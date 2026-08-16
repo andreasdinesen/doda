@@ -188,6 +188,7 @@ function render() {
   if (!state.user) { root.innerHTML = gateHtml(); bindGate(); return; }
   root.innerHTML = shellHtml();
   bindShell();
+  tegnGennemgangsbaand();
   tegnSide();
 }
 
@@ -299,6 +300,7 @@ function shellHtml() {
         </div>
         <div class="omni-chips" id="omniChips"></div>
       </div>
+      <div id="reviewNudge"></div>
       <div id="pageHost"></div>
     </main>
   </div>
@@ -313,6 +315,27 @@ function statsHtml() {
   dele.push(`${state.projects.length} projects`);
   if (c.done) dele.push(`${c.done} done`);
   return dele.map((d) => `<span>${esc(d)}</span>`).join('');
+}
+
+/* Et roligt baand, ikke en advarsel. Ingen roed farve, ingen tvang - og det
+   kan lukkes for i dag med ét klik (handover princip 1). */
+function tegnGennemgangsbaand() {
+  const host = document.getElementById('reviewNudge');
+  if (!host) return;
+  let lukket = null;
+  try { lukket = localStorage.getItem('doda_review_nudge'); } catch { /* privat */ }
+  if (!state.reviewDue || state.view === 'review' || lukket === state.today) { host.innerHTML = ''; return; }
+
+  const dag = new Date(`${state.today}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long' });
+  host.innerHTML = `<div class="nudge review-nudge">${icon('review', 17)}
+    <span>It is ${esc(dag)} — the day you set aside for your weekly review.</span>
+    <button class="btn ghost" id="nudgeGo">Start</button>
+    <button class="btn ghost" id="nudgeNo">Not now</button></div>`;
+  host.querySelector('#nudgeGo').addEventListener('click', () => gaaTil('review'));
+  host.querySelector('#nudgeNo').addEventListener('click', () => {
+    try { localStorage.setItem('doda_review_nudge', state.today); } catch { /* privat */ }
+    host.innerHTML = '';
+  });
 }
 
 function opdaterNav() {
@@ -343,6 +366,7 @@ function gaaTil(view, opt) {
   if (opt && opt.context !== undefined) state.filterContext = opt.context;
   document.body.classList.remove('navopen');
   opdaterNav();
+  tegnGennemgangsbaand();
   tegnSide();
   // Scroll kun til toppen ved reelt sideskift - ellers kastes brugeren op,
   // hver gang en inline-redigering gentegner (RUNE-ERFARINGER §4).
@@ -353,6 +377,7 @@ function gaaTil(view, opt) {
 async function genindlaes() {
   await hentState();
   opdaterNav();
+  tegnGennemgangsbaand();
   await tegnSide();
 }
 
@@ -364,6 +389,7 @@ async function hentState() {
     state.areas = d.areas || [];
     state.counts = d.counts;
     state.today = d.today;
+    state.reviewDue = d.reviewDue;
   } catch (ex) {
     if (ex.status !== 401) toast(ex.message);
   }

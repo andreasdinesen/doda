@@ -110,7 +110,9 @@ test('rundtur: eksportér alt, slet databasen, importér — samme system tilbag
   const bytes = Buffer.from('dette er en testfil med indhold', 'utf8');
   await fetch(`${BASE}/api/v1/items/${medFil.id}/files?name=notat.txt`, {
     method: 'POST',
-    headers: { 'Content-Type': 'text/plain', cookie },
+    // X-Doda-Upload er CSRF-barrieren pa upload-ruten: en session SKAL sende
+    // den, en API-noegle behoever ikke.
+    headers: { 'Content-Type': 'text/plain', 'X-Doda-Upload': '1', cookie },
     body: bytes,
   });
 

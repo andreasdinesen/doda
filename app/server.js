@@ -1289,6 +1289,7 @@ const ROUTES = {
       areas: hentOmraader(),
       counts: antal,
       today: iDag(),
+      reviewDue: gennemgangForfalder(),
     });
   },
 
@@ -1803,6 +1804,24 @@ function projektMedIndhold(id) {
   };
 }
 
+/**
+ * Er den ugentlige gennemgang forfalden?
+ *
+ * Paamindelsen er BEVIDST kun et diskret baand i appen - ikke en push-besked.
+ * Handover §5.12: sa faa notifikationer som overhovedet muligt, standard ingen.
+ * De rigtige deadlines har allerede en vej ud: iCal-feedet, hvor telefonens
+ * egen kalender giver besked. At bygge en push-kanal til ÉN ugentlig
+ * paamindelse ville vaere at tilfoeje en hel infrastruktur for at raabe.
+ */
+function gennemgangForfalder() {
+  const ugedag = Number(getSetting('review_weekday', '0')) || 0;
+  if (!ugedag) return false;                       // slaaet fra
+  if (parse.isoUgedag(new Date()) !== ugedag) return false;
+  const sidst = Number(getSetting('review_done', '0')) || 0;
+  // Seks dage, ikke syv: er den lavet i dag, skal den ikke minde igen.
+  return now() - sidst > 6 * 86400;
+}
+
 /* ------------------------------------------------------ kalenderfeed */
 
 /**
@@ -2147,6 +2166,19 @@ const MOENSTRE = [
     async kald(req, res, ctx) {
       const auth = godkend(req, res, 'write');
       if (!auth) return;
+
+      // Upload er det ENESTE muterende endepunkt, der ikke gaar gennem
+      // readJsonBody - og dermed det eneste uden Content-Type-barrieren.
+      // SameSite=Lax daekker det i praksis, men resten af appen har to lag,
+      // og denne skal ikke vaere undtagelsen. En HTML-formular kan ikke saette
+      // en egen header, og fetch med én udloeser en preflight, vi aldrig svarer.
+      // Noegle-adgang er fritaget: der er ingen ambient legitimation at misbruge.
+      if (!auth.viaToken && req.headers['x-doda-upload'] !== '1') {
+        apiFejl(res, 400, 'missing_header',
+          'Uploads from a browser session must send the header X-Doda-Upload: 1.');
+        return;
+      }
+
       const item = hentItem(ctx.params[0]);
       if (!item) { apiFejl(res, 404, 'not_found', 'No such item.'); return; }
 
@@ -2251,8 +2283,10 @@ const MOENSTRE = [
       const user = requireUser(req, res);
       if (!user) return;
       await readJsonBody(req);
+      // urlPath er ALLEREDE decodeURIComponent'et i dispatcheren - en
+      // dekodning mere ville tolke %2520 som et mellemrum.
       db.prepare('DELETE FROM credentials WHERE id = ? AND user_id = ?')
-        .run(decodeURIComponent(ctx.params[0]), user.id);
+        .run(ctx.params[0], user.id);
       audit('passkey-fjernet', user.username, clientIp(req));
       sendJson(res, 200, { credentials: hentCredentials(user.id) });
     },

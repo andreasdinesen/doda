@@ -68,7 +68,11 @@ async function uploadFil(itemId, fil) {
   const res = await fetch(`/api/v1/items/${itemId}/files?${q}`, {
     method: 'POST',
     credentials: 'same-origin',
-    headers: { 'Content-Type': blob.type || 'application/octet-stream' },
+    headers: {
+      'Content-Type': blob.type || 'application/octet-stream',
+      // CSRF-barriere: en fremmed formular kan ikke saette en egen header.
+      'X-Doda-Upload': '1',
+    },
     body: blob,
   });
   const data = await res.json().catch(() => ({}));

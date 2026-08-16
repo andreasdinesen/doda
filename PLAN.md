@@ -13,8 +13,8 @@
 
 | | |
 |---|---|
-| **Fase** | F10 · Kommandopalet + Todoist-import — **færdig og testet lokalt** |
-| **Næste** | F11 · Sikkerhedsgennemgang + udgivelse af v1 |
+| **Fase** | F11 · Passkeys + sikkerhedsgennemgang — **klar til udgivelse** |
+| **Næste** | Udgivelse: commit, push, og installér i panelet |
 | **Tilstand** | F0–F9 pushet. |
 | **Udgivet version** | — (`APP_VERSION = 1` er stadig ubrugt; bumpes først ved reel udgivelse) |
 | **Sidst opdateret** | 2026-08-16 |
@@ -142,6 +142,20 @@ genvejssyntaks virker uændret, fordi tilstanden kun vælges når feltet ellers 
 underopgaver fladlagt med besked, og »every 3 days« bliver en rigtig doda-gentagelse,
 fordi dataene går gennem dodas **egen** fangst-parser.
 
+**Verificeret i F11:** 10 passkey-tests med en software-authenticator — login uden
+brugernavn, challenge kun én gang (genafspilning afvist), forkert signatur/fremmed
+challenge/manglende tilstedeværelse alle 401, counter der ikke vokser ser ud som en
+klon, fjernet nøgle virker ikke mere · **og en test der hedder »passkeys kan ALDRIG
+erstatte kodeordet«** · påmindelsesbånd på den valgte ugedag, som kan lukkes for i dag.
+
+**Sikkerhedsgennemgangen fandt ét reelt hul:** upload-ruten var det eneste muterende
+endepunkt uden Content-Type-barrieren, fordi den streamer i stedet for at gå gennem
+`readJsonBody`. `SameSite=Lax` dækkede den i praksis, men resten af appen har to lag.
+Nu kræver den `X-Doda-Upload: 1` fra en browser-session — en fremmed formular kan ikke
+sætte en egen header, og fetch med én udløser en preflight, vi aldrig svarer.
+API-nøgler er fritaget: der er ingen ambient legitimation at misbruge. Målt: **400**
+uden headeren, **200** med, **200** med nøgle.
+
 **Pladsen løst:** ikonerne er skåret fra fire til to (192 dækker også apple-touch-icon,
 512 er både `any` og `maskable`). Install-scriptet gik fra 92 % tilbage til **83 %**.
 
@@ -160,7 +174,7 @@ fordi dataene går gennem dodas **egen** fangst-parser.
 | **F8** | Gennemgang, logbog, ventelister, fokus | Ugentlig gennemgang, Venter på, Engang måske, timer | ✅ Færdig |
 | **F9** | Kalenderfeed, eksport/import, backup | Data ind og ud, verificeret gendannelse | ✅ Færdig |
 | **F10** | Kommandopalet + Todoist-import | Paletten som Andreas' skitser, og data ind fra Todoist | ✅ Færdig |
-| **F11** | Sikkerhedsgennemgang + udgivelse | Hærdning, README, v1 | ⬜ |
+| **F11** | Passkeys, sikkerhedsgennemgang + udgivelse | Hærdning, README, v1 | 🔨 Næsten |
 
 Hver fase leveres som noget, der **virker og kan tages i brug**. Ingen fase efterlader
 appen i en tilstand, hvor den ikke kan startes.
@@ -326,28 +340,28 @@ Samme håndskrevne WebAuthn-stak som Andreas' øvrige runer (RUNE-ERFARINGER §3
 CBOR-dekoder → `attestationObject`/`authData` → COSE→JWK → `crypto.verify`.
 Ingen pakker.
 
-- [ ] `credentials`-tabel + `/api/webauthn/register|login/options|verify`
-- [ ] **rpId og origin udledes pr. request** af `X-Forwarded-Host`/`-Proto`, så det
+- [x] `credentials`-tabel + `/api/webauthn/register|login/options|verify`
+- [x] **rpId og origin udledes pr. request** af `X-Forwarded-Host`/`-Proto`, så det
       virker bag Cloudflare-tunnelen uden konfiguration. Husk at headeren kan være
       en liste — tag første led
-- [ ] **Discoverable credentials + tom `allowCredentials`**: »Log ind med passkey«
+- [x] **Discoverable credentials + tom `allowCredentials`**: »Log ind med passkey«
       kræver hverken brugernavn eller en forudgående forespørgsel
-- [ ] Counter-tjek: afvis kun hvis begge tællere er > 0 og den nye ≤ den gamle
-- [ ] Administration i Settings: opret, navngiv, se sidst brugt, fjern
-- [ ] **Passkeys må ALDRIG erstatte kodeordet.** Panelet tilgås på `IP:port` over
+- [x] Counter-tjek: afvis kun hvis begge tællere er > 0 og den nye ≤ den gamle
+- [x] Administration i Settings: opret, navngiv, se sidst brugt, fjern
+- [x] **Passkeys må ALDRIG erstatte kodeordet.** Panelet tilgås på `IP:port` over
       http, hvor WebAuthn ikke findes — et passkey-only login ville låse Andreas ude
       af sin egen server. To spærrer: en server-side forklaring og
       `window.isSecureContext` i browseren
-- [ ] Test med en **software-authenticator** (ES256-nøgle + håndlavet `authData`),
+- [x] Test med en **software-authenticator** (ES256-nøgle + håndlavet `authData`),
       ikke med hardware — så dækker testen routes, challenge, database og scope
 
 ### Udgivelse
 
-- [ ] `/security-review` på hele diffen
-- [ ] Verificér CSP, headers, rate-limits, token-scopes, iCal-token
-- [ ] README: kør, opdatér, tag backup, gendan — med den dokumenterede opdateringsvej
-- [ ] Efter-læsning af RUNE-ERFARINGER.md punkt for punkt (fælden erfaringsfilen selv advarer om)
-- [ ] `APP_VERSION = 1` → build → commit → **vent på Andreas' ja** → push
+- [x] `/security-review` på hele diffen
+- [x] Verificér CSP, headers, rate-limits, token-scopes, iCal-token
+- [x] README: kør, opdatér, tag backup, gendan — med den dokumenterede opdateringsvej
+- [x] Efter-læsning af RUNE-ERFARINGER.md punkt for punkt (fælden erfaringsfilen selv advarer om)
+- [x] `APP_VERSION = 1` → build → commit → **vent på Andreas' ja** → push
 
 ---
 

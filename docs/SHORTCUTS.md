@@ -120,7 +120,7 @@ alt hvad appen kan, kan du også udefra.
 | POST | `/api/v1/items/:id/complete` | write | Markér udført |
 | POST | `/api/v1/items/:id/uncomplete` | write | Fortryd |
 | DELETE | `/api/v1/items/:id` | write | Slet (blødt) |
-| POST | `/api/v1/items/:id/files?name=` | write | Vedhæft en fil. Rå krop, ingen multipart |
+| POST | `/api/v1/items/:id/files?name=` | write | Vedhæft en fil. Rå krop, ingen multipart. Fra en **nøgle** kræves ingen ekstra header; fra en browser-session kræves `X-Doda-Upload: 1` |
 | GET | `/api/v1/files/:id` | read | Hent filen. ETag + immutable |
 | DELETE | `/api/v1/files/:id` | write | Fjern en vedhæftning |
 | GET | `/api/v1/search?q=` | read | Fuldtekst, også i beskrivelser |

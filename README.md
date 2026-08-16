@@ -69,15 +69,32 @@ Gentagelser kan sættes på **pause** (reglen bevares) og **springes over** enke
 Ændrer du titel eller projekt på en forekomst, spørger appen, om det gælder kun
 denne gang eller alle fremtidige.
 
+### Login med passkey
+
+**Settings → Passkeys**. Så kan du logge ind med Touch ID, Face ID eller en
+sikkerhedsnøgle — uden brugernavn, for nøglen ved selv, hvem den hører til.
+
+> **Dit kodeord holder altid op med at virke.** Panelet tilgås over almindelig
+> http på `IP:port`, hvor passkeys slet ikke findes. Kunne en passkey erstatte
+> kodeordet, ville du kunne låse dig selv ude af din egen server. Derfor lader
+> doda det aldrig ske, og knappen vises kun, hvor den faktisk kan bruges.
+
+Fjerner du en nøgle, holder den op med at virke med det samme.
+
 ### Ugentlig gennemgang
 
 **Review** fører dig gennem seks trin: tøm inbox, gennemgå aktive projekter,
 Venter på, Engang måske, gentagelser der springes over, og ugens logbog.
 
 Du kan stoppe midtvejs — trinnet ligger på serveren, så du kan fortsætte fra
-samme sted senere, også fra en anden enhed. Du kan vælge en ugedag, hvor doda
-minder dig om det. Det er sammen med reelle deadlines det eneste, appen
-nogensinde siger noget om.
+samme sted senere, også fra en anden enhed.
+
+Vælger du en ugedag, viser doda et **roligt bånd** øverst den dag: »It is
+Sunday — the day you set aside for your weekly review«, med *Start* og *Not
+now*. Det er med vilje kun et bånd i appen og ikke en push-besked. De rigtige
+deadlines har allerede en vej ud — **kalenderfeedet**, hvor telefonens egen
+kalender giver besked. At bygge en push-kanal til én ugentlig påmindelse ville
+være at tilføje en hel infrastruktur for at råbe.
 
 **Logbook** viser hvad du har lavet, dag for dag, med filter på projekt. Ingen
 tal, ingen grafer, ingen produktivitetsscore — formålet er tilfredsstillelse og
@@ -356,4 +373,4 @@ Se `PLAN.md` for faseoversigt og status, `DESIGN.md` for de trufne beslutninger 
 
 | Version | Ændringer |
 |---|---|
-| 1 | *(under udvikling)* Fundament: rune, login, app-skal, design. |
+| 1 | Første udgave. Fangst med genvejssyntaks, inbox med tastaturafklaring, næste handlinger efter kontekst, projekter og områder, markdown-noter, gentagelser med Todoist-syntaks, vedhæftninger, ugentlig gennemgang, logbog, fokustimer, kalenderfeed, eksport/import, Todoist-import, API til iOS Shortcuts, MCP-server til Claude, passkeys, PWA med offline-fangst. |

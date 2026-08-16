@@ -1159,3 +1159,18 @@ button.chip:not(.flat):hover { text-decoration: line-through; }
   height: 1px;
   background: var(--border);
 }
+
+.review-nudge {
+  width: 100%;
+  max-width: 760px;
+  margin: 22px auto -8px;
+  align-items: center;
+}
+
+.review-nudge .btn.ghost { color: var(--accent-text); padding: 5px 12px; flex: none; }
+.review-nudge span { flex: 1; }
+
+@media (max-width: 900px) {
+  .review-nudge { flex-wrap: wrap; }
+  .review-nudge span { flex: 1 1 100%; }
+}
