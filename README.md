@@ -125,6 +125,19 @@ curl -X POST https://DIN-ADRESSE/api/v1/capture -H "Authorization: Bearer doda_D
 Trin-for-trin-opsætning af begge genveje, den fulde endepunktsliste og
 fejlkoderne står i **[docs/SHORTCUTS.md](docs/SHORTCUTS.md)**.
 
+### Claude kan forbinde til den
+
+doda er også en **MCP-server** på `/mcp`, så Claude kan fange, læse næste
+handlinger, markere udført, søge og kigge på projekter og gentagelser:
+
+```bash
+claude mcp add --transport http doda https://DIN-ADRESSE/mcp --header "Authorization: Bearer doda_DIN-NØGLE"
+```
+
+Den bruger de samme adgangsnøgler og de samme scopes — en `read`-nøgle giver
+Claude læseadgang og intet andet, og `tools/list` viser kun det, nøglen faktisk
+må. Se **[docs/MCP.md](docs/MCP.md)**.
+
 ---
 
 ## Installation

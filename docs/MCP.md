@@ -1,0 +1,139 @@
+# doda som MCP-server
+
+doda taler **Model Context Protocol** på `/mcp`, så Claude kan læse og skrive
+direkte i dine opgaver: fange noget, se hvad du kan lave nu, markere udført,
+søge, og kigge på projekter og gentagelser.
+
+Protokollen er JSON-RPC 2.0 over HTTP. Den er **håndskrevet uden pakker** —
+samme princip som resten af doda: ingen afhængigheder, ingen forsyningskæde at
+holde patchet.
+
+---
+
+## 1 · Lav en nøgle
+
+**Settings → Access keys** i doda. Vælg scope efter, hvad Claude skal kunne:
+
+| Scope | Claude kan | Værktøjer den ser |
+|---|---|---|
+| `capture` | kun tilføje | `capture` |
+| `read` | kun læse | `list_next_actions`, `list_inbox`, `search`, `list_projects`, `get_project`, `list_repeating`, `list_contexts` |
+| `full` | alt | alle ti |
+
+`tools/list` viser **kun** det, nøglen faktisk må. Så foreslår Claude aldrig et
+værktøj, der alligevel ville blive afvist — og scopet håndhæves igen ved selve
+kaldet, ikke kun i listen.
+
+Start med `read`, hvis du bare vil kunne spørge til dine opgaver. Brug `full`,
+når Claude også skal kunne rydde op for dig.
+
+---
+
+## 2 · Claude Code
+
+```bash
+claude mcp add --transport http doda https://DIN-ADRESSE/mcp --header "Authorization: Bearer doda_DIN-NØGLE"
+```
+
+Tjek at den svarer:
+
+```bash
+claude mcp list
+```
+
+Derefter kan du bare skrive »hvad kan jeg lave nu?« eller »fang: ring til
+tandlægen i morgen kl. 9«.
+
+## 3 · Claude Desktop
+
+Åbn **Settings → Developer → Edit Config** og tilføj:
+
+```json
+{
+  "mcpServers": {
+    "doda": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "https://DIN-ADRESSE/mcp",
+               "--header", "Authorization: Bearer doda_DIN-NØGLE"]
+    }
+  }
+}
+```
+
+Genstart Claude Desktop bagefter.
+
+> `mcp-remote` er en bro, fordi Desktop-konfigurationen kører kommandoer frem
+> for at kalde HTTP direkte. Den kører på din egen maskine — doda selv har
+> stadig ingen afhængigheder.
+
+## 4 · claude.ai i browseren
+
+Webklientens egne connectors kræver **OAuth 2.1** med dynamisk
+klientregistrering, og det har doda ikke. Det står på listen som en mulig
+udvidelse, men Claude Code og Desktop dækker behovet uden.
+
+---
+
+## 5 · Værktøjerne
+
+| Værktøj | Scope | Hvad |
+|---|---|---|
+| `capture` | capture | Fang en opgave eller note. **Hele genvejssyntaksen virker** |
+| `list_next_actions` | read | Hvad du kan gøre nu. Valgfrit `context` |
+| `list_inbox` | read | Ufordøjet, ældste først |
+| `search` | read | Fuldtekst, også i beskrivelser |
+| `complete_task` | write | Markér udført. Gentagelsen føres videre automatisk |
+| `update_task` | write | Titel, beskrivelse, status, datoer |
+| `list_projects` | read | Med område, antal åbne og **NO NEXT ACTION**-markering |
+| `get_project` | read | Alt i ét projekt: opgaver, noter, underprojekter |
+| `list_repeating` | read | Regel, næste forfald og antal spring |
+| `list_contexts` | read | Kontekster med antal næste handlinger |
+
+`capture` tager hele linjen, ikke felter hver for sig:
+
+```
+call the dentist #phone @Health !tomorrow at 9 // remember the referral
+water the plants !every! 3 days
+```
+
+Det er med vilje: Claude skal skrive én linje, ligesom du selv gør i appen —
+og det er **den samme parser**, der tolker den. Der findes ikke en særlig
+MCP-vej ind i dine data.
+
+Serveren sender en kort brugsanvisning med i `initialize`, så Claude ved, at
+inbox er det ufordøjede, at næste-listen er det aktuelle, og at den aldrig må
+finde på id'er selv.
+
+---
+
+## 6 · Sikkerhed
+
+- **Samme adgangsnøgler som resten af API'et**, med samme scopes og samme
+  øjeblikkelige tilbagekaldelse. Tilbagekald en nøgle, og Claude mister
+  adgangen ved næste kald.
+- **Origin-tjek mod DNS-rebinding**: kommer der en `Origin`-header, skal den
+  matche værten. En hjemmeside kan altså ikke få din browser til at snakke med
+  din doda. Klienter uden browser (Claude Code, Desktop) sender ingen Origin,
+  og så er der intet at tjekke.
+- **Kun POST.** `GET` og `DELETE` giver 405 — der er ingen serverstyret
+  SSE-strøm at hijacke.
+- Ugyldige nøgler logges til Yggdrasil-panelets sikkerhedshistorik pr. IP,
+  præcis som mislykkede login.
+- En fejl i et værktøj kommer tilbage som `isError` med en læsbar besked —
+  ikke som en protokolfejl. Så kan Claude rette op i stedet for at gå i stå.
+
+**Nøglen står i din klient-konfiguration i klartekst.** Det er samme situation
+som enhver anden API-nøgle på din egen maskine, men det er værd at vide: brug
+en nøgle pr. maskine, så du kan spærre én uden at røre de andre.
+
+---
+
+## 7 · Prøv den uden Claude
+
+```bash
+curl -s https://DIN-ADRESSE/mcp -H "Authorization: Bearer doda_DIN-NØGLE" -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+Svarer den med en liste af værktøjer, er alt som det skal være. Får du `401`,
+er nøglen forkert eller tilbagekaldt; `403` betyder, at din `Origin` ikke
+matcher værten.

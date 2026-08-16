@@ -394,7 +394,7 @@ const MAX_BODY = 2 * 1024 * 1024;
  *   aktivt af klienten, sa der er intet at forfalske - og sa skal en genvej,
  *   der bare sender en tekststreng, kunne virke (handover §5.10).
  */
-function readJsonBody(req, tilgivende) {
+function readJsonBody(req, tilgivende, tilladArray) {
   return new Promise((resolve, reject) => {
     const type = String(req.headers['content-type'] || '');
     const erJson = type.includes('application/json');
@@ -417,10 +417,11 @@ function readJsonBody(req, tilgivende) {
       const raw = Buffer.concat(chunks).toString('utf8').trim();
       if (!raw) { resolve({}); return; }
 
-      if (erJson || raw.startsWith('{')) {
+      if (erJson || raw.startsWith('{') || (tilladArray && raw.startsWith('['))) {
         try {
           const parsed = JSON.parse(raw);
-          resolve(parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {});
+          if (Array.isArray(parsed)) { resolve(tilladArray ? parsed : {}); return; }
+          resolve(parsed && typeof parsed === 'object' ? parsed : {});
         } catch {
           reject(Object.assign(new Error('The body is not valid JSON.'), { status: 400 }));
         }
@@ -740,6 +741,21 @@ function hentItems(filter) {
   return medKontekster(raekker);
 }
 
+/** Fuldtekst i titel OG beskrivelse. Afsluttede sorteres bagest, ikke bort. */
+function soegItems(raa) {
+  const q = String(raa || '').trim().slice(0, 200);
+  if (!q) return [];
+  // LIKE med escapede jokertegn - ellers kan et % i soegningen hente alt.
+  const moenster = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+  const raekker = db.prepare(`
+    SELECT ${ITEM_FELTER} FROM items i
+     WHERE i.deleted = 0 AND (i.title LIKE ? ESCAPE '\\' OR i.note LIKE ? ESCAPE '\\')
+     ORDER BY CASE WHEN i.status IN ('done','dropped') THEN 1 ELSE 0 END,
+              i.updated_at DESC
+     LIMIT 40`).all(moenster, moenster);
+  return medKontekster(raekker);
+}
+
 function hentItem(id) {
   const raekke = db.prepare(`SELECT ${ITEM_FELTER} FROM items i WHERE i.id = ? AND i.deleted = 0`).get(id);
   return raekke ? medKontekster([raekke])[0] : null;
@@ -835,10 +851,14 @@ function hentGentagelse(id) {
 }
 
 function aabenForekomst(recurrenceId) {
-  return db.prepare(`
+  const raekke = db.prepare(`
     SELECT ${ITEM_FELTER} FROM items i
      WHERE i.recurrence_id = ? AND i.deleted = 0
        AND i.status NOT IN ('done','dropped') LIMIT 1`).get(recurrenceId);
+  // Kontekster SKAL haenges pa. Uden dem faar kalderen et element, der
+  // ligner alle andre, men mangler et felt - og det knaekker foerst langt
+  // vaek fra her.
+  return raekke ? medKontekster([raekke])[0] : null;
 }
 
 function opretForekomst(r) {
@@ -1203,19 +1223,9 @@ const ROUTES = {
   },
 
   'GET /api/v1/search': (req, res, ctx) => {
-    const user = godkend(req, res, 'read');
-    if (!user) return;
-    const q = String(ctx.query.get('q') || '').trim().slice(0, 200);
-    if (q.length < 1) { sendJson(res, 200, { items: [] }); return; }
-    // LIKE med escapede jokertegn - ellers kan et % i soegningen hente alt.
-    const moenster = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
-    const raekker = db.prepare(`
-      SELECT ${ITEM_FELTER} FROM items i
-       WHERE i.deleted = 0 AND (i.title LIKE ? ESCAPE '\\' OR i.note LIKE ? ESCAPE '\\')
-       ORDER BY CASE WHEN i.status IN ('done','dropped') THEN 1 ELSE 0 END,
-                i.updated_at DESC
-       LIMIT 40`).all(moenster, moenster);
-    sendJson(res, 200, { items: medKontekster(raekker) });
+    const auth = godkend(req, res, 'read');
+    if (!auth) return;
+    sendJson(res, 200, { items: soegItems(ctx.query.get('q')) });
   },
 
   /* Genvejs-venligt: kun det man kan gore nu, valgfrit én kontekst, og
@@ -1435,6 +1445,56 @@ function projektMedIndhold(id) {
     children: hentProjekter().filter((x) => x.parent_id === id),
   };
 }
+
+/* ------------------------------------------------------------- mcp */
+
+/** Godkender uden at sende svar - MCP skal selv formulere 401'eren. */
+function godkendMcp(req) {
+  const auth = String(req.headers.authorization || '');
+  const bearer = auth.match(/^Bearer\s+(\S+)$/i);
+  const raa = bearer ? bearer[1] : String(req.headers['x-api-key'] || '');
+  if (!raa) return null;
+  const token = findToken(raa);
+  if (!token) {
+    logSecurity(`mcp-noegle-afvist ip=${clientIp(req)}`);
+    return null;
+  }
+  if (!rateAllow(`api:${token.id}`, 600, 3600)) return null;
+  stemplBrug(token);
+  return { token, viaToken: true };
+}
+
+const mcp = require('./mcp.js').opret({
+  version: 1,
+  parse,
+  // Kun det, vaerktoejerne har brug for. Modulet kender hverken databasen
+  // eller http'en - sa kan det testes for sig.
+  maa: (auth, scope) => SCOPE_TILLADER[auth.token.scope].has(scope),
+  godkendMcp,
+  fangst,
+  hentItems,
+  hentItem,
+  opdaterItem,
+  renseItem,
+  hentProjekter,
+  hentOmraader,
+  hentKontekster,
+  findKontekst,
+  findProjekt,
+  projektMedIndhold,
+  hentGentagelser,
+  readJsonBody,
+  logError,
+  soeg: (q) => soegItems(q),
+  fuldfoer(item) {
+    const faerdig = opdaterItem(item.id, { status: 'done', completed_at: now() });
+    if (!item.recurrence_id) return { item: faerdig, next: null };
+    const r = hentGentagelse(item.recurrence_id);
+    if (!r) return { item: faerdig, next: null };
+    const fra = r.mode === 'completion' ? iDag() : (item.due_date || iDag());
+    return { item: faerdig, next: rykGentagelse(r, fra, false), recurrence: hentGentagelse(r.id) };
+  },
+});
 
 /* Ruter med sti-parametre. Rakkefolgen er den, de proves i. */
 const MOENSTRE = [
@@ -1783,6 +1843,12 @@ const server = http.createServer(async (req, res) => {
   }
 
   try {
+    // MCP ligger pa /mcp - kort nok til at skrive i en klient-konfiguration.
+    if (urlPath === '/mcp') {
+      securityHeaders(res);
+      await mcp.haandter(req, res, { query });
+      return;
+    }
     if (urlPath.startsWith('/api/')) {
       securityHeaders(res);
       const rute = findRute(req.method, urlPath);

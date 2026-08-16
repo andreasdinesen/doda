@@ -108,7 +108,10 @@ def stempl_version(version):
 # ------------------------------------------------------------------ 2. payload
 
 def indsaml_filer():
-    filer = [('app/server.js', os.path.join(APP, 'server.js'))]
+    # Alle moduler i app/-roden, ikke kun server.js - ellers glemmer man et
+    # nyt modul i payloaden og opdager det foerst i containeren.
+    filer = [(f'app/{n}', os.path.join(APP, n))
+             for n in sorted(os.listdir(APP)) if n.endswith('.js')]
     for navn in sorted(os.listdir(SHARED)):
         if navn.endswith('.js'):
             filer.append((f'app/shared/{navn}', os.path.join(SHARED, navn)))

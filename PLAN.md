@@ -13,9 +13,9 @@
 
 | | |
 |---|---|
-| **Fase** | F4 · Gentagelser — **færdig og testet lokalt** |
-| **Næste** | F5 · MCP-server |
-| **Tilstand** | F0–F3 pushet. F4 ikke committet — venter på Andreas' ja. |
+| **Fase** | F5 · MCP-server — **færdig og testet lokalt** |
+| **Næste** | F6 · PWA + offline |
+| **Tilstand** | F0–F4 pushet. F5 ikke committet — venter på Andreas' ja. |
 | **Udgivet version** | — (`APP_VERSION = 1` er stadig ubrugt; bumpes først ved reel udgivelse) |
 | **Sidst opdateret** | 2026-08-16 |
 
@@ -66,6 +66,15 @@ skabelonen, »alle fremtidige« gør · stop bevarer den åbne som en almindelig
 sommertid: ugentlige og daglige gentagelser driver ikke hen over hverken efterårs-
 eller forårsskiftet.
 
+**Verificeret i F5:** 86 tests grønne, heraf 23 mod MCP-serveren over HTTP uden
+cookie — som en rigtig klient. `initialize` med versionsforhandling (ældre version
+accepteres, ukendt falder tilbage) · notifikationer kvitteres 202 uden krop · batch
+besvares som batch · `-32601`/`-32600`/`-32602` på de rigtige steder · **`tools/list`
+viser kun det, nøglens scope tillader** (en `capture`-nøgle ser præcis ét værktøj), og
+scopet håndhæves igen ved selve kaldet · 401 med `WWW-Authenticate` · fremmed `Origin`
+afvist 403 (DNS-rebinding) · `GET`/`DELETE` → 405 · værktøjsfejl kommer som `isError`
+med læsbar besked, ikke som protokolfejl.
+
 ### Faseoversigt
 
 | # | Fase | Leverance | Status |
@@ -75,7 +84,7 @@ eller forårsskiftet.
 | **F2** | API + adgangsnøgler + Shortcuts | iPhone/Siri kan fange og læse. Handover: *prioritér højt* | ✅ Færdig |
 | **F3** | Projekter, områder, kontekster, noter | Fuld GTD-struktur, markdown-noter | ✅ Færdig |
 | **F4** | Gentagelser | Todoist-syntaks med `!`, to tilstande, gentagelses-skærm | ✅ Færdig |
-| **F5** | MCP-server | Claude kan forbinde til appen | ⬜ |
+| **F5** | MCP-server | Claude kan forbinde til appen | ✅ Færdig |
 | **F6** | PWA + offline | Hjemmeskærm, offline-læsning, fangst-kø | ⬜ |
 | **F7** | Gennemgang, logbog, ventelister, fokus | Ugentlig gennemgang, Venter på, Engang måske, timer | ⬜ |
 | **F8** | Kalenderfeed, eksport/import, backup | Data ind og ud, verificeret gendannelse | ⬜ |
@@ -144,10 +153,10 @@ det færdige tingdo-design. Ingen opgavefunktioner endnu.
 
 **Mål:** Claude (Code, Desktop, evt. claude.ai) kan læse og skrive i doda.
 
-- [ ] `/mcp` — Streamable HTTP, JSON-RPC 2.0, håndskrevet uden pakker
-- [ ] Auth: samme adgangsnøgler som F2, `Authorization: Bearer` + scope-tjek pr. værktøj
-- [ ] Værktøjer: fang opgave, næste handlinger, fuldfør, søg, opret/læs note, projekter, gentagelser
-- [ ] `docs/MCP.md` — opsætning i Claude Code og Claude Desktop
+- [x] `/mcp` — Streamable HTTP, JSON-RPC 2.0, håndskrevet uden pakker
+- [x] Auth: samme adgangsnøgler som F2, `Authorization: Bearer` + scope-tjek pr. værktøj
+- [x] Værktøjer: fang opgave, næste handlinger, fuldfør, søg, opret/læs note, projekter, gentagelser
+- [x] `docs/MCP.md` — opsætning i Claude Code og Claude Desktop
 - [ ] Valgfrit senere: OAuth 2.1 + dynamisk klientregistrering, så claude.ai-webconnector virker
 
 ## F6 · PWA + offline
