@@ -210,6 +210,9 @@ function gateHtml() {
         <button class="btn primary" type="submit" style="width:100%">
           ${setup ? 'Create account' : 'Sign in'}</button>
       </form>
+      ${!setup && state.config.passkeys && state.config.hasPasskeys ? `
+        <div class="gate-or"><span>or</span></div>
+        <button class="btn" id="gatePasskey" style="width:100%">Sign in with a passkey</button>` : ''}
       ${setup ? '<p class="gate-note">doda is a single-user app. Once this account exists, sign-up closes for good.</p>' : ''}
     </div>
   </div>`;
@@ -235,6 +238,25 @@ function bindGate() {
       err.hidden = false;
     }
   });
+  const pk = document.getElementById('gatePasskey');
+  if (pk) {
+    pk.addEventListener('click', async () => {
+      const err = document.getElementById('gateError');
+      err.hidden = true;
+      try {
+        const d = await loginMedPasskey();
+        state.user = d.user;
+        await hentState();
+        render();
+      } catch (ex) {
+        // Brugeren afbroed selv - det er ikke en fejl, der skal vises.
+        if (ex.name === 'NotAllowedError') return;
+        err.textContent = ex.message || 'The passkey did not work';
+        err.hidden = false;
+      }
+    });
+  }
+
   document.getElementById('gateUser').focus();
 }
 

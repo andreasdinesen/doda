@@ -109,3 +109,85 @@ function lytPaaForbindelse() {
   opdaterOfflineMaerke();
   tomOutbox();
 }
+
+/* ------------------------------------------------------------ passkeys */
+
+const kanPasskeys = () => !!(window.PublicKeyCredential && window.isSecureContext);
+
+const fraB64u = (s) => Uint8Array.from(atob(String(s).replace(/-/g, '+').replace(/_/g, '/')
+  .padEnd(Math.ceil(String(s).length / 4) * 4, '=')), (c) => c.charCodeAt(0));
+const tilB64u = (b) => btoa(String.fromCharCode(...new Uint8Array(b)))
+  .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+/** Opretter en passkey pa denne enhed. */
+async function opretPasskey(navn) {
+  const o = await api('POST', '/api/webauthn/register/options', {});
+  const pk = o.publicKey;
+  pk.challenge = fraB64u(pk.challenge);
+  pk.user.id = fraB64u(pk.user.id);
+  pk.excludeCredentials = (pk.excludeCredentials || []).map((c) => ({ type: 'public-key', id: fraB64u(c.id) }));
+  const cred = await navigator.credentials.create({ publicKey: pk });
+  return api('POST', '/api/webauthn/register/verify', {
+    challengeId: o.challengeId,
+    name: navn,
+    attestationObject: tilB64u(cred.response.attestationObject),
+    clientDataJSON: tilB64u(cred.response.clientDataJSON),
+  });
+}
+
+/** Logger ind uden brugernavn - noeglen ved selv, hvem den hoerer til. */
+async function loginMedPasskey() {
+  const o = await api('POST', '/api/webauthn/login/options', {});
+  const pk = o.publicKey;
+  pk.challenge = fraB64u(pk.challenge);
+  pk.allowCredentials = [];
+  const cred = await navigator.credentials.get({ publicKey: pk });
+  return api('POST', '/api/webauthn/login/verify', {
+    challengeId: o.challengeId,
+    id: tilB64u(cred.rawId),
+    authenticatorData: tilB64u(cred.response.authenticatorData),
+    clientDataJSON: tilB64u(cred.response.clientDataJSON),
+    signature: tilB64u(cred.response.signature),
+  });
+}
+
+async function tegnPasskeys() {
+  const host = document.getElementById('pkList');
+  if (!host) return;
+  try {
+    const d = await api('GET', '/api/v1/passkeys');
+    const blokeret = d.blocked || (!kanPasskeys() && 'This browser cannot use passkeys.');
+    host.innerHTML = `
+      ${d.credentials.length ? d.credentials.map((c) => `
+        <div class="keyrow">
+          <div class="keyrow-main">
+            <div class="keyrow-name">${esc(c.name)}</div>
+            <div class="meta">${esc(c.alg)} · added ${esc(visTid(c.created_at))} ·
+              ${c.last_used_at ? `last used ${esc(visTid(c.last_used_at))}` : 'never used'}</div>
+          </div>
+          <button class="btn ghost" data-pkdel="${esc(c.id)}">Remove</button>
+        </div>`).join('') : '<p class="lead" style="margin:14px 0 0">No passkeys yet.</p>'}
+      ${blokeret ? `<p class="gate-note" style="text-align:left">${esc(blokeret)}</p>`
+    : '<button class="btn" id="pkAdd" style="margin-top:14px">Add a passkey</button>'}`;
+
+    const tilfoej = host.querySelector('#pkAdd');
+    if (tilfoej) {
+      tilfoej.addEventListener('click', async () => {
+        try {
+          await opretPasskey(`${navigator.platform || 'This device'}`.slice(0, 60));
+          await tegnPasskeys();
+          toast('Passkey added');
+        } catch (ex) {
+          if (ex.name !== 'NotAllowedError') toast(ex.message || 'Could not add the passkey');
+        }
+      });
+    }
+    host.querySelectorAll('[data-pkdel]').forEach((el) => {
+      el.addEventListener('click', async () => {
+        await api('DELETE', `/api/v1/passkeys/${encodeURIComponent(el.dataset.pkdel)}`, {});
+        await tegnPasskeys();
+        toast('Passkey removed — it stopped working immediately');
+      });
+    });
+  } catch (ex) { host.innerHTML = `<p class="lead">${esc(ex.message)}</p>`; }
+}

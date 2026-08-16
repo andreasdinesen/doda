@@ -1143,3 +1143,19 @@ button.chip:not(.flat):hover { text-decoration: line-through; }
   .helplist { grid-template-columns: 1fr; gap: 4px 0; }
   .helplist dt { justify-self: start; margin-top: 8px; }
 }
+
+.gate-or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.gate-or::before, .gate-or::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}

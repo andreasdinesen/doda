@@ -204,6 +204,22 @@ const MIGRATIONS = [
       CREATE INDEX attachments_item ON attachments(item_id) WHERE deleted = 0;
     `);
   },
+
+  function m7(d) {
+    d.exec(`
+      CREATE TABLE credentials (
+        id         TEXT PRIMARY KEY,          -- credentialId, base64url
+        user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name       TEXT NOT NULL DEFAULT '',
+        public_key TEXT NOT NULL,             -- SPKI PEM
+        alg        TEXT NOT NULL,
+        sign_count INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        last_used_at INTEGER
+      );
+      CREATE INDEX credentials_bruger ON credentials(user_id);
+    `);
+  },
 ];
 
 // Statusser. Raekkefoelgen er ogsaa den, lister sorteres efter.
@@ -1168,6 +1184,8 @@ const ROUTES = {
       needsSetup: userCount() === 0,
       secureContext: isHttps(req),
       dev: DEV,
+      passkeys: !passkeySpaerre(req),
+      hasPasskeys: db.prepare('SELECT COUNT(*) AS n FROM credentials').get().n > 0,
     });
   },
 
@@ -1503,6 +1521,71 @@ const ROUTES = {
 
   /* Eksport virker bade fra UI'et og via API'et - Andreas' krav. En genvej
      eller et script kan tage en kopi uden at aabne browseren. */
+  'POST /api/webauthn/register/options': async (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    await readJsonBody(req);
+    const spaerre = passkeySpaerre(req);
+    if (spaerre) { apiFejl(res, 400, 'insecure_context', spaerre); return; }
+    sendJson(res, 200, webauthn.registerOptions(req, user));
+  },
+
+  'POST /api/webauthn/register/verify': async (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    const body = await readJsonBody(req);
+    try {
+      const c = webauthn.registerVerify(req, user, body);
+      db.prepare(`
+        INSERT OR REPLACE INTO credentials (id, user_id, name, public_key, alg, sign_count, created_at)
+        VALUES (?,?,?,?,?,?,?)`)
+        .run(c.id, user.id, str(body.name, 60) || 'Passkey', c.publicKey, c.alg, c.signCount, now());
+      audit('passkey-oprettet', user.username, clientIp(req));
+      sendJson(res, 200, { credentials: hentCredentials(user.id) });
+    } catch (err) {
+      logSecurity(`passkey-registrering-fejl ip=${clientIp(req)}`);
+      apiFejl(res, 400, 'passkey_failed', err.message);
+    }
+  },
+
+  // Login kraever IKKE en session - det er hele pointen.
+  'POST /api/webauthn/login/options': async (req, res) => {
+    await readJsonBody(req);
+    const spaerre = passkeySpaerre(req);
+    if (spaerre) { apiFejl(res, 400, 'insecure_context', spaerre); return; }
+    sendJson(res, 200, webauthn.loginOptions(req));
+  },
+
+  'POST /api/webauthn/login/verify': async (req, res) => {
+    const body = await readJsonBody(req);
+    const ip = clientIp(req);
+    if (!rateAllow(`passkey:${ip}`, 20, 900)) {
+      logSecurity(`login-spaerret ip=${ip}`);
+      apiFejl(res, 429, 'rate_limited', 'Too many attempts - try again shortly.');
+      return;
+    }
+    try {
+      const { credential, signCount } = webauthn.loginVerify(req, body);
+      const bruger = db.prepare('SELECT id, username FROM users WHERE id = ?').get(credential.user_id);
+      if (!bruger) throw new Error('ukendt bruger');
+      db.prepare('UPDATE credentials SET sign_count = ?, last_used_at = ? WHERE id = ?')
+        .run(signCount, now(), credential.id);
+      audit('login-passkey', bruger.username, ip);
+      const token = createSession(bruger.id);
+      sendJson(res, 200, { user: bruger },
+        { 'Set-Cookie': sessionCookie(req, token, SESSION_DAYS * 86400) });
+    } catch (err) {
+      logSecurity(`login-fejl ip=${ip}`);
+      apiFejl(res, 401, 'passkey_failed', err.message);
+    }
+  },
+
+  'GET /api/v1/passkeys': (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    sendJson(res, 200, { credentials: hentCredentials(user.id), blocked: passkeySpaerre(req) });
+  },
+
   'GET /api/v1/export': (req, res, ctx) => {
     const auth = godkend(req, res, 'read');
     if (!auth) return;
@@ -1903,6 +1986,38 @@ function godkendMcp(req) {
   return { token, viaToken: true };
 }
 
+/* ---------------------------------------------------------- passkeys */
+
+function hentCredentials(userId) {
+  return db.prepare(`
+    SELECT id, name, alg, sign_count, created_at, last_used_at
+      FROM credentials WHERE user_id = ? ORDER BY created_at`).all(userId);
+}
+
+function findCredential(id) {
+  return db.prepare('SELECT * FROM credentials WHERE id = ?').get(String(id || ''));
+}
+
+const webauthn = require('./webauthn.js').opret({
+  appName: APP_NAME,
+  hentCredentials,
+  findCredential,
+});
+
+/**
+ * Passkeys kraever et secure context. Panelet tilgas pa IP:port over http,
+ * hvor WebAuthn slet ikke findes - derfor ma de ALDRIG erstatte kodeordet,
+ * og derfor svarer vi med en forklaring i stedet for en kryptisk fejl
+ * (RUNE-ERFARINGER, Tilmeld).
+ */
+function passkeySpaerre(req) {
+  if (isHttps(req)) return null;
+  const v = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(':')[0];
+  if (v === 'localhost' || v === '127.0.0.1') return null;
+  return 'Passkeys need a secure connection (https). Sign in with your password here — '
+    + 'that always works, and it is why doda never lets a passkey replace it.';
+}
+
 const mcp = require('./mcp.js').opret({
   version: 1,
   parse,
@@ -2128,6 +2243,18 @@ const MOENSTRE = [
       db.prepare('UPDATE items SET updated_at = ? WHERE id = ?').run(now(), a.item_id);
       audit('fil-slettet', a.name, null);
       sendJson(res, 200, { ok: true });
+    },
+  },
+  {
+    metode: 'DELETE', re: /^\/api\/v1\/passkeys\/(.{1,256})$/,
+    async kald(req, res, ctx) {
+      const user = requireUser(req, res);
+      if (!user) return;
+      await readJsonBody(req);
+      db.prepare('DELETE FROM credentials WHERE id = ? AND user_id = ?')
+        .run(decodeURIComponent(ctx.params[0]), user.id);
+      audit('passkey-fjernet', user.username, clientIp(req));
+      sendJson(res, 200, { credentials: hentCredentials(user.id) });
     },
   },
   {

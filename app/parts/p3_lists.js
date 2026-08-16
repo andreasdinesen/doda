@@ -564,6 +564,15 @@ function sideSettings() {
       <p class="gate-note" style="text-align:left">Danish words work too: <code>!i morgen</code>, <code>!om 2 uger</code>.</p>
     </div>
 
+    <div class="card"><h2>Passkeys</h2>
+      <p class="lead" style="margin:6px 0 0">Sign in with Touch ID, Face ID or a security
+      key instead of typing your password.</p>
+      <div id="pkList" class="keylist">Loading…</div>
+      <p class="gate-note" style="text-align:left"><strong>Your password always keeps
+      working.</strong> The panel is reached over plain http on <code>IP:port</code>,
+      where passkeys do not exist at all — so doda never lets one replace it.</p>
+    </div>
+
     <div class="card"><h2>Access keys</h2>
       <p class="lead" style="margin:6px 0 0">For iOS Shortcuts, Siri and anything else
       that talks to doda from outside. One key per device or purpose, so you can revoke
@@ -725,6 +734,7 @@ function bindNoegler() {
 function bindSettings() {
   bindNoegler();
   bindData();
+  tegnPasskeys();
   document.querySelectorAll('[data-tema]').forEach((el) => {
     el.addEventListener('click', () => { anvendTema(el.dataset.tema); tegnSide(); });
   });
