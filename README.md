@@ -69,6 +69,20 @@ Gentagelser kan sættes på **pause** (reglen bevares) og **springes over** enke
 Ændrer du titel eller projekt på en forekomst, spørger appen, om det gælder kun
 denne gang eller alle fremtidige.
 
+### På telefonen og uden net
+
+Åbn doda i Safari på din iPhone og vælg **Del → Føj til hjemmeskærm**. Så kører
+den i fuld skærm med sit eget ikon, uden browserens adresselinje.
+
+**Uden forbindelse** kan du stadig læse dine lister — de vises, som de så ud
+sidst, og et diskret mærke fortæller det. Og du kan stadig **fange**: teksten
+lægges i en kø og sendes automatisk, så snart der er net igen, i den rækkefølge
+du skrev den. Køen overlever, at du lukker appen.
+
+> Kræver https. Over almindelig http (fx panelets `IP:port`) virker appen
+> uændret, men uden offline-læsning og hjemmeskærm — det er en browserregel,
+> ikke et valg.
+
 ### Projekter, områder og noter
 
 Et **projekt** er alt, der kræver mere end ét skridt. Skriv `@Navn` når du fanger,

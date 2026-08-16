@@ -737,3 +737,22 @@ textarea.input { resize: vertical; min-height: 90px; font-family: inherit; }
      sidelaens scrollbar. Aldrig pa desktop - der skal fejlen forblive synlig. */
   html, body { overflow-x: hidden; }
 }
+
+/* ------------------------------------------------------------ offline */
+
+.offline-mark {
+  align-self: flex-end;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 8px;
+  padding: 4px 12px;
+  border-radius: var(--pill);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12px;
+}
+
+.offline-mark[hidden] { display: none !important; }

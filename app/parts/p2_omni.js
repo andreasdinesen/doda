@@ -219,6 +219,14 @@ async function fangstNu(bekraeftet) {
       },
     });
   } catch (ex) {
+    // Netvaerksbrud: gem lokalt og send, naar der er forbindelse igen.
+    // Et rigtigt afslag fra serveren skal derimod vises som det er.
+    if (erNetvaerksfejl(ex)) {
+      laegIKoe(tekst);
+      luk();
+      toast('Saved offline — it will be sent when you are back');
+      return;
+    }
     toast(ex.message);
   }
 }

@@ -102,7 +102,20 @@ def stempl_version(version):
     if ny != html:
         with open(sti, 'w', encoding='utf8') as fh:
             fh.write(ny)
-    print(f'  index.html stemplet med ?v={version}')
+
+    # Service workerens cache-navn OG dens precache-URL'er skal foelge samme
+    # version. Ellers hober hver udgivelse sig op i browserens cache, og
+    # SW'en kan servere en gammel app.js i det uendelige (RUNE-ERFARINGER §5).
+    sw = os.path.join(PUBLIC, 'sw.js')
+    with open(sw, encoding='utf8') as fh:
+        kode = fh.read()
+    ny_sw = re.sub(r'^const VERSION = \d+;', f'const VERSION = {version};', kode, flags=re.M)
+    if ny_sw != kode:
+        with open(sw, 'w', encoding='utf8') as fh:
+            fh.write(ny_sw)
+    if f'const VERSION = {version};' not in ny_sw:
+        fejl('kunne ikke stemple versionen i sw.js')
+    print(f'  index.html og sw.js stemplet med v={version}')
 
 
 # ------------------------------------------------------------------ 2. payload

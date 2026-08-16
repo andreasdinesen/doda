@@ -13,9 +13,9 @@
 
 | | |
 |---|---|
-| **Fase** | F5 · MCP-server — **færdig og testet lokalt** |
-| **Næste** | F6 · PWA + offline |
-| **Tilstand** | F0–F4 pushet. F5 ikke committet — venter på Andreas' ja. |
+| **Fase** | F6 · PWA + offline — **færdig** (se forbehold nedenfor) |
+| **Næste** | F7 · Vedhæftninger |
+| **Tilstand** | F0–F5 pushet. F6 ikke committet — venter på Andreas' ja. |
 | **Udgivet version** | — (`APP_VERSION = 1` er stadig ubrugt; bumpes først ved reel udgivelse) |
 | **Sidst opdateret** | 2026-08-16 |
 
@@ -75,6 +75,22 @@ scopet håndhæves igen ved selve kaldet · 401 med `WWW-Authenticate` · fremme
 afvist 403 (DNS-rebinding) · `GET`/`DELETE` → 405 · værktøjsfejl kommer som `isError`
 med læsbar besked, ikke som protokolfejl.
 
+**Verificeret i F6:** fangst-køen holder rækkefølgen gennem et netværksbrud og sender
+alt ved genoprettelse · offline-mærket tæller det ventende · ikoner, manifest og
+`sw.js` serveres · CSP har `worker-src 'self'` (uden den blokerer vores egen CSP
+service workeren) · `sw.js` precacher **præcis** de `?v=`-URL'er, index.html henter,
+og cache-navnet er versioneret.
+
+⚠️ **Ikke verificeret lokalt:** selve service worker-registreringen. Claude Codes
+browser-panel afviser `serviceWorker.register()` — også mod en helt nøgen server uden
+headers, så det er panelet og ikke koden. **Andreas bør bekræfte på sin telefon eller
+i en rigtig browser**, at appen kan lægges på hjemmeskærmen og læses uden net.
+
+⚠️ **Pladsen i runen:** install-scriptet fylder nu 74 % af MAX_ARG_STRLEN-loftet.
+Ikonerne kostede 24 K tegn, indtil de blev paletterede (70 KB → 18,5 KB). Bliver det
+trangt i F9, kan ikonerne tegnes af serveren ved opstart i stedet for at ligge i
+payloaden.
+
 ### Faseoversigt
 
 | # | Fase | Leverance | Status |
@@ -85,10 +101,11 @@ med læsbar besked, ikke som protokolfejl.
 | **F3** | Projekter, områder, kontekster, noter | Fuld GTD-struktur, markdown-noter | ✅ Færdig |
 | **F4** | Gentagelser | Todoist-syntaks med `!`, to tilstande, gentagelses-skærm | ✅ Færdig |
 | **F5** | MCP-server | Claude kan forbinde til appen | ✅ Færdig |
-| **F6** | PWA + offline | Hjemmeskærm, offline-læsning, fangst-kø | ⬜ |
-| **F7** | Gennemgang, logbog, ventelister, fokus | Ugentlig gennemgang, Venter på, Engang måske, timer | ⬜ |
-| **F8** | Kalenderfeed, eksport/import, backup | Data ind og ud, verificeret gendannelse | ⬜ |
-| **F9** | Sikkerhedsgennemgang + udgivelse | Hærdning, README, v1 | ⬜ |
+| **F6** | PWA + offline | Hjemmeskærm, offline-læsning, fangst-kø | ✅ Færdig |
+| **F7** | Vedhæftninger | Billeder og filer på opgaver og noter | ⬜ |
+| **F8** | Gennemgang, logbog, ventelister, fokus | Ugentlig gennemgang, Venter på, Engang måske, timer | ⬜ |
+| **F9** | Kalenderfeed, eksport/import, backup | Data ind og ud, verificeret gendannelse | ⬜ |
+| **F10** | Sikkerhedsgennemgang + udgivelse | Hærdning, README, v1 | ⬜ |
 
 Hver fase leveres som noget, der **virker og kan tages i brug**. Ingen fase efterlader
 appen i en tilstand, hvor den ikke kan startes.
@@ -161,12 +178,34 @@ det færdige tingdo-design. Ingen opgavefunktioner endnu.
 
 ## F6 · PWA + offline
 
-- [ ] Manifest + ikoner + hjemmeskærm på iOS
-- [ ] Service worker med versioneret cache (**husk `?v=N`-stempling — se RUNE-ERFARINGER §5**)
-- [ ] Offline-læsning af lister
-- [ ] Fangst offline → lokal kø → sendes ved forbindelse
+- [x] Manifest + ikoner + hjemmeskærm på iOS
+- [x] Service worker med versioneret cache (**husk `?v=N`-stempling — se RUNE-ERFARINGER §5**)
+- [x] Offline-læsning af lister
+- [x] Fangst offline → lokal kø → sendes ved forbindelse
 
-## F7 · Gennemgang, logbog, ventelister, fokus
+## F7 · Vedhæftninger
+
+**Mål:** Billeder og filer på opgaver og noter. Andreas' ønske, tilføjet undervejs i F6.
+
+**RUNE-ERFARINGER §4 er hele designet her** — det var Kokkeris dyreste lærestreg:
+billeder inde i de items, listen henter, gav et login-svar på 247,9 MB.
+
+- [ ] Egen tabel `attachments` + egen `/data/files/`-mappe. **Aldrig** filindhold i
+      `items` — elementet bærer kun et antal, så listerne er upåvirkede
+- [ ] Filerne på disk, ikke i SQLite: så streamer backup, og databasen forbliver lille
+- [ ] `GET /api/v1/files/:id` med **ETag + `Cache-Control: immutable`** og versioneret URL
+- [ ] Upload uden multipart-parser: rå krop + `?name=`/`Content-Type` (ingen npm-pakke)
+- [ ] Loft pr. fil (25 MB) og samlet kvote, med en læsbar fejl når den rammes
+- [ ] **Sikkerhed:** `nosniff` + `Content-Disposition: attachment` for alt undtagen
+      billeder. SVG serveres ALDRIG inline (kan bære script). Filnavne saniteres —
+      ingen sti-traversering, ingen kontroltegn
+- [ ] Billeder skaleres i **browseren** før upload (Node kan ikke skalere uden pakker)
+- [ ] Miniature i detaljeruden, klik åbner fuld visning; filer vises som en liste
+- [ ] Kamera/foto-valg på iPhone (`accept="image/*"`, `capture`), træk-og-slip på desktop
+- [ ] Vedhæftninger med i eksport/import (F9) og verificeret i backup-rundturen
+- [ ] MCP: `list_attachments` — men **aldrig** filindhold gennem MCP
+
+## F8 · Gennemgang, logbog, ventelister, fokus
 
 - [ ] Guidet ugentlig gennemgang i 6 trin, kan afbrydes og genoptages
 - [ ] Diskret påmindelse på valgt ugedag
@@ -174,7 +213,7 @@ det færdige tingdo-design. Ingen opgavefunktioner endnu.
 - [ ] Venter på (med hvem) · Engang måske
 - [ ] Fokustilstand med timer, der kører videre på tværs af skærme
 
-## F8 · Kalenderfeed, eksport/import, backup
+## F9 · Kalenderfeed, eksport/import, backup
 
 - [ ] iCal-feed med **kun reelle deadlines**, hemmelig og tilbagekaldelig adresse, indekseret opslag (aldrig fuld scanning)
 - [ ] Fuld eksport + import i åbent format (JSON), rundtur verificeret: eksportér alt → slet databasen → importér → samme system tilbage
@@ -183,7 +222,7 @@ det færdige tingdo-design. Ingen opgavefunktioner endnu.
 - [ ] Backup/gendan dokumenteret **og testet** — også på en stor database
 - [ ] Valgfri tingdo-import som separat trin
 
-## F9 · Sikkerhedsgennemgang + udgivelse
+## F10 · Sikkerhedsgennemgang + udgivelse
 
 - [ ] `/security-review` på hele diffen
 - [ ] Verificér CSP, headers, rate-limits, token-scopes, iCal-token

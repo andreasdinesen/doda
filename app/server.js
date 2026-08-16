@@ -361,6 +361,9 @@ function securityHeaders(res) {
     "font-src 'self'",
     "connect-src 'self'",
     "manifest-src 'self'",
+    // Uden worker-src falder service workeren tilbage pa child-src og derfra
+    // til default-src 'none' - og bliver blokeret af vores egen CSP.
+    "worker-src 'self'",
     "base-uri 'none'",
     "form-action 'self'",
     "frame-ancestors 'none'",
@@ -1035,6 +1038,7 @@ const ROUTES = {
       // Naar der ingen bruger er, skal foerste-gangs-opsaetningen vises.
       needsSetup: userCount() === 0,
       secureContext: isHttps(req),
+      dev: DEV,
     });
   },
 

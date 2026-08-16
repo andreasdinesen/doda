@@ -153,13 +153,13 @@ function icon(name, size = 18) {
 const VIEWS = [
   { id: 'next', label: 'Next Actions', icon: 'next', group: 1 },
   { id: 'inbox', label: 'Inbox', icon: 'inbox', group: 1, tael: 'inbox' },
-  { id: 'waiting', label: 'Waiting For', icon: 'waiting', group: 2, fase: 'F7' },
-  { id: 'someday', label: 'Someday', icon: 'someday', group: 2, fase: 'F7' },
+  { id: 'waiting', label: 'Waiting For', icon: 'waiting', group: 2, fase: 'F8' },
+  { id: 'someday', label: 'Someday', icon: 'someday', group: 2, fase: 'F8' },
   { id: 'repeat', label: 'Repeating', icon: 'repeat', group: 2 },
   { id: 'projects', label: 'Projects', icon: 'projects', group: 3 },
   { id: 'contexts', label: 'Contexts', icon: 'contexts', group: 3 },
-  { id: 'log', label: 'Logbook', icon: 'log', group: 4, fase: 'F7' },
-  { id: 'review', label: 'Review', icon: 'review', group: 4, fase: 'F7' },
+  { id: 'log', label: 'Logbook', icon: 'log', group: 4, fase: 'F8' },
+  { id: 'review', label: 'Review', icon: 'review', group: 4, fase: 'F8' },
   { id: 'settings', label: 'Settings', icon: 'settings', group: 5 },
 ];
 
@@ -261,6 +261,7 @@ function shellHtml() {
     </aside>
     <main class="main">
       <div class="topbar">
+        <div class="offline-mark meta" id="offlineMark" hidden></div>
         <div class="stats meta" id="statsHost">${statsHtml()}</div>
         <div class="omni">
           <span class="omni-icon">${icon('search', 20)}</span>
@@ -357,4 +358,6 @@ async function hentState() {
     return;
   }
   render();
+  registrerSW();
+  lytPaaForbindelse();
 })();
