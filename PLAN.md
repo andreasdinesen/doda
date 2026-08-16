@@ -13,10 +13,10 @@
 
 | | |
 |---|---|
-| **Fase** | **v1 udgivet.** Efterslæb fra handoveren lukket. |
-| **Næste** | Udgivelse: commit, push, og installér i panelet |
-| **Tilstand** | F0–F9 pushet. |
-| **Udgivet version** | — (`APP_VERSION = 1` er stadig ubrugt; bumpes først ved reel udgivelse) |
+| **Fase** | **v4 udgivet.** F0–F11 bygget; connector til claude.ai bygget og testet. |
+| **Næste** | Udgivelse af connectoren: bump til `APP_VERSION = 5`, build, push |
+| **Tilstand** | OAuth 2.1 klar i arbejdsmappen, 135 tests grønne, install-script 93 % af loftet |
+| **Udgivet version** | **4** (`/projekt` inline + icon.svg) |
 | **Sidst opdateret** | 2026-08-16 |
 
 **Sprog:** interfacet er **engelsk** (Andreas' valg — æøå er besværligt at taste).
@@ -382,6 +382,28 @@ Ingen pakker.
 - [x] README: kør, opdatér, tag backup, gendan — med den dokumenterede opdateringsvej
 - [x] Efter-læsning af RUNE-ERFARINGER.md punkt for punkt (fælden erfaringsfilen selv advarer om)
 - [x] `APP_VERSION = 1` → build → commit → **vent på Andreas' ja** → push
+
+---
+
+## F12 · Connector til claude.ai (OAuth 2.1)
+
+Webklienten kan ikke sende en fast nøgle i en header — den skal kunne registrere
+sig selv og sende Andreas gennem et login. Se `docs/OAUTH.md`.
+
+- [x] `app/oauth.js`: opdagelse, registrering (RFC 7591), PKCE-validering,
+      engangs-koder, roterende refresh — ingen pakker, `srv`-indsprøjtning som `mcp.js`
+- [x] Migration `m8`: `oauth_clients`, `oauth_refresh`, `client_id` + `expires_at` på `tokens`
+- [x] Access-tokens går gennem `opretToken()`, og `findToken` fik et udløbstjek —
+      **én valideringsvej for alle nøgler**
+- [x] Syv ruter uden for `/api/`, med CORS uden om `securityHeaders()`
+- [x] `/mcp` svarer 401 med `WWW-Authenticate: … resource_metadata="…"` — uden den
+      kan Claude ikke opdage autorisationsserveren
+- [x] Samtykkeside uden JavaScript, med session-bundet bevis mod CSRF
+- [x] `?next=`-viderestilling efter login, låst til `/oauth/authorize?`
+- [x] Settings → **Connected apps** med scope, sidst brugt og *Revoke*
+- [x] 18 tests i `tests/oauth.test.mjs` mod en rigtig server, inkl. kode-tyveri
+      mellem klienter, rotation og udløb (uret flyttes i databasen ved siden af)
+- [ ] `APP_VERSION = 5` → build → **vent på Andreas' ja** → push
 
 ---
 

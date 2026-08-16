@@ -6,7 +6,7 @@
  * browserens cache, og SW'en kan servere en gammel app.js i det uendelige
  * (RUNE-ERFARINGER §5). */
 
-const VERSION = 4;
+const VERSION = 5;
 const CACHE = `doda-v${VERSION}`;
 
 // Praecis de samme URL'er som index.html henter - ellers ligger der to
@@ -52,7 +52,11 @@ self.addEventListener('fetch', (e) => {
 
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
-  if (url.pathname === '/mcp') return;
+  // Protokol-endepunkter er ikke appen og ma aldrig serveres fra cachen:
+  // et OAuth-samtykke eller et .well-known-dokument skal ALTID komme fra
+  // serveren, og de er meningsloese offline.
+  if (url.pathname === '/mcp' || url.pathname.startsWith('/oauth/')
+      || url.pathname.startsWith('/.well-known/')) return;
 
   // Selve siden: net foerst, sa en ny udgivelse altid opdages, men skallen
   // findes offline.
@@ -60,7 +64,10 @@ self.addEventListener('fetch', (e) => {
     e.respondWith((async () => {
       try {
         const svar = await fetch(req);
-        (await caches.open(CACHE)).put('./', svar.clone());
+        // KUN app-skallen gemmes under './'. Ellers kunne en hvilken som
+        // helst anden navigation ende med at vaere det, brugeren far at se,
+        // naeste gang han abner doda uden net.
+        if (url.pathname === '/') (await caches.open(CACHE)).put('./', svar.clone());
         return svar;
       } catch {
         return (await caches.match('./')) || new Response('Offline', { status: 503 });

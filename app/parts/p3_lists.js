@@ -645,6 +645,16 @@ function sideSettings() {
       read your whole system — prefer <strong>capture only</strong> unless you need more.</p>
     </div>
 
+    <div class="card"><h2>Connected apps</h2>
+      <p class="lead" style="margin:6px 0 0">Apps that asked for access themselves and
+      that you approved — claude.ai connects this way. Revoking one stops it immediately;
+      it has to ask you again.</p>
+      <div id="connList" class="keylist">Loading…</div>
+      <p class="gate-note" style="text-align:left">Add doda in Claude as a custom
+      connector with the address <code>${esc(location.origin)}/mcp</code>. Claude finds
+      the rest by itself and sends you here to approve it.</p>
+    </div>
+
     <div class="card"><h2>Calendar subscription</h2>
       <p class="lead" style="margin:6px 0 12px">A feed your calendar app can follow.
       It contains <strong>only real deadlines</strong> — never your whole task list.
@@ -723,6 +733,40 @@ async function tegnNoegler() {
   } catch (ex) { host.innerHTML = `<p class="lead">${esc(ex.message)}</p>`; }
 }
 
+/* Samme keyrow-moenster som noeglerne. En forbindelse er bare en noegle, jeg
+   ikke selv har skrevet ned - og den skal kunne rives over lige sa let. */
+async function tegnForbindelser() {
+  const host = document.getElementById('connList');
+  if (!host) return;
+  try {
+    const d = await api('GET', '/api/v1/connections');
+    if (!d.connections.length) {
+      host.innerHTML = '<p class="lead" style="margin:14px 0 0">Nothing connected yet.</p>';
+      return;
+    }
+    host.innerHTML = d.connections.map((c) => {
+      const aktiv = c.active > 0 || c.refreshes > 0;
+      const brugt = c.last_used_at ? `last used ${visTid(c.last_used_at)}` : 'never used';
+      return `
+      <div class="keyrow">
+        <div class="keyrow-main">
+          <div class="keyrow-name">${esc(c.name)}</div>
+          <div class="meta">${aktiv ? esc(SCOPE_TEKST[c.scope] || c.scope || 'connected') : 'revoked'} ·
+            ${esc(brugt)} · added ${visTid(c.created_at)}</div>
+        </div>
+        ${aktiv ? `<button class="btn ghost" data-conn="${esc(c.id)}">Revoke</button>` : ''}
+      </div>`;
+    }).join('');
+    host.querySelectorAll('[data-conn]').forEach((el) => {
+      el.addEventListener('click', async () => {
+        await api('DELETE', `/api/v1/connections/${el.dataset.conn}`, {});
+        toast('Connection revoked — it stopped working immediately');
+        tegnForbindelser();
+      });
+    });
+  } catch (ex) { host.innerHTML = `<p class="lead">${esc(ex.message)}</p>`; }
+}
+
 function visTid(unix) {
   const d = new Date(unix * 1000);
   const timer = (Date.now() / 1000 - unix) / 3600;
@@ -789,6 +833,7 @@ function bindSettings() {
   bindNoegler();
   bindData();
   tegnPasskeys();
+  tegnForbindelser();
   document.querySelectorAll('[data-tema]').forEach((el) => {
     el.addEventListener('click', () => { anvendTema(el.dataset.tema); tegnSide(); });
   });

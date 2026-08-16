@@ -364,9 +364,17 @@ function opret(srv) {
     const auth = srv.godkendMcp(req);
     if (!auth) {
       // WWW-Authenticate faar MCP-klienter til at sige "ugyldig noegle" i
-      // stedet for at prove igen i det uendelige.
-      res.writeHead(401, { 'Content-Type': 'application/json', 'WWW-Authenticate': 'Bearer realm="doda"' });
-      res.end(JSON.stringify({ error: 'invalid_key', message: 'Send a valid doda access key as "Authorization: Bearer doda_…".' }));
+      // stedet for at prove igen i det uendelige - OG den er hele indgangen
+      // til OAuth: uden resource_metadata kan claude.ai ikke finde
+      // autorisationsserveren og opgiver forbindelsen (RFC 9728).
+      res.writeHead(401, {
+        'Content-Type': 'application/json',
+        'WWW-Authenticate': srv.oauthUdfordring(req),
+      });
+      res.end(JSON.stringify({
+        error: 'invalid_key',
+        message: 'Send a valid doda access key as "Authorization: Bearer doda_…", or connect with OAuth.',
+      }));
       return;
     }
 

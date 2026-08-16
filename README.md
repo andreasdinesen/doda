@@ -214,6 +214,13 @@ Den bruger de samme adgangsnøgler og de samme scopes — en `read`-nøgle giver
 Claude læseadgang og intet andet, og `tools/list` viser kun det, nøglen faktisk
 må. Se **[docs/MCP.md](docs/MCP.md)**.
 
+**claude.ai i browseren** kan ikke sende en nøgle i en header, så den kobler sig
+på med **OAuth 2.1**: tilføj `https://DIN-ADRESSE/mcp` som custom connector, og
+Claude finder selv resten og sender dig til doda for at trykke *Allow*.
+Forbindelsen står bagefter under **Settings → Connected apps** og kan
+tilbagekaldes derfra. Hele flowet og hvad der gør det sikkert:
+**[docs/OAUTH.md](docs/OAUTH.md)**.
+
 ---
 
 ## Installation
@@ -378,6 +385,7 @@ Se `PLAN.md` for faseoversigt og status, `DESIGN.md` for de trufne beslutninger 
 
 | Version | Ændringer |
 |---|---|
+| 5 | **Connector til claude.ai.** Webklienten kan ikke sende en nøgle i en header, så doda taler nu **OAuth 2.1**: dynamisk klientregistrering, PKCE, engangs-koder, roterende refresh og en samtykkeside uden JavaScript. Tilføj `https://DIN-ADRESSE/mcp` som custom connector — Claude finder selv resten. Forbindelser står under **Settings → Connected apps** og kan tilbagekaldes øjeblikkeligt. Se [docs/OAUTH.md](docs/OAUTH.md). |
 | 4 | **Rettelse:** `/projekt` virkede kun som første tegn i paletten, ikke midt i en sætning — selv om legenden lover `/ projects`. Nu betyder `@` og `/` præcis det samme, og hverken URL'er, datoer eller `ja/nej` bliver ramt. |
 | 3 | **Rettelse: v2 kunne ikke nås i panelet.** Serveren bandt sig til den host-port, panelet havde allokeret, i stedet for container-porten 3000. Der er nu en regressionstest, der starter serveren med panelets præcise miljø. |
 | 2 | Genvejsoversigt med `?`, `c`/`p` til kontekst og projekt fra en liste, og bundnavigation på mobil — de tre punkter fra beskrivelsen, der manglede i v1. |

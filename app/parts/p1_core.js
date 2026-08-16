@@ -5,7 +5,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 4;
+const APP_VERSION = 5;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -237,6 +237,7 @@ function bindGate() {
       });
       state.user = data.user;
       state.config.needsSetup = false;
+      if (fortsaetTilConnector()) return;
       await hentState();
       render();
     } catch (ex) {
@@ -252,6 +253,7 @@ function bindGate() {
       try {
         const d = await loginMedPasskey();
         state.user = d.user;
+        if (fortsaetTilConnector()) return;
         await hentState();
         render();
       } catch (ex) {
@@ -431,6 +433,31 @@ async function hentState() {
   }
 }
 
+/* ------------------------------------------------------------ connector */
+
+/**
+ * Adressen at vende tilbage til, naar man er logget ind.
+ *
+ * Serveren sender ?next=/oauth/authorize?... hertil, naar en connector beder
+ * om samtykke og der ingen session er. KUN den ene sti accepteres - alt andet
+ * ville vaere en aaben viderestilling, og en connector-godkendelse er
+ * praecis det sted, hvor man ikke skal kunne lokkes videre.
+ */
+function oauthNaeste() {
+  try {
+    const n = new URLSearchParams(location.search).get('next') || '';
+    return n.startsWith('/oauth/authorize?') ? n : null;
+  } catch { return null; }
+}
+
+/** Kaldes efter login. Returnerer true, hvis siden er paa vej et andet sted hen. */
+function fortsaetTilConnector() {
+  const n = oauthNaeste();
+  if (!n) return false;
+  location.replace(n);
+  return true;
+}
+
 /* --------------------------------------------------------------- start */
 
 (async function start() {
@@ -440,6 +467,9 @@ async function hentState() {
     document.title = state.config.appName || 'doda';
     const me = await api('GET', '/api/me');
     state.user = me.user;
+    // Var jeg allerede logget ind, da connectoren sendte mig herhen, skal
+    // jeg slet ikke se appen - kun samtykkesiden.
+    if (state.user && fortsaetTilConnector()) return;
     if (state.user) await hentState();
   } catch (ex) {
     document.getElementById('root').innerHTML =

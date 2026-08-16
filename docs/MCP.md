@@ -68,9 +68,22 @@ Genstart Claude Desktop bagefter.
 
 ## 4 · claude.ai i browseren
 
-Webklientens egne connectors kræver **OAuth 2.1** med dynamisk
-klientregistrering, og det har doda ikke. Det står på listen som en mulig
-udvidelse, men Claude Code og Desktop dækker behovet uden.
+Webklienten kan ikke sende en fast nøgle i en header. Den kender ikke din
+server på forhånd, så den skal kunne **registrere sig selv** og sende dig
+gennem et login. Det er dét, doda nu kan — se `docs/OAUTH.md` for hele flowet.
+
+**Sådan gør du:**
+
+1. I Claude: **Settings → Connectors → Add custom connector**.
+2. Adressen er `https://DIN-ADRESSE/mcp`. Ingen nøgle, intet andet.
+3. Claude finder resten selv og sender dig til doda, hvor du logger ind og
+   trykker **Allow**.
+4. Forbindelsen står bagefter under **Settings → Connected apps** i doda og
+   kan tilbagekaldes derfra.
+
+> Kræver **https**. Adressen skal kunne nås udefra (Cloudflare-tunnelen), og
+> claude.ai's redirect-adresse er `https://claude.ai/api/mcp/auth_callback`.
+> Den registrerer klienten selv — du skal ikke skrive den nogen steder.
 
 ---
 
@@ -111,7 +124,11 @@ finde på id'er selv.
 
 - **Samme adgangsnøgler som resten af API'et**, med samme scopes og samme
   øjeblikkelige tilbagekaldelse. Tilbagekald en nøgle, og Claude mister
-  adgangen ved næste kald.
+  adgangen ved næste kald. Det gælder også OAuth: et token derfra ender i
+  præcis samme tabel og valideres ad præcis samme vej — bare med et udløb.
+- **En connector kan aldrig administrere sig selv.** Kodeordsskift, oprettelse
+  af nøgler og tilbagekaldelse af forbindelser kræver en rigtig browsersession.
+  Én kompromitteret forbindelse kan altså ikke give sig selv varig adgang.
 - **Origin-tjek mod DNS-rebinding**: kommer der en `Origin`-header, skal den
   matche værten. En hjemmeside kan altså ikke få din browser til at snakke med
   din doda. Klienter uden browser (Claude Code, Desktop) sender ingen Origin,

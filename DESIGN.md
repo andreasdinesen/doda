@@ -181,6 +181,20 @@ Andreas' to eksplicitte krav. Konkret:
    kalender-apps poller hvert kvarter (RUNE-ERFARINGER §4, Kokkeris dyre lektie).
 10. Passkeys **må aldrig erstatte kodeordet**: panelet tilgås på `IP:port` over http,
     hvor WebAuthn ikke findes. Kodeordslogin skal altid virke.
+11. **OAuth 2.1 til claude.ai's connectors** (`app/oauth.js`, se `docs/OAUTH.md`).
+    Valgene bag den:
+    - Access-tokens får **ikke deres egen tabel**. De lægges i `tokens` med et
+      `client_id` og et `expires_at`, så de valideres af `findToken` ad præcis
+      samme vej som en håndlavet nøgle. Én validering, ét sted at tilbagekalde.
+    - **Roterende refresh** og 8 timers levetid på access-tokenet. Koden er
+      engangsbrug, lever ét minut og er bundet til både klient og redirect.
+    - **PKCE med S256 er obligatorisk** — `plain` er ikke en beskyttelse.
+      `redirect_uri` matches nøjagtigt; kun https udefra, `localhost` undtaget.
+    - **Samtykkesiden har ingen JavaScript** (CSP'en tillader ikke inline
+      scripts uden hash) og bærer et session-bundet bevis, fordi den er appens
+      eneste cookie-godkendte rute uden en JSON-krop.
+    - En connector kan **ikke administrere sig selv**: kodeordsskift, nøgler og
+      tilbagekaldelse af forbindelser kræver stadig `requireUser()`.
 
 ## 6 · Handoverens åbne spørgsmål (§11) — mine svar
 

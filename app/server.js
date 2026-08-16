@@ -230,6 +230,35 @@ const MIGRATIONS = [
       CREATE INDEX credentials_bruger ON credentials(user_id);
     `);
   },
+
+  function m8(d) {
+    // OAuth 2.1 til claude.ai. Webklienten kender ikke serveren pa forhand,
+    // sa den skal kunne registrere sig selv og sende mig gennem et login.
+    //
+    // Access-tokens far IKKE deres egen tabel: de laegges i tokens med et
+    // client_id og et udloeb, sa de gar gennem praecis samme findToken-vej
+    // som en handlavet noegle. Én validering, ét sted at tilbagekalde.
+    d.exec(`
+      CREATE TABLE oauth_clients (
+        id            TEXT PRIMARY KEY,
+        name          TEXT NOT NULL,
+        redirect_uris TEXT NOT NULL,          -- JSON-array, matches NOEJAGTIGT
+        created_at    INTEGER NOT NULL
+      );
+      CREATE TABLE oauth_refresh (
+        hash       TEXT PRIMARY KEY,          -- sha256, aldrig klartekst
+        token_id   TEXT NOT NULL,
+        client_id  TEXT NOT NULL,
+        scope      TEXT NOT NULL,
+        user_id    TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        revoked_at INTEGER
+      );
+      CREATE INDEX oauth_refresh_klient ON oauth_refresh(client_id) WHERE revoked_at IS NULL;
+      ALTER TABLE tokens ADD COLUMN client_id TEXT;
+      ALTER TABLE tokens ADD COLUMN expires_at INTEGER;
+    `);
+  },
 ];
 
 // Statusser. Raekkefoelgen er ogsaa den, lister sorteres efter.
@@ -387,12 +416,20 @@ function clientIp(req) {
 // for at blive stemplet ind af build'et - saa kan CSP'en aldrig komme ud af
 // trit med filen. Se DESIGN.md §5.
 let INLINE_SCRIPT_HASH = '';
+// Selve scriptteksten og versionsnummeret laeses samme sted. Samtykkesiden
+// (OAuth) er ikke en del af SPA'en, men skal se ud som resten og foelge
+// samme tema - og med den ORDRET samme scripttekst er hashen allerede givet.
+let INLINE_SCRIPT_TEXT = '';
+let APP_VERSION_CSS = '1';
 
 function computeInlineHash() {
   try {
     const html = fs.readFileSync(path.join(PUBLIC_DIR, 'index.html'), 'utf8');
+    const v = html.match(/style\.css\?v=(\d+)/);
+    if (v) APP_VERSION_CSS = v[1];
     const m = html.match(/<script data-theme-init>([\s\S]*?)<\/script>/);
     if (!m) return;
+    INLINE_SCRIPT_TEXT = m[1];
     const digest = crypto.createHash('sha256').update(m[1], 'utf8').digest('base64');
     INLINE_SCRIPT_HASH = ` 'sha256-${digest}'`;
   } catch (err) {
@@ -575,13 +612,19 @@ function hashToken(raa) {
   return crypto.createHash('sha256').update(String(raa), 'utf8').digest('hex');
 }
 
-function opretToken(navn, scope) {
+/**
+ * @param {{clientId?: string, expiresAt?: number}} [ekstra]  Saettes kun for
+ *   OAuth-tokens. En haandlavet noegle har hverken klient eller udloeb.
+ */
+function opretToken(navn, scope, ekstra) {
+  const e = ekstra || {};
   const hemmelig = crypto.randomBytes(32).toString('base64url');
   const noegle = `doda_${hemmelig}`;
   const id = newId();
-  db.prepare('INSERT INTO tokens (id, name, hash, prefix, scope, created_at) VALUES (?,?,?,?,?,?)')
-    .run(id, navn, hashToken(noegle), hemmelig.slice(0, 6), scope, now());
-  audit('noegle-oprettet', navn, scope);
+  db.prepare(`INSERT INTO tokens (id, name, hash, prefix, scope, created_at, client_id, expires_at)
+              VALUES (?,?,?,?,?,?,?,?)`)
+    .run(id, navn, hashToken(noegle), hemmelig.slice(0, 6), scope, now(), e.clientId || null, e.expiresAt || null);
+  audit(e.clientId ? 'oauth-token-udstedt' : 'noegle-oprettet', navn, scope);
   // Noeglen returneres ÉN gang og gemmes aldrig i klartekst.
   return { id, key: noegle };
 }
@@ -589,8 +632,11 @@ function opretToken(navn, scope) {
 function findToken(raa) {
   if (typeof raa !== 'string' || !raa.startsWith('doda_')) return null;
   const row = db.prepare(`
-    SELECT id, name, scope, last_used_at FROM tokens
-     WHERE hash = ? AND revoked_at IS NULL`).get(hashToken(raa));
+    SELECT id, name, scope, last_used_at, client_id FROM tokens
+     WHERE hash = ? AND revoked_at IS NULL
+       -- Uden udloebstjekket ville et OAuth-token leve evigt, uanset hvad
+       -- vi lovede klienten i expires_in.
+       AND (expires_at IS NULL OR expires_at > ?)`).get(hashToken(raa), now());
   return row || null;
 }
 
@@ -1737,9 +1783,12 @@ const ROUTES = {
     const user = requireUser(req, res);
     if (!user) return;
     sendJson(res, 200, {
+      // client_id IS NULL: kun MINE egne noegler. Et OAuth-token er ikke noget,
+      // jeg har lavet i hand - det hoerer hjemme under "Connected apps", hvor
+      // hele forbindelsen kan tilbagekaldes paa én gang.
       tokens: db.prepare(`
         SELECT id, name, prefix, scope, created_at, last_used_at FROM tokens
-         WHERE revoked_at IS NULL ORDER BY created_at DESC`).all(),
+         WHERE revoked_at IS NULL AND client_id IS NULL ORDER BY created_at DESC`).all(),
     });
   },
 
@@ -1752,6 +1801,15 @@ const ROUTES = {
     if (!navn) { apiFejl(res, 400, 'no_name', 'Give the key a name, so you know what to revoke later.'); return; }
     const ny = opretToken(navn, scope);
     sendJson(res, 200, { id: ny.id, key: ny.key, name: navn, scope });
+  },
+
+  /* Connectorer, der har koblet sig pa gennem OAuth. Samme regel som for
+     noeglerne: kun en rigtig session ma se og tilbagekalde dem - ellers
+     kunne én laekket forbindelse rydde de andre af vejen. */
+  'GET /api/v1/connections': (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    sendJson(res, 200, { connections: hentForbindelser() });
   },
 
   'POST /api/v1/contexts': async (req, res) => {
@@ -2015,6 +2073,335 @@ function godkendMcp(req) {
   return { token, viaToken: true };
 }
 
+/* ------------------------------------------------------------- oauth */
+
+/* Connectoren til claude.ai. Motoren star i app/oauth.js; herunder er kun
+   det, den ikke kan vide noget om: databasen, samtykkesiden og ruterne. */
+
+const oauth = require('./oauth.js').opret({
+  gemKlient(k) {
+    db.prepare('INSERT INTO oauth_clients (id, name, redirect_uris, created_at) VALUES (?,?,?,?)')
+      .run(k.id, k.name, k.redirect_uris, now());
+    audit('oauth-klient-registreret', k.name, null);
+  },
+
+  hentKlient(id) {
+    return db.prepare('SELECT id, name, redirect_uris FROM oauth_clients WHERE id = ?')
+      .get(String(id || '')) || null;
+  },
+
+  /**
+   * Access- og refresh-token i ét.
+   *
+   * Access-tokenet gaar gennem opretToken, sa det ender i tokens-tabellen og
+   * valideres af findToken praecis som en haandlavet noegle - bare med et
+   * udloeb. Der er ingen anden vej ind i API'et.
+   */
+  udstedTokens(clientId, scope, userId) {
+    const klient = db.prepare('SELECT name FROM oauth_clients WHERE id = ?').get(clientId);
+    const t = now();
+    const adgang = opretToken(klient ? klient.name : 'OAuth client', scope,
+      { clientId, expiresAt: t + oauth.ADGANG_LEVETID });
+    const refresh = `dodar_${crypto.randomBytes(32).toString('base64url')}`;
+    db.prepare(`INSERT INTO oauth_refresh (hash, token_id, client_id, scope, user_id, created_at)
+                VALUES (?,?,?,?,?,?)`)
+      .run(hashToken(refresh), adgang.id, clientId, scope, userId, t);
+    return {
+      access_token: adgang.key,
+      token_type: 'Bearer',
+      expires_in: oauth.ADGANG_LEVETID,
+      refresh_token: refresh,
+      scope,
+    };
+  },
+
+  findRefresh(raa) {
+    if (typeof raa !== 'string' || !raa.startsWith('dodar_')) return null;
+    return db.prepare(`
+      SELECT hash, token_id, client_id, scope, user_id FROM oauth_refresh
+       WHERE hash = ? AND revoked_at IS NULL`).get(hashToken(raa)) || null;
+  },
+
+  tilbagekaldRefresh(raa) {
+    db.prepare('UPDATE oauth_refresh SET revoked_at = ? WHERE hash = ? AND revoked_at IS NULL')
+      .run(now(), hashToken(String(raa || '')));
+  },
+});
+
+/** Alt, en klient har faaet: access-tokens OG refresh-tokens. */
+function tilbagekaldKlient(clientId) {
+  const t = now();
+  db.prepare('UPDATE tokens SET revoked_at = ? WHERE client_id = ? AND revoked_at IS NULL').run(t, clientId);
+  db.prepare('UPDATE oauth_refresh SET revoked_at = ? WHERE client_id = ? AND revoked_at IS NULL').run(t, clientId);
+}
+
+/**
+ * Kun klienter, jeg rent faktisk har godkendt.
+ *
+ * En registrering er ikke en forbindelse: claude.ai registrerer sig paa ny,
+ * hver gang den proever, og de forsoeg, jeg aldrig sagde ja til, har ingen
+ * tokens. Uden EXISTS-tjekket ville listen fyldes med rakker, der bade er
+ * uinteressante og ser tilbagekaldte ud.
+ */
+function hentForbindelser() {
+  return db.prepare(`
+    SELECT c.id, c.name, c.created_at,
+           (SELECT MAX(t.last_used_at) FROM tokens t WHERE t.client_id = c.id) AS last_used_at,
+           (SELECT COUNT(*) FROM tokens t
+             WHERE t.client_id = c.id AND t.revoked_at IS NULL AND t.expires_at > ?) AS active,
+           (SELECT COUNT(*) FROM oauth_refresh r
+             WHERE r.client_id = c.id AND r.revoked_at IS NULL) AS refreshes,
+           (SELECT t.scope FROM tokens t WHERE t.client_id = c.id ORDER BY t.created_at DESC LIMIT 1) AS scope
+      FROM oauth_clients c
+     WHERE EXISTS (SELECT 1 FROM tokens t WHERE t.client_id = c.id)
+     ORDER BY c.created_at DESC`).all(now());
+}
+
+/**
+ * Samtykkesiden.
+ *
+ * Ren HTML med en almindelig <form method="post"> - ingen JavaScript. CSP'en
+ * tillader ikke inline scripts uden hash, og en side, der kun har to knapper,
+ * har ingen grund til at have brug for dem.
+ *
+ * Tema-scriptet er den ENE undtagelse: det er ordret det samme som i
+ * index.html, og har derfor allerede sin hash i CSP-headeren.
+ */
+function oauthSide(indhold) {
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>doda</title>
+<meta name="color-scheme" content="light dark">
+<script data-theme-init>${INLINE_SCRIPT_TEXT}</script>
+<link rel="stylesheet" href="/style.css?v=${APP_VERSION_CSS}">
+</head>
+<body>
+<div class="gate"><div class="card">${indhold}</div></div>
+</body>
+</html>`;
+}
+
+function sendHtml(res, status, html) {
+  securityHeaders(res);
+  res.writeHead(status, {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Content-Length': Buffer.byteLength(html),
+    'Cache-Control': 'no-store',
+  });
+  res.end(html);
+}
+
+function escHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function oauthFejlside(res, besked) {
+  sendHtml(res, 400, oauthSide(`
+    <h2 style="margin:0 0 10px">Connection refused</h2>
+    <p class="lead">${escHtml(besked)}</p>
+    <p class="gate-note">Nothing was granted. You can close this window.</p>`));
+}
+
+/**
+ * Skjult felt, der binder samtykke-formularen til netop denne session.
+ *
+ * SameSite=Lax gor allerede en cross-site POST cookieloes, men det er den
+ * eneste cookie-godkendte rute i appen, der ikke laeser en JSON-krop - og
+ * RUNE-ERFARINGER siger: naar en sikkerhedsregel bor i én faelles funktion,
+ * skal de ruter, der IKKE gaar gennem den, have deres egen.
+ */
+function samtykkeBevis(req) {
+  const s = parseCookies(req.headers.cookie)[SESSION_COOKIE] || '';
+  return crypto.createHmac('sha256', s).update('oauth-consent').digest('hex');
+}
+
+const OAUTH_FELTER = ['client_id', 'redirect_uri', 'response_type', 'scope',
+  'state', 'code_challenge', 'code_challenge_method'];
+
+function samtykkeHtml(req, q, o) {
+  const skjulte = OAUTH_FELTER
+    .map((n) => `<input type="hidden" name="${n}" value="${escHtml(q.get(n) || '')}">`).join('\n');
+  const hvad = o.scope === 'read'
+    ? 'read your tasks, notes, projects and contexts'
+    : 'read <em>and change</em> your tasks, notes, projects and contexts';
+  return oauthSide(`
+    <div class="brand">doda</div>
+    <p class="lead" style="text-align:center;margin:18px 0 22px">
+      <strong>${escHtml(o.klient.name)}</strong> wants to connect to your doda.</p>
+    <p class="lead" style="margin:0 0 6px">If you allow it, it can ${hvad}.</p>
+    <p class="lead" style="margin:0 0 22px">It can never change your password, create
+      access keys, or revoke connections — those need this browser.</p>
+    <form method="post" action="/oauth/authorize">
+      ${skjulte}
+      <input type="hidden" name="bevis" value="${samtykkeBevis(req)}">
+      <button class="btn primary" type="submit" name="godkend" value="ja" style="width:100%">Allow</button>
+      <button class="btn" type="submit" name="godkend" value="nej" style="width:100%;margin-top:8px">Cancel</button>
+    </form>
+    <p class="gate-note">You can revoke this again under Settings → Connected apps.
+      Signed in as <strong>${escHtml(o.bruger)}</strong>.</p>`);
+}
+
+/* CORS. De her fire endepunkter er offentlige opdagelses- og
+   udvekslingspunkter uden ambient legitimation: der er ingen cookie at
+   misbruge, og en klient i en browser skal kunne naa dem. */
+function oauthCors(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, MCP-Protocol-Version');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Max-Age', '3600');
+}
+
+async function haandterOauth(req, res, urlPath, query) {
+  const metode = req.method;
+
+  if (metode === 'OPTIONS') {
+    oauthCors(res);
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+
+  /* --- opdagelse. Begge stier serveres: RFC 9728 haenger ressourcens sti pa
+     (/.well-known/oauth-protected-resource/mcp), mens flere klienter proever
+     den nogne form foerst. To linjer her sparer en tavs opdagelsesfejl. --- */
+  if (/^\/\.well-known\/oauth-protected-resource(\/.*)?$/.test(urlPath)) {
+    oauthCors(res);
+    sendJson(res, 200, oauth.beskyttetRessource(req));
+    return;
+  }
+  if (/^\/\.well-known\/oauth-authorization-server(\/.*)?$/.test(urlPath)) {
+    oauthCors(res);
+    sendJson(res, 200, oauth.serverMetadata(req));
+    return;
+  }
+
+  /* --- dynamisk klientregistrering (RFC 7591) --- */
+  if (urlPath === '/oauth/register' && metode === 'POST') {
+    oauthCors(res);
+    if (!rateAllow(`oauth-register:${clientIp(req)}`, 20, 3600)) {
+      sendJson(res, 429, { error: 'temporarily_unavailable', error_description: 'Too many registrations. Try again later.' });
+      return;
+    }
+    // tilgivende: der er ingen cookie i spil, sa JSON-kravet (en CSRF-barriere)
+    // giver ingen mening her.
+    const krop = await readJsonBody(req, true);
+    const r = oauth.registrer(krop);
+    if (r.fejl) {
+      sendJson(res, 400, { error: 'invalid_redirect_uri', error_description: r.fejl });
+      return;
+    }
+    sendJson(res, 201, r.klient);
+    return;
+  }
+
+  /* --- samtykke --- */
+  if (urlPath === '/oauth/authorize' && (metode === 'GET' || metode === 'POST')) {
+    const bruger = sessionUser(req);
+    if (!bruger) {
+      if (metode !== 'GET') { oauthFejlside(res, 'Your session expired while approving. Start the connection again.'); return; }
+      // Log ind foerst, og kom saa tilbage hertil. Frontenden sender kun
+      // videre til stier, der begynder med /oauth/authorize - aldrig til et
+      // fremmed sted (aaben viderestilling).
+      const tilbage = `/?next=${encodeURIComponent(req.url)}`;
+      res.writeHead(302, { Location: tilbage, 'Cache-Control': 'no-store' });
+      res.end();
+      return;
+    }
+
+    const q = metode === 'GET' ? query : null;
+    const felter = q || new URLSearchParams();
+    if (metode === 'POST') {
+      const krop = await readJsonBody(req, true);
+      for (const n of OAUTH_FELTER) felter.set(n, String(krop[n] || ''));
+      // Laengden sammenlignes pa BUFFERE, ikke pa strenge: timingSafeEqual
+      // kaster ved forskellig laengde, og et flerbyte-tegn ville give to
+      // strenge af samme laengde, men to buffere af forskellig.
+      const forventet = Buffer.from(samtykkeBevis(req));
+      const givet = Buffer.from(String(krop.bevis || ''));
+      if (givet.length !== forventet.length || !crypto.timingSafeEqual(givet, forventet)) {
+        logSecurity(`oauth-samtykke-afvist ip=${clientIp(req)}`);
+        oauthFejlside(res, 'That approval did not come from this browser session.');
+        return;
+      }
+      if (String(krop.godkend || '') !== 'ja') {
+        // Afvisning meldes tilbage til klienten, som protokollen kraever -
+        // ellers star den og venter pa en kode, der aldrig kommer.
+        const o = oauth.tjekAutorisation(felter);
+        if (o.fejl || !o.redirect) { oauthFejlside(res, 'Connection cancelled.'); return; }
+        const url = new URL(o.redirect);
+        url.searchParams.set('error', 'access_denied');
+        if (o.state) url.searchParams.set('state', o.state);
+        audit('oauth-afvist', o.klient.name, clientIp(req));
+        res.writeHead(302, { Location: url.toString(), 'Cache-Control': 'no-store' });
+        res.end();
+        return;
+      }
+    }
+
+    const o = oauth.tjekAutorisation(felter);
+    if (o.fejl) { oauthFejlside(res, o.fejl); return; }
+
+    if (metode === 'GET') {
+      sendHtml(res, 200, samtykkeHtml(req, felter, Object.assign({ bruger: bruger.username }, o)));
+      return;
+    }
+
+    const url = oauth.giveTilladelse(o, bruger.id);
+    audit('oauth-godkendt', o.klient.name, o.scope);
+    logSecurity(`oauth-godkendt klient=${o.klient.name}`);
+    res.writeHead(302, { Location: url, 'Cache-Control': 'no-store' });
+    res.end();
+    return;
+  }
+
+  /* --- token --- */
+  if (urlPath === '/oauth/token' && metode === 'POST') {
+    oauthCors(res);
+    if (!rateAllow(`oauth-token:${clientIp(req)}`, 120, 3600)) {
+      sendJson(res, 429, { error: 'temporarily_unavailable', error_description: 'Too many token requests.' });
+      return;
+    }
+    // OAuth-klienter sender application/x-www-form-urlencoded.
+    const krop = await readJsonBody(req, true);
+    const art = String(krop.grant_type || '');
+    let r;
+    if (art === 'authorization_code') r = oauth.byttKode(krop);
+    else if (art === 'refresh_token') r = oauth.forny(krop);
+    else { sendJson(res, 400, { error: 'unsupported_grant_type' }); return; }
+
+    if (r.fejl) {
+      logSecurity(`oauth-grant-afvist art=${art} ip=${clientIp(req)}`);
+      sendJson(res, 400, { error: r.fejl, error_description: 'That code or refresh token is not valid any more.' });
+      return;
+    }
+    sendJson(res, 200, r);
+    return;
+  }
+
+  /* --- tilbagekaldelse (RFC 7009). Svarer altid 200: et ugyldigt token er
+     allerede tilbagekaldt, og alt andet ville rebe, hvad der findes. --- */
+  if (urlPath === '/oauth/revoke' && metode === 'POST') {
+    oauthCors(res);
+    const krop = await readJsonBody(req, true);
+    const t = String(krop.token || '');
+    if (t.startsWith('dodar_')) {
+      db.prepare('UPDATE oauth_refresh SET revoked_at = ? WHERE hash = ? AND revoked_at IS NULL')
+        .run(now(), hashToken(t));
+    } else if (t.startsWith('doda_')) {
+      db.prepare('UPDATE tokens SET revoked_at = ? WHERE hash = ? AND client_id IS NOT NULL AND revoked_at IS NULL')
+        .run(now(), hashToken(t));
+    }
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+
+  sendJson(res, 404, { error: 'unknown endpoint' });
+}
+
 /* ---------------------------------------------------------- passkeys */
 
 function hentCredentials(userId) {
@@ -2054,6 +2441,11 @@ const mcp = require('./mcp.js').opret({
   // eller http'en - sa kan det testes for sig.
   maa: (auth, scope) => SCOPE_TILLADER[auth.token.scope].has(scope),
   godkendMcp,
+  // Pegepinden til autorisationsserveren. Stien med /mcp bagpaa er den
+  // kanoniske i RFC 9728 (ressourcens sti haenges paa); den nogne form
+  // serveres ogsaa, fordi flere klienter proever den foerst.
+  oauthUdfordring: (req) => `Bearer realm="doda", `
+    + `resource_metadata="${oauth.base(req)}/.well-known/oauth-protected-resource/mcp"`,
   fangst,
   hentItems,
   hentItem,
@@ -2440,6 +2832,23 @@ const MOENSTRE = [
     },
   },
   {
+    // Tilbagekald en hel forbindelse: bade de access-tokens, den har faaet,
+    // og retten til at forny dem. Klienten selv bliver staaende, sa navnet
+    // stadig kan genkendes, hvis den proever igen.
+    metode: 'DELETE', re: /^\/api\/v1\/connections\/([\w-]{1,64})$/,
+    async kald(req, res, ctx) {
+      const user = requireUser(req, res);
+      if (!user) return;
+      await readJsonBody(req);
+      const k = db.prepare('SELECT name FROM oauth_clients WHERE id = ?').get(ctx.params[0]);
+      if (!k) { apiFejl(res, 404, 'not_found', 'No such connection.'); return; }
+      tilbagekaldKlient(ctx.params[0]);
+      audit('oauth-tilbagekaldt', k.name, clientIp(req));
+      logSecurity(`oauth-tilbagekaldt klient=${k.name}`);
+      sendJson(res, 200, { connections: hentForbindelser() });
+    },
+  },
+  {
     metode: 'POST', re: /^\/api\/v1\/items\/([\w-]{1,64})$/,
     async kald(req, res, ctx) {
       const auth = godkend(req, res, 'write');
@@ -2585,6 +2994,15 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // OAuth ligger UDEN for /api/: de to .well-known-dokumenter har faste
+    // stier, og resten skal kunne staa i en klient-konfiguration. De saetter
+    // deres egne CORS-headere og ma derfor ikke gennem securityHeaders, som
+    // ville lukke dem igen med Cross-Origin-Resource-Policy: same-origin.
+    if (urlPath.startsWith('/oauth/') || urlPath.startsWith('/.well-known/oauth-')) {
+      await haandterOauth(req, res, urlPath, query);
+      return;
+    }
+
     // MCP ligger pa /mcp - kort nok til at skrive i en klient-konfiguration.
     if (urlPath === '/mcp') {
       securityHeaders(res);
@@ -2624,6 +3042,16 @@ function sweep() {
     db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(t);
     db.prepare('DELETE FROM rate WHERE reset_at <= ?').run(t);
     db.prepare('DELETE FROM audit WHERE at < ?').run(t - 180 * 86400);
+    // OAuth-tokens fornys hver 8. time og hober sig ellers op. De beholdes
+    // en maaned efter udloeb, sa "sidst brugt" pa forbindelsen ikke
+    // forsvinder, foerste gang der ryddes op.
+    db.prepare('DELETE FROM tokens WHERE expires_at IS NOT NULL AND expires_at < ?').run(t - 30 * 86400);
+    db.prepare('DELETE FROM oauth_refresh WHERE revoked_at IS NOT NULL AND revoked_at < ?').run(t - 30 * 86400);
+    // Registreringer, jeg aldrig sagde ja til. En klient registrerer sig ved
+    // hvert forsoeg, sa de her hober sig op uden at betyde noget.
+    db.prepare(`DELETE FROM oauth_clients WHERE created_at < ?
+                  AND NOT EXISTS (SELECT 1 FROM tokens t WHERE t.client_id = oauth_clients.id)`)
+      .run(t - 7 * 86400);
   } catch (err) {
     logError(`oprydning fejlede: ${err.message}`);
   }
