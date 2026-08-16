@@ -756,3 +756,83 @@ textarea.input { resize: vertical; min-height: 90px; font-family: inherit; }
 }
 
 .offline-mark[hidden] { display: none !important; }
+
+/* ------------------------------------------------------ vedhaeftninger */
+
+.filedrop {
+  border: 1px dashed var(--border);
+  border-radius: var(--r);
+  padding: 14px;
+  transition: border-color .12s, background .12s;
+}
+
+.filedrop.over { border-color: var(--accent); background: var(--accent-soft); }
+.filedrop.busy { opacity: .6; pointer-events: none; }
+
+.files { display: flex; flex-wrap: wrap; gap: 8px; }
+.files:not(:empty) { margin-bottom: 12px; }
+
+.filecard { position: relative; border-radius: var(--r-sm); overflow: hidden; }
+
+.filecard.image {
+  width: 84px;
+  height: 84px;
+  display: block;
+  border: 1px solid var(--border-soft);
+}
+
+.filecard.image img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.filecard.doc {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--border-soft);
+  background: var(--bg);
+  padding-right: 26px;
+}
+
+.filecard.doc a {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 12px;
+  text-decoration: none;
+  color: var(--text);
+  max-width: 260px;
+}
+
+.filecard.doc .filename {
+  font-size: 13.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filecard.doc .meta { text-transform: none; letter-spacing: 0; flex: none; }
+
+.filedel {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(20, 15, 8, .62);
+  color: #fff;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  opacity: 0;
+}
+
+.filecard:hover .filedel, .filecard:focus-within .filedel { opacity: 1; }
+.filedel:hover { background: rgba(20, 15, 8, .85); }
+
+/* Pa touch findes hover ikke - saa skal krydset altid vaere der. */
+@media (hover: none) { .filedel { opacity: 1; } }
+
+.filebtn { width: 100%; justify-content: center; }
+.filehint { text-transform: none; letter-spacing: 0; margin: 10px 0 0; text-align: center; font-size: 11.5px; }

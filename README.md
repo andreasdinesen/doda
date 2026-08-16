@@ -69,6 +69,24 @@ Gentagelser kan sættes på **pause** (reglen bevares) og **springes over** enke
 Ændrer du titel eller projekt på en forekomst, spørger appen, om det gælder kun
 denne gang eller alle fremtidige.
 
+### Billeder og filer
+
+Åbn en opgave eller note og træk filer ind — eller tryk **Add images or files**.
+På telefonen kan du vælge kamera eller fotobibliotek.
+
+Store fotos **skaleres ned i browseren**, før de sendes, så de ikke fylder
+unødigt. PNG bevares som PNG, så gennemsigtighed ikke bliver til sort.
+Grænsen er 25 MB pr. fil.
+
+Billeder vises som miniature og åbner i fuld størrelse ved klik. Alt andet
+vises som en fil, du kan hente. Filerne ligger i serverens datamappe og er
+derfor med i panelets backup.
+
+> **Sikkerhed:** kun almindelige billedformater vises inline i browseren. Alt
+> andet — også SVG, som kan indeholde kode — leveres som en ren download.
+> Filnavne saniteres, og på disken hedder filerne kun deres id, så et filnavn
+> aldrig kan pege et forkert sted hen.
+
 ### På telefonen og uden net
 
 Åbn doda i Safari på din iPhone og vælg **Del → Føj til hjemmeskærm**. Så kører

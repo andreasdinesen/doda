@@ -179,6 +179,31 @@ const MIGRATIONS = [
       CREATE INDEX items_gentagelse ON items(recurrence_id) WHERE recurrence_id IS NOT NULL;
     `);
   },
+
+  function m6(d) {
+    // Filerne ligger pa DISK i /data/files, ikke i databasen. To grunde:
+    // backup streamer dem i stedet for at laese dem i hukommelsen, og
+    // databasen forbliver lille nok til at kunne kopieres.
+    //
+    // Og indholdet kommer ALDRIG i naerheden af items-tabellen. Kokkeri
+    // ramte et login-svar pa 247,9 MB, fordi billeder la i de poster,
+    // listen hentede (RUNE-ERFARINGER §4).
+    d.exec(`
+      CREATE TABLE attachments (
+        id         TEXT PRIMARY KEY,
+        item_id    TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+        name       TEXT NOT NULL,
+        mime       TEXT NOT NULL,
+        size       INTEGER NOT NULL,
+        sha        TEXT NOT NULL,
+        width      INTEGER,
+        height     INTEGER,
+        created_at INTEGER NOT NULL,
+        deleted    INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX attachments_item ON attachments(item_id) WHERE deleted = 0;
+    `);
+  },
 ];
 
 // Statusser. Raekkefoelgen er ogsaa den, lister sorteres efter.
@@ -741,7 +766,7 @@ function hentItems(filter) {
      ORDER BY ${filter.nyesteFoerst ? 'i.completed_at DESC, i.created_at DESC' : 'i.seq, i.created_at'}
      LIMIT ?`).all(...arg, Math.min(Number(filter.limit) || 500, 2000));
 
-  return medKontekster(raekker);
+  return medVedhaeftningsantal(medKontekster(raekker));
 }
 
 /** Fuldtekst i titel OG beskrivelse. Afsluttede sorteres bagest, ikke bort. */
@@ -756,12 +781,17 @@ function soegItems(raa) {
      ORDER BY CASE WHEN i.status IN ('done','dropped') THEN 1 ELSE 0 END,
               i.updated_at DESC
      LIMIT 40`).all(moenster, moenster);
-  return medKontekster(raekker);
+  return medVedhaeftningsantal(medKontekster(raekker));
 }
 
 function hentItem(id) {
   const raekke = db.prepare(`SELECT ${ITEM_FELTER} FROM items i WHERE i.id = ? AND i.deleted = 0`).get(id);
-  return raekke ? medKontekster([raekke])[0] : null;
+  if (!raekke) return null;
+  const item = medKontekster([raekke])[0];
+  // Det ENKELTE element far metadata med; lister far kun et antal.
+  item.attachments = hentVedhaeftninger(id);
+  item.attachment_count = item.attachments.length;
+  return item;
 }
 
 function saetKontekster(itemId, kontekstIder) {
@@ -827,6 +857,105 @@ function opdaterItem(id, felter) {
   arg.push(now());
   db.prepare(`UPDATE items SET ${saet.join(', ')} WHERE id = ?`).run(...arg, id);
   return hentItem(id);
+}
+
+/* -------------------------------------------------------- vedhaeftninger */
+
+const FILES_DIR = path.join(DATA_DIR, 'files');
+const MAX_FIL = 25 * 1024 * 1024;          // pr. fil
+const MAX_SAMLET = 2 * 1024 * 1024 * 1024; // samlet kvote
+
+/* Kun disse vises INLINE i browseren. Alt andet - inklusive SVG, der kan
+   baere script - tvinges til download. Det er den vigtigste spaerring i hele
+   funktionen: en fil, brugeren selv har uploadet, ma aldrig kunne koere som
+   en side pa dodas eget domaene. */
+const INLINE_MIME = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif']);
+
+function sikreFilesDir() {
+  try { fs.mkdirSync(FILES_DIR, { recursive: true }); } catch (err) { logError(`kunne ikke lave files/: ${err.message}`); }
+}
+
+/** Filnavnet er KUN til visning og download - stien pa disken er altid id'et. */
+function renseFilnavn(raa) {
+  const n = String(raa || 'file')
+    .replace(/[\x00-\x1f\x7f]/g, '')   // kontroltegn
+    .replace(/[/\\]/g, '-')                  // ingen stier
+    .replace(/^\.+/, '')                     // ingen skjulte filer
+    .trim()
+    .slice(0, 120);
+  return n || 'file';
+}
+
+function filSti(id) {
+  // id'et kommer fra newId() og er ren hex - men tjek alligevel, sa en
+  // fremtidig aendring ikke aabner for sti-traversering.
+  if (!/^[a-f0-9]{32}$/.test(id)) return null;
+  return path.join(FILES_DIR, id);
+}
+
+function samletStoerrelse() {
+  return db.prepare('SELECT COALESCE(SUM(size), 0) AS n FROM attachments WHERE deleted = 0').get().n;
+}
+
+function hentVedhaeftninger(itemId) {
+  return db.prepare(`
+    SELECT id, name, mime, size, sha, width, height, created_at
+      FROM attachments WHERE item_id = ? AND deleted = 0 ORDER BY created_at`).all(itemId);
+}
+
+/** Antal pr. element i ÉT opslag - listerne ma aldrig hente metadata pr. raekke. */
+function medVedhaeftningsantal(raekker) {
+  if (!raekker.length) return raekker;
+  const huller = raekker.map(() => '?').join(',');
+  const tal = db.prepare(`
+    SELECT item_id, COUNT(*) AS n FROM attachments
+     WHERE deleted = 0 AND item_id IN (${huller}) GROUP BY item_id`).all(...raekker.map((r) => r.id));
+  const kort = new Map(tal.map((t) => [t.item_id, t.n]));
+  for (const r of raekker) r.attachment_count = kort.get(r.id) || 0;
+  return raekker;
+}
+
+/**
+ * Laeser en raa krop direkte til disk.
+ *
+ * Ikke readJsonBody: den samler alt i hukommelsen med et 2 MB-loft. En fil
+ * skal streames, ellers ligger 25 MB i heapen pr. samtidig upload.
+ */
+function modtagFil(req, maal, maxBytes) {
+  return new Promise((resolve, reject) => {
+    const ud = fs.createWriteStream(maal);
+    const hash = crypto.createHash('sha256');
+    let size = 0;
+    let stoppet = false;
+
+    const stop = (err) => {
+      if (stoppet) return;
+      stoppet = true;
+      ud.destroy();
+      fs.unlink(maal, () => {});
+      // Forbindelsen rives IKKE ned her. Gjorde man det, ville klienten se
+      // "connection reset" i stedet for det 413, vi gerne vil svare - og sa
+      // aner en API-klient ikke, hvorfor uploaden fejlede. Kalderen svarer
+      // foerst og lukker bagefter.
+      req.pause();
+      reject(err);
+    };
+
+    req.on('data', (chunk) => {
+      size += chunk.length;
+      if (size > maxBytes) {
+        stop(Object.assign(new Error(`The file is larger than ${Math.round(maxBytes / 1024 / 1024)} MB.`), { status: 413 }));
+        return;
+      }
+      hash.update(chunk);
+      ud.write(chunk);
+    });
+    req.on('error', stop);
+    req.on('end', () => {
+      if (stoppet) return;
+      ud.end(() => resolve({ size, sha: hash.digest('hex') }));
+    });
+  });
 }
 
 /* --------------------------------------------------------- gentagelser */
@@ -1590,6 +1719,112 @@ const MOENSTRE = [
     },
   },
   {
+    // Rå krop, ikke multipart: en multipart-parser er ~200 linjer, man selv
+    // skal holde sikker. Browseren kan sende en File direkte som krop, og
+    // navnet kan staa i adressen.
+    metode: 'POST', re: /^\/api\/v1\/items\/([\w-]{1,64})\/files$/,
+    async kald(req, res, ctx) {
+      const auth = godkend(req, res, 'write');
+      if (!auth) return;
+      const item = hentItem(ctx.params[0]);
+      if (!item) { apiFejl(res, 404, 'not_found', 'No such item.'); return; }
+
+      if (samletStoerrelse() >= MAX_SAMLET) {
+        apiFejl(res, 507, 'quota_full', 'Attachment storage is full. Delete some files first.');
+        return;
+      }
+      const id = newId();
+      const maal = filSti(id);
+      if (!maal) { apiFejl(res, 500, 'server_error', 'Could not allocate a file.'); return; }
+
+      sikreFilesDir();
+      let info;
+      try {
+        info = await modtagFil(req, maal, MAX_FIL);
+      } catch (err) {
+        // Svar foerst, luk bagefter: resten af den store krop er vi ikke
+        // interesserede i, men klienten skal naa at laese begrundelsen.
+        res.setHeader('Connection', 'close');
+        apiFejl(res, err.status || 400, err.status === 413 ? 'too_large' : 'upload_failed',
+          err.message || 'The upload failed.');
+        res.on('finish', () => req.destroy());
+        return;
+      }
+      if (!info.size) {
+        fs.unlink(maal, () => {});
+        apiFejl(res, 400, 'empty_file', 'The file was empty.');
+        return;
+      }
+
+      const navn = renseFilnavn(ctx.query.get('name'));
+      // Klientens Content-Type er kun et HINT. Den bestemmer, om filen vises
+      // inline - derfor whitelistes den, og alt ukendt bliver til en download.
+      const raaMime = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+      const mime = /^[\w.+-]+\/[\w.+-]+$/.test(raaMime) ? raaMime : 'application/octet-stream';
+      const b = Number(ctx.query.get('w'));
+      const h = Number(ctx.query.get('h'));
+
+      db.prepare(`
+        INSERT INTO attachments (id, item_id, name, mime, size, sha, width, height, created_at)
+        VALUES (?,?,?,?,?,?,?,?,?)`)
+        .run(id, item.id, navn, mime, info.size, info.sha,
+          Number.isFinite(b) && b > 0 ? Math.round(b) : null,
+          Number.isFinite(h) && h > 0 ? Math.round(h) : null, now());
+      db.prepare('UPDATE items SET updated_at = ? WHERE id = ?').run(now(), item.id);
+      audit('fil-uploadet', navn, `${info.size} b`);
+      sendJson(res, 200, { attachment: hentVedhaeftninger(item.id).find((a) => a.id === id) });
+    },
+  },
+  {
+    metode: 'GET', re: /^\/api\/v1\/files\/([a-f0-9]{32})$/,
+    kald(req, res, ctx) {
+      const auth = godkend(req, res, 'read');
+      if (!auth) return;
+      const a = db.prepare('SELECT * FROM attachments WHERE id = ? AND deleted = 0').get(ctx.params[0]);
+      if (!a) { apiFejl(res, 404, 'not_found', 'No such file.'); return; }
+      const sti = filSti(a.id);
+      let stat;
+      try { stat = fs.statSync(sti); } catch { apiFejl(res, 410, 'gone', 'The file is missing on disk.'); return; }
+
+      // Indholdet kan aldrig aendre sig for et givet id - derfor immutable.
+      // ETag lader browseren noejes med en 304.
+      if (req.headers['if-none-match'] === `"${a.sha}"`) { res.writeHead(304); res.end(); return; }
+
+      const inline = INLINE_MIME.has(a.mime);
+      securityHeaders(res);
+      res.writeHead(200, {
+        // Alt der ikke er et almindeligt billede serveres som en ren
+        // bytestroem og TVINGES til download. SVG er med vilje ikke pa
+        // listen: den kan baere script og ville koere pa dodas eget domaene.
+        'Content-Type': inline ? a.mime : 'application/octet-stream',
+        'Content-Disposition': `${inline ? 'inline' : 'attachment'}; filename="${a.name.replace(/["\\]/g, '')}"`,
+        'Content-Length': stat.size,
+        'Cache-Control': 'private, max-age=31536000, immutable',
+        ETag: `"${a.sha}"`,
+      });
+      if (req.method === 'HEAD') { res.end(); return; }
+      fs.createReadStream(sti).pipe(res);
+    },
+  },
+  {
+    metode: 'DELETE', re: /^\/api\/v1\/files\/([a-f0-9]{32})$/,
+    async kald(req, res, ctx) {
+      const auth = godkend(req, res, 'write');
+      if (!auth) return;
+      await readJsonBody(req, auth.viaToken);
+      const a = db.prepare('SELECT id, item_id, name FROM attachments WHERE id = ? AND deleted = 0').get(ctx.params[0]);
+      if (!a) { apiFejl(res, 404, 'not_found', 'No such file.'); return; }
+      // Raekken slettes haardt OG filen fjernes: en vedhaeftning uden
+      // indhold er ubrugelig, og pladsen skal frigives med det samme.
+      db.prepare('DELETE FROM attachments WHERE id = ?').run(a.id);
+      const sti = filSti(a.id);
+      if (sti) fs.unlink(sti, () => {});
+      db.prepare('UPDATE items SET updated_at = ? WHERE id = ?').run(now(), a.item_id);
+      audit('fil-slettet', a.name, null);
+      sendJson(res, 200, { ok: true });
+    },
+  },
+  {
     metode: 'GET', re: /^\/api\/v1\/projects\/([\w-]{1,64})$/,
     kald(req, res, ctx) {
       const auth = godkend(req, res, 'read');
@@ -1902,6 +2137,7 @@ process.on('uncaughtException', (err) => {
 });
 
 migrate();
+sikreFilesDir();
 computeInlineHash();
 sweep();
 setInterval(sweep, 6 * 3600 * 1000).unref();

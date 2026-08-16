@@ -145,6 +145,7 @@ function elementRaekke(it, i) {
       ${meta.length ? `<div class="item-meta meta">${meta.join(' · ')}</div>` : ''}
     </div>
     ${it.note ? `<span class="item-flag" title="Has a description">${icon('note', 15)}</span>` : ''}
+    ${it.attachment_count ? `<span class="item-flag" title="${it.attachment_count} attachment(s)">${icon('link', 15)}</span>` : ''}
   </div>`;
 }
 
@@ -249,7 +250,17 @@ async function slet(id) {
 
 /* ------------------------------------------------------ detaljeruden */
 
-function aabnElement(it) {
+async function aabnElement(listeItem) {
+  // Listen baerer KUN et antal vedhaeftninger, aldrig metadataene - det er
+  // hele pointen med §4-lektien. Ruden skal derfor hente det fulde element,
+  // ellers star filerne der ikke.
+  let it = listeItem;
+  if (listeItem.attachment_count && !listeItem.attachments) {
+    try { it = (await api('GET', `/api/v1/items/${listeItem.id}`)).item; }
+    catch { it = Object.assign({ attachments: [] }, listeItem); }
+  } else if (!it.attachments) {
+    it = Object.assign({ attachments: [] }, listeItem);
+  }
   const host = document.createElement('div');
   host.className = 'modal';
   host.innerHTML = `
@@ -289,6 +300,8 @@ function aabnElement(it) {
           ${it.contexts.some((x) => x.id === c.id) ? 'checked' : ''}>#${esc(c.name)}</label>`).join('')
     : '<span class="lead">No contexts yet — add one by typing #name when you capture.</span>'}</div>
     </div>
+
+    ${vedhaeftningerHtml(it)}
 
     <div class="modal-foot">
       <button class="btn ghost" id="edDelete">Delete</button>
@@ -365,6 +378,18 @@ function aabnElement(it) {
       toast(tilNote ? 'Converted to a note' : 'Converted to a task');
     } catch (ex) { toast(ex.message); }
   });
+
+  // Efter upload eller sletning gentegnes KUN fillisten - brugerens ugemte
+  // rettelser i titel og beskrivelse skal ikke gaa tabt. Navngivet funktion,
+  // ikke arguments.callee: filen er strict mode.
+  const genhentFiler = async () => {
+    const frisk = (await api('GET', `/api/v1/items/${it.id}`)).item;
+    it.attachments = frisk.attachments || [];
+    host.querySelector('#fileList').innerHTML = it.attachments.map(filKort).join('');
+    bindVedhaeftninger(host, it, genhentFiler);
+    await genindlaes();
+  };
+  bindVedhaeftninger(host, it, genhentFiler);
 
   host.querySelector('#edTitle').focus();
 }

@@ -216,6 +216,28 @@ function opret(srv) {
       },
     },
     {
+      name: 'list_attachments',
+      scope: 'read',
+      description:
+        'List the files attached to one task or note: name, type and size. '
+        + 'Returns metadata only — file contents are never sent over MCP.',
+      inputSchema: {
+        type: 'object',
+        properties: { id: { type: 'string', description: 'The task or note id.' } },
+        required: ['id'],
+      },
+      kald(a) {
+        const item = srv.hentItem(String(a.id || ''));
+        if (!item) return { fejl: `No item with id ${a.id}.` };
+        const filer = item.attachments || [];
+        if (!filer.length) return { tekst: `“${item.title}” has no attachments.`, data: { attachments: [] } };
+        return {
+          tekst: filer.map((f) => `- ${f.name}  ·  ${f.mime}  ·  ${f.size} bytes`).join('\n'),
+          data: { attachments: filer },
+        };
+      },
+    },
+    {
       name: 'list_contexts',
       scope: 'read',
       description: 'List the contexts that exist, with how many next actions each one holds.',

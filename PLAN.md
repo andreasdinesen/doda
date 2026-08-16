@@ -13,9 +13,9 @@
 
 | | |
 |---|---|
-| **Fase** | F6 · PWA + offline — **færdig** (se forbehold nedenfor) |
-| **Næste** | F7 · Vedhæftninger |
-| **Tilstand** | F0–F5 pushet. F6 ikke committet — venter på Andreas' ja. |
+| **Fase** | F7 · Vedhæftninger — **færdig og testet lokalt** |
+| **Næste** | F8 · Gennemgang, logbog, ventelister, fokus |
+| **Tilstand** | F0–F6 pushet. F7 ikke committet — venter på Andreas' ja. |
 | **Udgivet version** | — (`APP_VERSION = 1` er stadig ubrugt; bumpes først ved reel udgivelse) |
 | **Sidst opdateret** | 2026-08-16 |
 
@@ -91,6 +91,17 @@ Ikonerne kostede 24 K tegn, indtil de blev paletterede (70 KB → 18,5 KB). Bliv
 trangt i F9, kan ikonerne tegnes af serveren ved opstart i stedet for at ligge i
 payloaden.
 
+**Verificeret i F7:** **listerne får kun `attachment_count`** — filmetadata følger
+udelukkende med det enkelte element (§4-lektien håndhævet i koden) · PNG serveres
+inline, mens **PDF og SVG tvinges til `application/octet-stream` + `attachment`**, så
+en uploadet SVG aldrig kan køre som en side på dodas domæne · `nosniff`, `immutable`
+og ETag med virkende 304 · filnavne saniteres (`../../../etc/passwd` →
+`-..-..-etc-passwd`), og stien på disken er altid det rene hex-id · tom fil afvist ·
+for stor fil svarer 413 **før** forbindelsen lukkes · `files/` er med i runens `wipe`.
+
+⚠️ Install-scriptet er nu på **78 %**. F8–F10 skal holde øje; ellers flyttes ikonerne
+ud af payloaden og tegnes af serveren ved opstart.
+
 ### Faseoversigt
 
 | # | Fase | Leverance | Status |
@@ -102,7 +113,7 @@ payloaden.
 | **F4** | Gentagelser | Todoist-syntaks med `!`, to tilstande, gentagelses-skærm | ✅ Færdig |
 | **F5** | MCP-server | Claude kan forbinde til appen | ✅ Færdig |
 | **F6** | PWA + offline | Hjemmeskærm, offline-læsning, fangst-kø | ✅ Færdig |
-| **F7** | Vedhæftninger | Billeder og filer på opgaver og noter | ⬜ |
+| **F7** | Vedhæftninger | Billeder og filer på opgaver og noter | ✅ Færdig |
 | **F8** | Gennemgang, logbog, ventelister, fokus | Ugentlig gennemgang, Venter på, Engang måske, timer | ⬜ |
 | **F9** | Kalenderfeed, eksport/import, backup | Data ind og ud, verificeret gendannelse | ⬜ |
 | **F10** | Sikkerhedsgennemgang + udgivelse | Hærdning, README, v1 | ⬜ |
@@ -190,20 +201,20 @@ det færdige tingdo-design. Ingen opgavefunktioner endnu.
 **RUNE-ERFARINGER §4 er hele designet her** — det var Kokkeris dyreste lærestreg:
 billeder inde i de items, listen henter, gav et login-svar på 247,9 MB.
 
-- [ ] Egen tabel `attachments` + egen `/data/files/`-mappe. **Aldrig** filindhold i
+- [x] Egen tabel `attachments` + egen `/data/files/`-mappe. **Aldrig** filindhold i
       `items` — elementet bærer kun et antal, så listerne er upåvirkede
-- [ ] Filerne på disk, ikke i SQLite: så streamer backup, og databasen forbliver lille
-- [ ] `GET /api/v1/files/:id` med **ETag + `Cache-Control: immutable`** og versioneret URL
-- [ ] Upload uden multipart-parser: rå krop + `?name=`/`Content-Type` (ingen npm-pakke)
-- [ ] Loft pr. fil (25 MB) og samlet kvote, med en læsbar fejl når den rammes
-- [ ] **Sikkerhed:** `nosniff` + `Content-Disposition: attachment` for alt undtagen
+- [x] Filerne på disk, ikke i SQLite: så streamer backup, og databasen forbliver lille
+- [x] `GET /api/v1/files/:id` med **ETag + `Cache-Control: immutable`** og versioneret URL
+- [x] Upload uden multipart-parser: rå krop + `?name=`/`Content-Type` (ingen npm-pakke)
+- [x] Loft pr. fil (25 MB) og samlet kvote, med en læsbar fejl når den rammes
+- [x] **Sikkerhed:** `nosniff` + `Content-Disposition: attachment` for alt undtagen
       billeder. SVG serveres ALDRIG inline (kan bære script). Filnavne saniteres —
       ingen sti-traversering, ingen kontroltegn
-- [ ] Billeder skaleres i **browseren** før upload (Node kan ikke skalere uden pakker)
-- [ ] Miniature i detaljeruden, klik åbner fuld visning; filer vises som en liste
-- [ ] Kamera/foto-valg på iPhone (`accept="image/*"`, `capture`), træk-og-slip på desktop
+- [x] Billeder skaleres i **browseren** før upload (Node kan ikke skalere uden pakker)
+- [x] Miniature i detaljeruden, klik åbner fuld visning; filer vises som en liste
+- [x] Kamera/foto-valg på iPhone (`accept="image/*"`, `capture`), træk-og-slip på desktop
 - [ ] Vedhæftninger med i eksport/import (F9) og verificeret i backup-rundturen
-- [ ] MCP: `list_attachments` — men **aldrig** filindhold gennem MCP
+- [x] MCP: `list_attachments` — men **aldrig** filindhold gennem MCP
 
 ## F8 · Gennemgang, logbog, ventelister, fokus
 

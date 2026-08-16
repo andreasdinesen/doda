@@ -317,7 +317,11 @@ def byg_yaml(version, payload):
         ],
 
         'backup': {'include': []},
-        'wipe': {'paths': ['doda.db', 'doda.db-wal', 'doda.db-shm'], 'backup_first': True},
+        # files/ skal med i wipe - ellers efterlader en nulstilling alle
+        # vedhaeftninger som foraeldreloese filer, der aldrig ryddes op.
+        # backup.include: [] daekker hele datamappen, saa filerne er med der.
+        'wipe': {'paths': ['doda.db', 'doda.db-wal', 'doda.db-shm', 'files'],
+                 'backup_first': True},
     }}
 
     tekst = yaml.safe_dump(rune, allow_unicode=True, sort_keys=False, width=120)

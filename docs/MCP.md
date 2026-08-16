@@ -17,8 +17,8 @@ holde patchet.
 | Scope | Claude kan | Værktøjer den ser |
 |---|---|---|
 | `capture` | kun tilføje | `capture` |
-| `read` | kun læse | `list_next_actions`, `list_inbox`, `search`, `list_projects`, `get_project`, `list_repeating`, `list_contexts` |
-| `full` | alt | alle ti |
+| `read` | kun læse | `list_next_actions`, `list_inbox`, `search`, `list_projects`, `get_project`, `list_repeating`, `list_attachments`, `list_contexts` |
+| `full` | alt | alle elleve |
 
 `tools/list` viser **kun** det, nøglen faktisk må. Så foreslår Claude aldrig et
 værktøj, der alligevel ville blive afvist — og scopet håndhæves igen ved selve
@@ -87,6 +87,7 @@ udvidelse, men Claude Code og Desktop dækker behovet uden.
 | `list_projects` | read | Med område, antal åbne og **NO NEXT ACTION**-markering |
 | `get_project` | read | Alt i ét projekt: opgaver, noter, underprojekter |
 | `list_repeating` | read | Regel, næste forfald og antal spring |
+| `list_attachments` | read | Filer på ét element — **kun metadata**, aldrig indhold |
 | `list_contexts` | read | Kontekster med antal næste handlinger |
 
 `capture` tager hele linjen, ikke felter hver for sig:

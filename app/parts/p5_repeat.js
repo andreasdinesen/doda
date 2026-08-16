@@ -1,5 +1,5 @@
 'use strict';
-/* doda - skaermen "Repeating".
+/* doda - skaermen "Recurring".
    Det er HER man opdager, at en vane ikke virker: naeste forfald ved siden af
    antallet af gange, den er sprunget over (handover §5.6). */
 
@@ -19,7 +19,7 @@ async function sideRepeat() {
     host.innerHTML = `<section class="page">
       ${repeatHead()}
       <div class="empty">${icon('calm', 34)}
-        <p class="empty-title">Nothing repeats yet</p>
+        <p class="empty-title">Nothing recurs yet</p>
         <p>Add <code>!every monday</code> when you capture — or
         <code>!every! 3 days</code> to count from the day you finish.</p></div>
     </section>`;
@@ -38,7 +38,7 @@ async function sideRepeat() {
 
 function repeatHead() {
   return `<div class="page-head">
-    <h1>Repeating</h1>
+    <h1>Recurring</h1>
     <p class="lead">${esc(BESKRIVELSER.repeat)}</p>
     <div class="card" style="margin-top:18px;padding:14px 18px">
       <table class="syntax">
@@ -95,7 +95,7 @@ function aabnGentagelse(r) {
     <label class="field"><span>Title (applies to every future one)</span>
       <input class="input" id="rTitle" value="${esc(r.title)}"></label>
 
-    <label class="field"><span>Repeat rule</span>
+    <label class="field"><span>Recurrence rule</span>
       <input class="input" id="rRule" value="${esc(r.rule.text)}"
         placeholder="every monday · every! 3 days · last workday of the month"></label>
 
@@ -113,7 +113,7 @@ function aabnGentagelse(r) {
     </div>
 
     <div class="modal-foot" style="flex-wrap:wrap">
-      <button class="btn ghost" id="rDelete">Stop repeating</button>
+      <button class="btn ghost" id="rDelete">Stop recurring</button>
       <button class="btn ghost" id="rSkip"${r.paused ? ' disabled' : ''}>Skip this one</button>
       <button class="btn ghost" id="rPause">${r.paused ? 'Resume' : 'Pause'}</button>
       <span style="flex:1"></span>
@@ -151,7 +151,7 @@ function aabnGentagelse(r) {
 
   host.querySelector('#rDelete').addEventListener('click', async () => {
     await api('DELETE', `/api/v1/recurrences/${r.id}`, {});
-    await efter('Stopped repeating — the open one is now a normal task');
+    await efter('Stopped recurring — the open one is now a normal task');
   });
 
   host.querySelector('#rTitle').focus();
@@ -170,7 +170,7 @@ function spoergOmSerie(titel) {
     host.innerHTML = `
     <div class="modal-card" role="dialog" aria-modal="true" style="max-width:440px">
       <h2>This one, or all future ones?</h2>
-      <p class="lead" style="margin:6px 0 20px">“${esc(titel)}” repeats.
+      <p class="lead" style="margin:6px 0 20px">“${esc(titel)}” is recurring.
       Should the change stick to every future one, or only to this occurrence?</p>
       <div class="modal-foot">
         <span style="flex:1"></span>
