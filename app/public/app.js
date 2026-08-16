@@ -565,6 +565,140 @@
   };
 }));
 
+/* ---- shared/todoist.js ---- */
+/* doda - laeser Todoists CSV-eksport.
+ *
+ * Todoist eksporterer ét projekt pr. fil ("Projektnavn.csv") med kolonnerne
+ * TYPE, CONTENT, DESCRIPTION, PRIORITY, INDENT, AUTHOR, RESPONSIBLE, DATE, …
+ *
+ * VIGTIGST: begreberne er BYTTET OM mellem de to apps.
+ *   Todoist  @label   = en maerkat        -> doda  #kontekst
+ *   Todoist  #projekt = et projekt        -> doda  @projekt
+ * Oversaettes det ikke, ender alle maerkater som projekter og omvendt.
+ *
+ * Filen er UMD-pakket som resten af app/shared/ - saa kan bade serveren og
+ * browseren bruge den, og der findes kun ÉN forstaaelse af formatet.
+ */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.dodaTodoist = factory();
+}(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+
+  /** RFC 4180-agtig CSV: felter i anfoerselstegn kan indeholde komma og linjeskift. */
+  function parseCsv(tekst) {
+    const raekker = [];
+    let felt = '';
+    let raekke = [];
+    let iCitat = false;
+    const s = String(tekst || '').replace(/^﻿/, '');   // BOM fra Excel
+
+    for (let i = 0; i < s.length; i++) {
+      const c = s[i];
+      if (iCitat) {
+        if (c === '"') {
+          if (s[i + 1] === '"') { felt += '"'; i++; }        // "" = et rigtigt "
+          else iCitat = false;
+        } else felt += c;
+        continue;
+      }
+      if (c === '"') { iCitat = true; continue; }
+      if (c === ',') { raekke.push(felt); felt = ''; continue; }
+      if (c === '\r') continue;
+      if (c === '\n') { raekke.push(felt); raekker.push(raekke); raekke = []; felt = ''; continue; }
+      felt += c;
+    }
+    if (felt || raekke.length) { raekke.push(felt); raekker.push(raekke); }
+    return raekker.filter((r) => r.some((f) => f !== ''));
+  }
+
+  /**
+   * Oversaetter én Todoist-CSV til doda-elementer.
+   *
+   * @param {string} csv      filens indhold
+   * @param {string} filnavn  bruges som projektnavn ("Arbejde.csv" -> "Arbejde")
+   * @returns {{project, items, skipped, warnings}}
+   */
+  function laesProjekt(csv, filnavn) {
+    const raekker = parseCsv(csv);
+    if (!raekker.length) return { project: null, items: [], skipped: 0, warnings: ['The file was empty.'] };
+
+    const head = raekker[0].map((h) => h.trim().toUpperCase());
+    const i = (navn) => head.indexOf(navn);
+    if (i('TYPE') < 0 || i('CONTENT') < 0) {
+      return { project: null, items: [], skipped: 0, warnings: ['This does not look like a Todoist CSV export.'] };
+    }
+
+    const projekt = String(filnavn || 'Todoist').replace(/\.csv$/i, '').trim() || 'Todoist';
+    const ud = { project: projekt, items: [], skipped: 0, warnings: [] };
+    let fladlagt = 0;
+
+    for (const r of raekker.slice(1)) {
+      const type = (r[i('TYPE')] || '').trim().toLowerCase();
+      let indhold = (r[i('CONTENT')] || '').trim();
+      if (!indhold) { ud.skipped++; continue; }
+
+      // Sektionsoverskrifter og tomme skillelinjer er layout, ikke opgaver.
+      if (type === 'section' || (!type && !indhold)) { ud.skipped++; continue; }
+
+      const erNote = type === 'note';
+      const beskrivelse = i('DESCRIPTION') >= 0 ? (r[i('DESCRIPTION')] || '').trim() : '';
+      const dato = i('DATE') >= 0 ? (r[i('DATE')] || '').trim() : '';
+      const indent = i('INDENT') >= 0 ? Number(r[i('INDENT')] || 1) : 1;
+      if (indent > 1) fladlagt++;
+
+      // Todoists markdown-links [tekst](url) er de samme som dodas - de
+      // faar lov at staa. Men maerkaterne skal byttes om.
+      const maerkater = [];
+      indhold = indhold.replace(/(^|\s)@([\p{L}\p{N}_-]+)/gu, (helt, foer, navn) => {
+        maerkater.push(navn);
+        return foer;
+      }).replace(/\s{2,}/g, ' ').trim();
+
+      // Et "#" i Todoist peger pa et projekt - men projektet kender vi
+      // allerede fra filnavnet, sa referencen fjernes hellere end at blive
+      // til en forkert kontekst.
+      indhold = indhold.replace(/(^|\s)#([\p{L}\p{N}_-]+)/gu, '$1').replace(/\s{2,}/g, ' ').trim();
+      if (!indhold) { ud.skipped++; continue; }
+
+      ud.items.push({
+        kind: erNote ? 'note' : 'task',
+        title: indhold.slice(0, 500),
+        note: beskrivelse.slice(0, 20000),
+        contexts: maerkater,
+        project: projekt,
+        date: dato,
+      });
+    }
+
+    if (fladlagt) {
+      ud.warnings.push(`${fladlagt} subtask${fladlagt === 1 ? '' : 's'} flattened — doda has projects, not subtasks.`);
+    }
+    return ud;
+  }
+
+  /**
+   * Bygger den fangst-linje, dodas egen parser forstaar.
+   *
+   * Dermed gaar Todoist-data gennem PRAECIS samme vej som alt andet: datoer,
+   * gentagelser og kontekster tolkes af én parser, ikke to.
+   */
+  function somFangst(item) {
+    const dele = [];
+    if (item.kind === 'note') dele.push('*');
+    dele.push(item.title);
+    for (const c of item.contexts) dele.push(`#${c}`);
+    if (item.project) dele.push(`@"${item.project.replace(/"/g, '')}"`);
+    // Todoists "every day" og "17 Aug" laeses af dodas datotolkning som den er.
+    if (item.date) dele.push(`!${item.date}`);
+    let linje = dele.join(' ');
+    if (item.note) linje += ` // ${item.note.replace(/\n/g, ' ')}`;
+    return linje;
+  }
+
+  return { parseCsv, laesProjekt, somFangst };
+}));
+
 /* ---- p1_core.js ---- */
 'use strict';
 /* doda - kerne: opstart, tema, login, app-skal.
@@ -833,11 +967,15 @@ function shellHtml() {
       <div class="topbar">
         <div class="offline-mark meta" id="offlineMark" hidden></div>
         <div class="stats meta" id="statsHost">${statsHtml()}</div>
-        <div class="omni">
-          <span class="omni-icon">${icon('search', 20)}</span>
-          <input class="omni-input" id="omni" autocomplete="off" spellcheck="false"
-            placeholder="Search, capture, or jump to a project…">
+        <div class="omni-card" id="omniCard">
+          <div class="omni-field">
+            <span class="omni-icon">${icon('search', 22)}</span>
+            <span class="omni-mode" id="omniMode" hidden></span>
+            <input class="omni-input" id="omni" autocomplete="off" spellcheck="false"
+              placeholder="Just type to Capture, Navigate and Find">
+          </div>
           <div class="omni-panel" id="omniPanel" hidden></div>
+          <div class="omni-legend meta" id="omniLegend"></div>
         </div>
         <div class="omni-chips" id="omniChips"></div>
       </div>
@@ -935,28 +1073,43 @@ async function hentState() {
 
 /* ---- p2_omni.js ---- */
 'use strict';
-/* doda - kommandobaren. Ét felt der bade soeger og opretter.
+/* doda - kommandopaletten. Ét felt der bade soeger, opretter og navigerer.
    Oprettelse star altid oeverst og kan altid nas med Enter: soegning ma
    aldrig komme i vejen for fangst (handover §5.1). */
 
+/* Foerste tegn vaelger en TILSTAND. Pillen inde i feltet og legenden i bunden
+   viser hvilken - sa man aldrig er i tvivl om, hvad Enter kommer til at gore. */
+const MODER = {
+  '+': { id: 'task', pil: '+ New Task', ph: 'Task title…', legend: ['/ project', '# context'], enter: 'Create' },
+  '*': { id: 'note', pil: '* New Note', ph: 'Note title…', legend: ['/ project'], enter: 'Create' },
+  '/': { id: 'project', pil: '/ Projects', ph: 'Find a project…', legend: [], enter: 'Open' },
+  '#': { id: 'context', pil: '# Contexts', ph: 'Find a context…', legend: [], enter: 'Open' },
+  ':': { id: 'area', pil: ': Areas', ph: 'Find an area…', legend: [], enter: 'Open' },
+};
+
+const STANDARD_LEGEND = ['+ task', '* note', '/ projects', '# contexts', ': areas'];
+
 const omniState = {
+  mode: null,          // et tegn fra MODER, eller null
   tolket: null,
   resultater: [],
   valgt: 0,
   raekker: [],
-  bekraeft: null,   // {contexts:[], project} - ukendte navne der skal godkendes
+  bekraeft: null,      // {contexts:[], project} - ukendte navne der skal godkendes
   soegeTimer: null,
   soegeToken: 0,
 };
 
 function omniEl() { return document.getElementById('omni'); }
+function omniKort() { return document.getElementById('omniCard'); }
 
 /* Tolkningen sker LOKALT med den samme parser, serveren bruger. Ingen
    netvaerkskald pr. tastetryk - chipsene skal foelge fingrene. */
 function tolkNu(tekst) {
   const p = (typeof dodaParse !== 'undefined') ? dodaParse : null;
   if (!p) return null;
-  return p.tolkFangst(tekst);
+  // I note-tilstand tolkes teksten, som om praefikset stod der.
+  return p.tolkFangst(omniState.mode === '*' ? `* ${tekst}` : tekst);
 }
 
 function ukendteNavne(tolket) {
@@ -969,6 +1122,35 @@ function ukendteNavne(tolket) {
   };
 }
 
+/* ------------------------------------------------------------ tilstand */
+
+function saetMode(tegn) {
+  omniState.mode = tegn;
+  const el = omniEl();
+  const pil = document.getElementById('omniMode');
+  if (!el || !pil) return;
+  const m = tegn ? MODER[tegn] : null;
+  pil.hidden = !m;
+  pil.textContent = m ? m.pil : '';
+  el.placeholder = m ? m.ph : 'Just type to Capture, Navigate and Find';
+  omniKort().classList.toggle('moded', !!m);
+}
+
+function tegnLegend() {
+  const host = document.getElementById('omniLegend');
+  if (!host) return;
+  const m = omniState.mode ? MODER[omniState.mode] : null;
+  const dele = m ? m.legend : STANDARD_LEGEND;
+  const enter = m ? m.enter : 'Select';
+  host.innerHTML = `
+    <span class="legend-keys">${dele.map((d) => {
+    const mellemrum = d.indexOf(' ');
+    return `<span class="legend-item"><kbd>${esc(d.slice(0, mellemrum))}</kbd>${esc(d.slice(mellemrum + 1))}</span>`;
+  }).join('<span class="legend-dot">·</span>')}</span>
+    <span class="legend-nav"><span class="legend-item">↑ ↓ Navigate</span>
+      <span class="legend-item">↵ ${esc(enter)}</span></span>`;
+}
+
 /* ------------------------------------------------------------- chips */
 
 function tegnChips() {
@@ -976,10 +1158,10 @@ function tegnChips() {
   if (!host) return;
   const t = omniState.tolket;
   const raa = omniEl() ? omniEl().value.trim() : '';
-  if (!raa || !t) { host.innerHTML = ''; return; }
+  // Navigations-tilstandene har ingen tolkning at vise.
+  if (!raa || !t || (omniState.mode && !'+*'.includes(omniState.mode))) { host.innerHTML = ''; return; }
 
   const chips = [];
-  chips.push([t.kind === 'note' ? 'Note' : 'Task', 'accent']);
   for (const c of t.contexts) chips.push([`#${c}`, 'accent']);
   if (t.project) chips.push([`@${t.project}`, 'accent']);
   if (t.due) chips.push([`⏰ ${visDato(t.due.dato)}${t.due.tid ? ` ${t.due.tid}` : ''}`, 'accent']);
@@ -994,7 +1176,6 @@ function tegnChips() {
     chips.push(g ? [`↻ ${dodaParse.beskrivGentagelse(g)}`, 'accent']
       : [`↻ didn't understand "${t.recurrenceText}"`, 'neutral']);
   }
-
   for (const w of t.warnings) {
     if (w !== 'gentagelse') chips.push([w.replace('forstod ikke datoen', "didn't understand the date"), 'neutral']);
   }
@@ -1016,11 +1197,37 @@ function visDato(iso) {
   return dato.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
-/* ------------------------------------------------------------ panelet */
+/* ------------------------------------------------------------ raekker */
 
 function byggRaekker() {
   const raa = omniEl().value.trim();
   const raekker = [];
+  const mode = omniState.mode;
+
+  // Navigation: vis det, man kan springe til.
+  if (mode === '/' || mode === '#' || mode === ':') {
+    const kilde = mode === '/' ? state.projects : mode === '#' ? state.contexts : state.areas;
+    const traf = kilde.filter((x) => !raa || x.name.toLowerCase().includes(raa.toLowerCase()));
+    for (const x of traf.slice(0, 12)) {
+      raekker.push({
+        type: 'goto', mode, id: x.id, titel: x.name,
+        under: mode === '/' ? `${x.open_count || 0} open` : mode === '#' ? 'context' : 'area',
+        ikon: mode === '/' ? 'projects' : mode === '#' ? 'contexts' : 'someday',
+      });
+    }
+    if (!traf.length) {
+      const hvad = mode === '/' ? 'projects' : mode === '#' ? 'contexts' : 'areas';
+      // Skeln mellem "der findes ingen" og "din soegning gav intet" - to
+      // vidt forskellige situationer for brugeren.
+      raekker.push(raa
+        ? { type: 'tom', titel: `No ${hvad} matching “${raa}”`, under: 'Try another name' }
+        : { type: 'tom', titel: `No ${hvad} yet`,
+          under: mode === ':' ? 'Add one under Projects → Manage areas'
+            : `Type ${mode === '/' ? '@Name' : '#name'} when you capture, and it appears here` });
+    }
+    return raekker;
+  }
+
   if (!raa) return raekker;
 
   if (omniState.bekraeft) {
@@ -1036,8 +1243,7 @@ function byggRaekker() {
     raekker.push({
       type: 'create',
       titel: t && t.title ? t.title : raa,
-      under: t && t.kind === 'note' ? 'New note' : 'New task in Inbox',
-      ikon: t && t.kind === 'note' ? 'note' : 'plus',
+      under: mode === '*' ? 'NEW NOTE' : mode === '+' ? 'NEW TASK' : 'QUICK CAPTURE',
     });
   }
 
@@ -1063,16 +1269,30 @@ function tegnPanel() {
         <span class="omni-row-sub">${esc(statusNavn(it.status))}${it.contexts.length ? ` · ${it.contexts.map((c) => `#${c.name}`).join(' ')}` : ''}</span></span>
       </button>`;
     }
-    return `<button class="omni-row${r.type === 'confirm' ? ' confirm' : ''}"${valgt} data-i="${i}">
-      ${icon(r.ikon || 'plus')}
+    if (r.type === 'tom') {
+      return `<div class="omni-row empty-row"><span class="omni-row-main">
+        <span class="omni-row-title">${esc(r.titel)}</span>
+        <span class="omni-row-sub">${esc(r.under)}</span></span></div>`;
+    }
+    if (r.type === 'goto') {
+      return `<button class="omni-row"${valgt} data-i="${i}">
+        ${icon(r.ikon)}<span class="omni-row-main">
+        <span class="omni-row-title">${esc(r.titel)}</span>
+        <span class="omni-row-sub">${esc(r.under)}</span></span></button>`;
+    }
+    // Quick Capture: den store, fremhaevede raekke.
+    return `<button class="omni-row big${r.type === 'confirm' ? ' confirm' : ''}"${valgt} data-i="${i}">
+      <span class="omni-plus">${icon(r.type === 'confirm' ? 'next' : 'plus', 20)}</span>
       <span class="omni-row-main"><span class="omni-row-title">${esc(r.titel)}</span>
-      <span class="omni-row-sub">${esc(r.under)}</span></span>
+      ${r.type === 'confirm' ? `<span class="omni-row-sub">${esc(r.under)}</span>` : ''}</span>
+      ${r.type === 'confirm' ? '' : `<span class="omni-badge">${esc(r.under)}</span>`}
     </button>`;
   }).join('');
   panel.hidden = false;
 
-  panel.querySelectorAll('.omni-row').forEach((el) => {
+  panel.querySelectorAll('button.omni-row').forEach((el) => {
     el.addEventListener('mouseenter', () => { omniState.valgt = Number(el.dataset.i); markerValgt(); });
+    el.addEventListener('mousedown', (e) => e.preventDefault());   // behold fokus i feltet
     el.addEventListener('click', () => { omniState.valgt = Number(el.dataset.i); aktiver(); });
   });
 }
@@ -1095,7 +1315,8 @@ const statusNavn = (s) => STATUS_NAVNE[s] || s;
 function planlaegSoegning() {
   clearTimeout(omniState.soegeTimer);
   const q = omniEl().value.trim();
-  if (q.length < 2 || q.startsWith('*') || q.startsWith('+')) {
+  // Navigation soeger lokalt; kun fritekst og opgave-tilstand spoerger serveren.
+  if (q.length < 2 || (omniState.mode && omniState.mode !== '+')) {
     omniState.resultater = [];
     tegnPanel();
     return;
@@ -1119,17 +1340,23 @@ async function aktiver() {
   const raekke = omniState.raekker[omniState.valgt];
   if (!raekke) return;
 
-  if (raekke.type === 'item') {
-    aabnElement(raekke.item);
+  if (raekke.type === 'item') { aabnElement(raekke.item); luk(); return; }
+  if (raekke.type === 'tom') return;
+  if (raekke.type === 'goto') {
     luk();
+    if (raekke.mode === '/') gaaTilProjekt(raekke.id);
+    else if (raekke.mode === '#') gaaTil('next', { context: raekke.id });
+    else { state.filterArea = raekke.id; gaaTil('projects'); }
     return;
   }
   await fangstNu(raekke.type === 'confirm');
 }
 
 async function fangstNu(bekraeftet) {
-  const tekst = omniEl().value.trim();
+  let tekst = omniEl().value.trim();
   if (!tekst) return;
+  // Tilstanden oversaettes til det praefiks, parseren og serveren forstar.
+  if (omniState.mode === '*') tekst = `* ${tekst}`;
 
   // Kendes alle navne i forvejen, er der intet at bekraefte - saa skal ét
   // Enter vaere nok. Det er hele pointen med "fangst pa ét trin".
@@ -1149,10 +1376,7 @@ async function fangstNu(bekraeftet) {
     await genindlaes();
     toast(it.kind === 'note' ? 'Note saved' : `Added to ${statusNavn(it.status)}`, {
       label: 'Undo',
-      run: async () => {
-        await api('DELETE', `/api/v1/items/${it.id}`, {});
-        await genindlaes();
-      },
+      run: async () => { await api('DELETE', `/api/v1/items/${it.id}`, {}); await genindlaes(); },
     });
   } catch (ex) {
     // Netvaerksbrud: gem lokalt og send, naar der er forbindelse igen.
@@ -1170,20 +1394,31 @@ async function fangstNu(bekraeftet) {
 function luk() {
   const el = omniEl();
   if (el) { el.value = ''; el.blur(); }
+  saetMode(null);
   omniState.tolket = null;
   omniState.resultater = [];
   omniState.bekraeft = null;
   omniState.valgt = 0;
   tegnChips();
   tegnPanel();
+  tegnLegend();
 }
 
 function opdaterOmni() {
   const el = omniEl();
+
+  // Foerste tegn kan vaelge en tilstand - men KUN naar feltet ellers er tomt.
+  // Ellers ville "#hjem" midt i en saetning skifte tilstand, og den inline
+  // genvejssyntaks ville holde op med at virke.
+  if (!omniState.mode && el.value.length === 1 && MODER[el.value]) {
+    saetMode(el.value);
+    el.value = '';
+  }
+
   omniState.tolket = tolkNu(el.value);
-  // En aendring i teksten gor en tidligere bekraeftelse ugyldig.
-  omniState.bekraeft = null;
+  omniState.bekraeft = null;   // en aendring i teksten gor bekraeftelsen ugyldig
   tegnChips();
+  tegnLegend();
   tegnPanel();
   planlaegSoegning();
 }
@@ -1191,15 +1426,29 @@ function opdaterOmni() {
 function bindOmni() {
   const el = omniEl();
   if (!el) return;
+  saetMode(null);
+  tegnLegend();
+
   el.addEventListener('input', opdaterOmni);
-  el.addEventListener('focus', () => { if (el.value.trim()) tegnPanel(); });
+  el.addEventListener('focus', tegnPanel);
   el.addEventListener('blur', () => {
     // Lille forsinkelse, sa et klik pa en raekke nar at blive registreret.
-    setTimeout(() => { const p = document.getElementById('omniPanel'); if (p) p.hidden = true; }, 150);
+    setTimeout(() => {
+      if (document.activeElement === el) return;
+      const p = document.getElementById('omniPanel');
+      if (p) p.hidden = true;
+    }, 150);
   });
 
   el.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { e.preventDefault(); luk(); return; }
+    // Backspace i et tomt felt forlader tilstanden i stedet for ingenting.
+    if (e.key === 'Backspace' && !el.value && omniState.mode) {
+      e.preventDefault();
+      saetMode(null);
+      opdaterOmni();
+      return;
+    }
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       if (!omniState.raekker.length) return;
       e.preventDefault();
@@ -1212,7 +1461,7 @@ function bindOmni() {
   });
 }
 
-/* Signaturen: begynd bare at skrive, sa aabner kommandobaren.
+/* Signaturen: begynd bare at skrive, sa aabner paletten.
    Undtagelserne er vigtigere end reglen - uden dem stjaeler den tastetryk
    fra ethvert felt i appen. */
 document.addEventListener('keydown', (e) => {
@@ -1228,8 +1477,6 @@ document.addEventListener('keydown', (e) => {
 
   const omni = omniEl();
   if (!omni) return;
-
-  if (e.key === '/') { e.preventDefault(); omni.focus(); return; }
   if (e.key.length !== 1) return;
   e.preventDefault();
   omni.focus();
@@ -1494,10 +1741,19 @@ async function slet(id) {
 
 /* ------------------------------------------------------ detaljeruden */
 
+/* ------------------------------------------------------- detaljeruden */
+
+/*
+ * Layoutet foelger tingdo: titlen er en overskrift med en afkrydsningsring,
+ * beskrivelsen star lige under som "Add details…", og felterne er CHIPS man
+ * trykker pa - ikke en formular med etiketter.
+ *
+ * Pointen er, at intet er paakraevet. En opgave med bare en titel skal se
+ * faerdig ud, ikke som en halvudfyldt blanket.
+ */
 async function aabnElement(listeItem) {
   // Listen baerer KUN et antal vedhaeftninger, aldrig metadataene - det er
-  // hele pointen med §4-lektien. Ruden skal derfor hente det fulde element,
-  // ellers star filerne der ikke.
+  // hele pointen med §4-lektien. Ruden skal derfor hente det fulde element.
   let it = listeItem;
   if (listeItem.attachment_count && !listeItem.attachments) {
     try { it = (await api('GET', `/api/v1/items/${listeItem.id}`)).item; }
@@ -1505,44 +1761,57 @@ async function aabnElement(listeItem) {
   } else if (!it.attachments) {
     it = Object.assign({ attachments: [] }, listeItem);
   }
+
+  // Alt redigeres i et udkast og gemmes foerst ved Save - sa et fejlklik pa
+  // en chip ikke aendrer noget bag om brugeren.
+  const u = {
+    title: it.title,
+    note: it.note,
+    status: it.status,
+    project_id: it.project_id,
+    due_date: it.due_date,
+    defer_date: it.defer_date,
+    contexts: it.contexts.map((c) => c.id),
+  };
+
   const host = document.createElement('div');
   host.className = 'modal';
   host.innerHTML = `
-  <div class="modal-card" role="dialog" aria-modal="true" aria-label="Edit item">
-    <label class="field"><span>Title</span>
-      <input class="input" id="edTitle" value="${esc(it.title)}"></label>
-
-    <label class="field"><span>Description</span>
-      <textarea class="input" id="edNote" rows="5"
-        placeholder="Notes, links, anything. Markdown links work: [text](https://…)">${esc(it.note)}</textarea></label>
-    <div id="edPreview" class="note-preview"${it.note ? '' : ' hidden'}></div>
-
-    <div class="row2">
-      <label class="field"><span>Status</span>
-        <select class="input" id="edStatus">
-          ${['inbox', 'next', 'queued', 'waiting', 'someday', 'done', 'dropped'].map((s) =>
-    `<option value="${s}"${s === it.status ? ' selected' : ''}>${esc(statusNavn(s))}</option>`).join('')}
-        </select></label>
-      <label class="field"><span>Project</span>
-        <select class="input" id="edProject">
-          <option value="">— none —</option>
-          ${state.projects.map((p) =>
-    `<option value="${esc(p.id)}"${p.id === it.project_id ? ' selected' : ''}>${esc(p.name)}</option>`).join('')}
-        </select></label>
+  <div class="modal-card detail" role="dialog" aria-modal="true" aria-label="Edit item">
+    <div class="detail-head">
+      ${it.kind === 'task' ? `<button class="tick big${u.status === 'done' ? ' on' : ''}" id="dTick"
+        aria-label="Mark done" title="Mark done"></button>` : `<span class="detail-noteicon">${icon('note', 22)}</span>`}
+      <input class="detail-title" id="dTitle" value="${esc(u.title)}" placeholder="Title" aria-label="Title">
+      <button class="detail-close" id="dClose" aria-label="Close">×</button>
     </div>
 
-    <div class="row2">
-      <label class="field"><span>Due date</span>
-        <input class="input" id="edDue" type="date" value="${esc(it.due_date || '')}"></label>
-      <label class="field"><span>Hidden until</span>
-        <input class="input" id="edDefer" type="date" value="${esc(it.defer_date || '')}"></label>
-    </div>
+    <textarea class="detail-note" id="dNote" rows="1"
+      placeholder="Add details…" aria-label="Details">${esc(u.note)}</textarea>
+    <div class="note-preview" id="dPreview" hidden></div>
 
-    <div class="field"><span>Contexts</span>
-      <div class="ctxpick">${state.contexts.length ? state.contexts.map((c) => `
-        <label class="ctxopt"><input type="checkbox" value="${esc(c.id)}"
-          ${it.contexts.some((x) => x.id === c.id) ? 'checked' : ''}>#${esc(c.name)}</label>`).join('')
-    : '<span class="lead">No contexts yet — add one by typing #name when you capture.</span>'}</div>
+    <div class="chiprow" id="dChips"></div>
+
+    <div class="detail-help" id="dHelp" hidden>
+      <div class="meta">Getting started</div>
+      <h2>What you can set here</h2>
+      <p class="lead">Tap a chip to change it. Nothing here is <strong>required</strong>.</p>
+      <dl class="helplist">
+        <dt><span class="chip flat">no project</span></dt>
+        <dd><strong>The outcome this task belongs to.</strong> Anything that takes more than one step is a project.</dd>
+        <dt><span class="chip flat">inbox</span></dt>
+        <dd><strong>Where this task goes next.</strong> Next Actions when you can do it,
+          Waiting For when it is with someone else, Someday when it can wait.</dd>
+        <dt><span class="chip flat">no date</span></dt>
+        <dd><strong>The day it shows up in Next Actions.</strong> It stays out of your way
+          until then, and nothing is ever marked late.</dd>
+        <dt><span class="helphash">#</span></dt>
+        <dd><strong>Context.</strong> Where or with what you get things done: #home, #computer,
+          #calls. Type <code>#</code> in the title to add one.</dd>
+        <dt><span class="meta">Focus</span></dt>
+        <dd><strong>Everything else out of the way.</strong> This task on a screen of its own,
+          with a timer that keeps running.</dd>
+      </dl>
+      <button class="btn primary" id="dGotIt">Got it</button>
     </div>
 
     ${vedhaeftningerHtml(it)}
@@ -1550,7 +1819,6 @@ async function aabnElement(listeItem) {
     <div class="modal-foot">
       <button class="btn ghost" id="edDelete">Delete</button>
       <button class="btn ghost" id="edConvert">${it.kind === 'note' ? 'Make it a task' : 'Make it a note'}</button>
-      ${it.kind === 'task' && it.status !== 'done' ? '<button class="btn ghost" id="edFocus">Focus</button>' : ''}
       <span style="flex:1"></span>
       <button class="btn" id="edCancel">Cancel</button>
       <button class="btn primary" id="edSave">Save</button>
@@ -1562,18 +1830,151 @@ async function aabnElement(listeItem) {
   const esctast = (e) => { if (e.key === 'Escape') { e.preventDefault(); luk(); } };
   document.addEventListener('keydown', esctast);
   host.addEventListener('click', (e) => { if (e.target === host) luk(); });
+  host.querySelector('#dClose').addEventListener('click', luk);
+  host.querySelector('#edCancel').addEventListener('click', luk);
 
-  const noteEl = host.querySelector('#edNote');
-  const preview = host.querySelector('#edPreview');
+  /* --- chips ---------------------------------------------------- */
+
+  const visDatoKort = (iso) => {
+    if (!iso) return null;
+    const [y, m, d] = iso.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  };
+
+  const tegnChipsRow = () => {
+    const projekt = u.project_id ? (state.projects.find((p) => p.id === u.project_id) || {}).name : null;
+    const kontekster = state.contexts.filter((c) => u.contexts.includes(c.id));
+    host.querySelector('#dChips').innerHTML = `
+      <button class="chip flat" data-edit="project">${esc(projekt || 'no project')}</button>
+      <button class="chip flat" data-edit="status">${esc(statusNavn(u.status))}</button>
+      <button class="chip flat${u.due_date ? ' set' : ''}" data-edit="due">${esc(visDatoKort(u.due_date) || 'no date')}</button>
+      ${u.defer_date ? `<button class="chip flat set" data-edit="defer">hidden until ${esc(visDatoKort(u.defer_date))}</button>`
+    : '<button class="chip flat" data-edit="defer">no hide-until</button>'}
+      ${kontekster.map((c) => `<button class="chip" data-ctx="${esc(c.id)}">#${esc(c.name)}</button>`).join('')}
+      <button class="chip flat" data-edit="contexts">${kontekster.length ? '+' : '# context'}</button>
+      <span style="flex:1"></span>
+      ${it.kind === 'task' && u.status !== 'done' ? `<button class="chip flat" id="dFocus">${icon('clock', 13)} Focus</button>` : ''}
+      <button class="chip flat" id="dHelpBtn" aria-label="What is this?">?</button>`;
+    bindChips();
+  };
+
+  /** Bytter en chip ud med det rigtige felt, og tilbage igen naar man er faerdig. */
+  const redigerInline = (knap, felt) => {
+    const el = document.createElement(felt.tag);
+    el.className = 'chipedit';
+    if (felt.tag === 'input') { el.type = 'date'; el.value = felt.value || ''; }
+    else el.innerHTML = felt.options;
+    knap.replaceWith(el);
+    el.focus();
+    if (el.showPicker) { try { el.showPicker(); } catch { /* ikke alle browsere */ } }
+    const faerdig = () => { felt.onchange(el.value); tegnChipsRow(); };
+    el.addEventListener('change', faerdig);
+    el.addEventListener('blur', () => setTimeout(tegnChipsRow, 120));
+    el.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); faerdig(); } });
+  };
+
+  function bindChips() {
+    host.querySelectorAll('[data-edit]').forEach((knap) => {
+      knap.addEventListener('click', () => {
+        const hvad = knap.dataset.edit;
+        if (hvad === 'project') {
+          redigerInline(knap, {
+            tag: 'select',
+            options: `<option value="">— no project —</option>${state.projects.map((p) =>
+              `<option value="${esc(p.id)}"${p.id === u.project_id ? ' selected' : ''}>${esc(p.name)}</option>`).join('')}`,
+            onchange: (v) => { u.project_id = v || null; },
+          });
+        } else if (hvad === 'status') {
+          redigerInline(knap, {
+            tag: 'select',
+            options: ['inbox', 'next', 'queued', 'waiting', 'someday', 'done', 'dropped'].map((s) =>
+              `<option value="${s}"${s === u.status ? ' selected' : ''}>${esc(statusNavn(s))}</option>`).join(''),
+            onchange: (v) => { u.status = v; },
+          });
+        } else if (hvad === 'due' || hvad === 'defer') {
+          redigerInline(knap, {
+            tag: 'input',
+            value: hvad === 'due' ? u.due_date : u.defer_date,
+            onchange: (v) => { if (hvad === 'due') u.due_date = v || null; else u.defer_date = v || null; },
+          });
+        } else {
+          redigerInline(knap, {
+            tag: 'select',
+            options: `<option value="">— add a context —</option>${state.contexts
+              .filter((c) => !u.contexts.includes(c.id))
+              .map((c) => `<option value="${esc(c.id)}">#${esc(c.name)}</option>`).join('')}`,
+            onchange: (v) => { if (v) u.contexts.push(v); },
+          });
+        }
+      });
+    });
+    // Klik pa en kontekst-chip fjerner den igen.
+    host.querySelectorAll('[data-ctx]').forEach((el) => {
+      el.addEventListener('click', () => {
+        u.contexts = u.contexts.filter((x) => x !== el.dataset.ctx);
+        tegnChipsRow();
+      });
+    });
+    const f = host.querySelector('#dFocus');
+    if (f) f.addEventListener('click', () => { luk(); startFokus(it); });
+    host.querySelector('#dHelpBtn').addEventListener('click', () => {
+      const h = host.querySelector('#dHelp');
+      h.hidden = !h.hidden;
+    });
+  }
+  tegnChipsRow();
+
+  // Forklaringen vises, indtil den er set én gang - som i tingdo.
+  try {
+    if (!localStorage.getItem('doda_help_detail')) host.querySelector('#dHelp').hidden = false;
+  } catch { /* privat tilstand */ }
+  host.querySelector('#dGotIt').addEventListener('click', () => {
+    host.querySelector('#dHelp').hidden = true;
+    try { localStorage.setItem('doda_help_detail', '1'); } catch { /* ligegyldigt */ }
+  });
+
+  /* --- titel, beskrivelse, afkrydsning --------------------------- */
+
+  const titelEl = host.querySelector('#dTitle');
+  const noteEl = host.querySelector('#dNote');
+  const preview = host.querySelector('#dPreview');
+
+  titelEl.addEventListener('input', () => { u.title = titelEl.value; });
+
+  // Feltet vokser med teksten - en fast hoejde ville enten spilde plads
+  // eller klemme en lang note sammen.
+  const voks = () => { noteEl.style.height = 'auto'; noteEl.style.height = `${Math.max(noteEl.scrollHeight, 28)}px`; };
   const tegnPreview = () => {
     const v = noteEl.value.trim();
-    preview.hidden = !v;
+    preview.hidden = !v || document.activeElement === noteEl;
     preview.innerHTML = v ? markdown(v) : '';
   };
-  noteEl.addEventListener('input', tegnPreview);
+  noteEl.addEventListener('input', () => { u.note = noteEl.value; voks(); });
+  noteEl.addEventListener('focus', tegnPreview);
+  noteEl.addEventListener('blur', tegnPreview);
+  voks();
   tegnPreview();
 
-  host.querySelector('#edCancel').addEventListener('click', luk);
+  const tick = host.querySelector('#dTick');
+  if (tick) {
+    tick.addEventListener('click', () => {
+      u.status = u.status === 'done' ? 'next' : 'done';
+      tick.classList.toggle('on', u.status === 'done');
+      tegnChipsRow();
+    });
+  }
+
+  /* --- gem, slet, konvertér -------------------------------------- */
+
+  const gem = async (ekstra) => api('POST', `/api/v1/items/${it.id}`, Object.assign({
+    title: u.title,
+    note: u.note,
+    status: u.status,
+    project_id: u.project_id,
+    due_date: u.due_date,
+    defer_date: u.defer_date,
+    contexts: u.contexts,
+  }, ekstra || {}));
 
   host.querySelector('#edSave').addEventListener('click', async () => {
     // Hoerer elementet til en gentagelse, skal brugeren tage stilling:
@@ -1581,30 +1982,19 @@ async function aabnElement(listeItem) {
     let tilSerien = false;
     if (it.recurrence_id) {
       const svar = await spoergOmSerie(it.title);
-      if (svar === null) return;          // lukket uden at vaelge
+      if (svar === null) return;
       tilSerien = svar;
     }
     try {
-      await api('POST', `/api/v1/items/${it.id}`, {
-        applyToSeries: tilSerien,
-        title: host.querySelector('#edTitle').value,
-        note: noteEl.value,
-        status: host.querySelector('#edStatus').value,
-        project_id: host.querySelector('#edProject').value || null,
-        due_date: host.querySelector('#edDue').value || null,
-        defer_date: host.querySelector('#edDefer').value || null,
-        contexts: [...host.querySelectorAll('.ctxpick input:checked')].map((x) => x.value),
-      });
+      await gem({ applyToSeries: tilSerien });
       luk();
       await genindlaes();
+      tegnSide();
       toast('Saved');
     } catch (ex) { toast(ex.message); }
   });
 
-  host.querySelector('#edDelete').addEventListener('click', async () => {
-    luk();
-    await slet(it.id);
-  });
+  host.querySelector('#edDelete').addEventListener('click', async () => { luk(); await slet(it.id); });
 
   // Konvertering ma ALDRIG miste indhold: bade titel og beskrivelse foelger
   // med begge veje (handover §5.5). En note er reference og skal derfor ud af
@@ -1612,21 +2002,16 @@ async function aabnElement(listeItem) {
   host.querySelector('#edConvert').addEventListener('click', async () => {
     const tilNote = it.kind !== 'note';
     try {
-      await api('POST', `/api/v1/items/${it.id}`, {
-        title: host.querySelector('#edTitle').value,
-        note: noteEl.value,
-        kind: tilNote ? 'note' : 'task',
-        status: tilNote ? 'queued' : (it.status === 'queued' ? 'inbox' : it.status),
-      });
+      await gem({ kind: tilNote ? 'note' : 'task', status: tilNote ? 'queued' : (u.status === 'queued' ? 'inbox' : u.status) });
       luk();
       await genindlaes();
+      tegnSide();
       toast(tilNote ? 'Converted to a note' : 'Converted to a task');
     } catch (ex) { toast(ex.message); }
   });
 
   // Efter upload eller sletning gentegnes KUN fillisten - brugerens ugemte
-  // rettelser i titel og beskrivelse skal ikke gaa tabt. Navngivet funktion,
-  // ikke arguments.callee: filen er strict mode.
+  // rettelser i titel og beskrivelse skal ikke gaa tabt.
   const genhentFiler = async () => {
     const frisk = (await api('GET', `/api/v1/items/${it.id}`)).item;
     it.attachments = frisk.attachments || [];
@@ -1636,10 +2021,8 @@ async function aabnElement(listeItem) {
   };
   bindVedhaeftninger(host, it, genhentFiler);
 
-  const fokusKnap = host.querySelector('#edFocus');
-  if (fokusKnap) fokusKnap.addEventListener('click', () => { luk(); startFokus(it); });
-
-  host.querySelector('#edTitle').focus();
+  titelEl.focus();
+  titelEl.setSelectionRange(titelEl.value.length, titelEl.value.length);
 }
 
 /* ------------------------------------------------------ indstillinger */
@@ -1700,6 +2083,7 @@ function sideSettings() {
         <button class="btn" id="expData">Export data</button>
         <button class="btn" id="expAll">Export with files</button>
         <button class="btn" id="impBtn">Import…</button>
+        <button class="btn" id="tdBtn">Import from Todoist…</button>
         <input type="file" id="impFile" accept="application/json,.json" hidden>
       </div>
       <p class="gate-note" style="text-align:left">Import is matched on id, so the same
@@ -3120,6 +3504,8 @@ async function bindData() {
   document.getElementById('expData').addEventListener('click', () => hent(false));
   document.getElementById('expAll').addEventListener('click', () => hent(true));
 
+  document.getElementById('tdBtn').addEventListener('click', todoistImport);
+
   const felt = document.getElementById('impFile');
   document.getElementById('impBtn').addEventListener('click', () => felt.click());
   felt.addEventListener('change', async () => {
@@ -3181,4 +3567,102 @@ function kopiér(tekst) {
     }
     toast('Copied');
   } catch { toast('Could not copy — select the text manually'); }
+}
+
+/* ------------------------------------------------------ Todoist-import */
+
+/**
+ * Todoist eksporterer ét projekt pr. CSV-fil. Man kan traekke dem alle ind
+ * pa én gang.
+ *
+ * Data gaar gennem dodas EGEN fangst-parser, sa datoer, gentagelser og
+ * kontekster tolkes af én motor - ikke to, der kan komme i utakt.
+ */
+async function todoistImport() {
+  const felt = document.createElement('input');
+  felt.type = 'file';
+  felt.accept = '.csv,text/csv';
+  felt.multiple = true;
+  felt.addEventListener('change', async () => {
+    const filer = [...felt.files];
+    if (!filer.length) return;
+
+    const laest = [];
+    for (const f of filer) {
+      laest.push(Object.assign(dodaTodoist.laesProjekt(await f.text(), f.name), { filnavn: f.name }));
+    }
+    visTodoistForhaandsvisning(laest);
+  });
+  felt.click();
+}
+
+function visTodoistForhaandsvisning(laest) {
+  const ialt = laest.reduce((n, f) => n + f.items.length, 0);
+  const advarsler = laest.flatMap((f) => f.warnings.map((w) => `${f.filnavn}: ${w}`));
+  const brugbare = laest.filter((f) => f.items.length);
+
+  const host = document.createElement('div');
+  host.className = 'modal';
+  host.innerHTML = `
+  <div class="modal-card" role="dialog" aria-modal="true">
+    <h2>Import from Todoist</h2>
+    ${ialt ? `<p class="lead" style="margin:6px 0 16px">${ialt} item${ialt === 1 ? '' : 's'}
+      from ${brugbare.length} project${brugbare.length === 1 ? '' : 's'}. Nothing is saved until you confirm.</p>`
+    : '<p class="lead" style="margin:6px 0 16px">Nothing to import from those files.</p>'}
+
+    ${brugbare.map((f) => {
+    const kontekster = [...new Set(f.items.flatMap((i) => i.contexts))];
+    return `<div class="card" style="margin-bottom:8px;padding:14px 18px">
+        <div style="font-weight:650">${esc(f.project)}</div>
+        <div class="meta" style="text-transform:none;letter-spacing:0;margin-top:4px">
+          ${f.items.filter((i) => i.kind === 'task').length} tasks ·
+          ${f.items.filter((i) => i.kind === 'note').length} notes
+          ${kontekster.length ? ` · contexts: ${kontekster.map((c) => `#${esc(c)}`).join(' ')}` : ''}
+          ${f.skipped ? ` · ${f.skipped} skipped` : ''}
+        </div>
+        <div class="meta" style="text-transform:none;letter-spacing:0;margin-top:8px;opacity:.75">
+          ${f.items.slice(0, 3).map((i) => esc(i.title)).join(' · ')}${f.items.length > 3 ? ' …' : ''}
+        </div>
+      </div>`;
+  }).join('')}
+
+    ${advarsler.length ? `<div class="nudge" style="margin-top:8px">${icon('next', 17)}
+      <span>${advarsler.map(esc).join('<br>')}</span></div>` : ''}
+
+    <p class="gate-note" style="text-align:left">Todoist's <strong>@labels</strong> become
+    doda <strong>#contexts</strong> — the two apps use the symbols the other way round.
+    Priorities are dropped on purpose: doda has no priority levels.</p>
+
+    <div class="modal-foot">
+      <span style="flex:1"></span>
+      <button class="btn" id="tdCancel">Cancel</button>
+      <button class="btn primary" id="tdGo"${ialt ? '' : ' disabled'}>Import ${ialt || ''}</button>
+    </div>
+  </div>`;
+  document.body.appendChild(host);
+  const luk = () => host.remove();
+  host.querySelector('#tdCancel').addEventListener('click', luk);
+  host.addEventListener('click', (e) => { if (e.target === host) luk(); });
+
+  host.querySelector('#tdGo').addEventListener('click', async () => {
+    const knap = host.querySelector('#tdGo');
+    knap.disabled = true;
+    let n = 0;
+    let fejl = 0;
+    for (const f of brugbare) {
+      for (const it of f.items) {
+        try {
+          // Samme endepunkt som al anden fangst - ingen saerlig importvej
+          // ind i dataene.
+          await api('POST', '/api/v1/capture', { text: dodaTodoist.somFangst(it), createNew: true });
+          n++;
+        } catch { fejl++; }
+      }
+      knap.textContent = `Imported ${n}…`;
+    }
+    luk();
+    await genindlaes();
+    tegnSide();
+    toast(fejl ? `Imported ${n}, ${fejl} failed` : `Imported ${n} items from Todoist`);
+  });
 }

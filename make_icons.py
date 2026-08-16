@@ -29,7 +29,9 @@ def tegn(px, gennemsigtig=False):
     img = Image.new('RGBA', (s, s), bg)
     d = ImageDraw.Draw(img)
 
-    m = s * 0.19          # margen
+    # 22 % margen: nok til at et maskable-ikon kan beskaeres cirkulaert,
+    # uden at maerket rammer kanten.
+    m = s * 0.22          # margen
     tyk = max(int(s * 0.062), 1)
     d.ellipse([m, m, s - m, s - m], outline=OKKER, width=tyk)
 
@@ -57,13 +59,12 @@ def gem(img, sti):
 
 
 def main():
-    for px in (180, 192, 512):
+    # KUN to ikoner. De ligger i runens install-script, som har et hardt loft,
+    # og PNG komprimeres ikke af brotli - fire ikoner kostede 19 % af budgettet.
+    # 192 daekker ogsaa apple-touch-icon, og 512 er baade "any" og "maskable",
+    # fordi maerket har 22 % margen hele vejen rundt.
+    for px in (192, 512):
         gem(tegn(px), os.path.join(UD, f'icon-{px}.png'))
-    # Maskable: iOS/Android beskaerer hjoernerne, sa maerket skal have luft.
-    stor = Image.new('RGBA', (512, 512), BAGGRUND)
-    lille = tegn(340, gennemsigtig=True)
-    stor.paste(lille, (86, 86), lille)
-    gem(stor, os.path.join(UD, 'icon-maskable-512.png'))
 
 
 if __name__ == '__main__':

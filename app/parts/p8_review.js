@@ -358,6 +358,8 @@ async function bindData() {
   document.getElementById('expData').addEventListener('click', () => hent(false));
   document.getElementById('expAll').addEventListener('click', () => hent(true));
 
+  document.getElementById('tdBtn').addEventListener('click', todoistImport);
+
   const felt = document.getElementById('impFile');
   document.getElementById('impBtn').addEventListener('click', () => felt.click());
   felt.addEventListener('change', async () => {
@@ -419,4 +421,102 @@ function kopiér(tekst) {
     }
     toast('Copied');
   } catch { toast('Could not copy — select the text manually'); }
+}
+
+/* ------------------------------------------------------ Todoist-import */
+
+/**
+ * Todoist eksporterer ét projekt pr. CSV-fil. Man kan traekke dem alle ind
+ * pa én gang.
+ *
+ * Data gaar gennem dodas EGEN fangst-parser, sa datoer, gentagelser og
+ * kontekster tolkes af én motor - ikke to, der kan komme i utakt.
+ */
+async function todoistImport() {
+  const felt = document.createElement('input');
+  felt.type = 'file';
+  felt.accept = '.csv,text/csv';
+  felt.multiple = true;
+  felt.addEventListener('change', async () => {
+    const filer = [...felt.files];
+    if (!filer.length) return;
+
+    const laest = [];
+    for (const f of filer) {
+      laest.push(Object.assign(dodaTodoist.laesProjekt(await f.text(), f.name), { filnavn: f.name }));
+    }
+    visTodoistForhaandsvisning(laest);
+  });
+  felt.click();
+}
+
+function visTodoistForhaandsvisning(laest) {
+  const ialt = laest.reduce((n, f) => n + f.items.length, 0);
+  const advarsler = laest.flatMap((f) => f.warnings.map((w) => `${f.filnavn}: ${w}`));
+  const brugbare = laest.filter((f) => f.items.length);
+
+  const host = document.createElement('div');
+  host.className = 'modal';
+  host.innerHTML = `
+  <div class="modal-card" role="dialog" aria-modal="true">
+    <h2>Import from Todoist</h2>
+    ${ialt ? `<p class="lead" style="margin:6px 0 16px">${ialt} item${ialt === 1 ? '' : 's'}
+      from ${brugbare.length} project${brugbare.length === 1 ? '' : 's'}. Nothing is saved until you confirm.</p>`
+    : '<p class="lead" style="margin:6px 0 16px">Nothing to import from those files.</p>'}
+
+    ${brugbare.map((f) => {
+    const kontekster = [...new Set(f.items.flatMap((i) => i.contexts))];
+    return `<div class="card" style="margin-bottom:8px;padding:14px 18px">
+        <div style="font-weight:650">${esc(f.project)}</div>
+        <div class="meta" style="text-transform:none;letter-spacing:0;margin-top:4px">
+          ${f.items.filter((i) => i.kind === 'task').length} tasks ·
+          ${f.items.filter((i) => i.kind === 'note').length} notes
+          ${kontekster.length ? ` · contexts: ${kontekster.map((c) => `#${esc(c)}`).join(' ')}` : ''}
+          ${f.skipped ? ` · ${f.skipped} skipped` : ''}
+        </div>
+        <div class="meta" style="text-transform:none;letter-spacing:0;margin-top:8px;opacity:.75">
+          ${f.items.slice(0, 3).map((i) => esc(i.title)).join(' · ')}${f.items.length > 3 ? ' …' : ''}
+        </div>
+      </div>`;
+  }).join('')}
+
+    ${advarsler.length ? `<div class="nudge" style="margin-top:8px">${icon('next', 17)}
+      <span>${advarsler.map(esc).join('<br>')}</span></div>` : ''}
+
+    <p class="gate-note" style="text-align:left">Todoist's <strong>@labels</strong> become
+    doda <strong>#contexts</strong> — the two apps use the symbols the other way round.
+    Priorities are dropped on purpose: doda has no priority levels.</p>
+
+    <div class="modal-foot">
+      <span style="flex:1"></span>
+      <button class="btn" id="tdCancel">Cancel</button>
+      <button class="btn primary" id="tdGo"${ialt ? '' : ' disabled'}>Import ${ialt || ''}</button>
+    </div>
+  </div>`;
+  document.body.appendChild(host);
+  const luk = () => host.remove();
+  host.querySelector('#tdCancel').addEventListener('click', luk);
+  host.addEventListener('click', (e) => { if (e.target === host) luk(); });
+
+  host.querySelector('#tdGo').addEventListener('click', async () => {
+    const knap = host.querySelector('#tdGo');
+    knap.disabled = true;
+    let n = 0;
+    let fejl = 0;
+    for (const f of brugbare) {
+      for (const it of f.items) {
+        try {
+          // Samme endepunkt som al anden fangst - ingen saerlig importvej
+          // ind i dataene.
+          await api('POST', '/api/v1/capture', { text: dodaTodoist.somFangst(it), createNew: true });
+          n++;
+        } catch { fejl++; }
+      }
+      knap.textContent = `Imported ${n}…`;
+    }
+    luk();
+    await genindlaes();
+    tegnSide();
+    toast(fejl ? `Imported ${n}, ${fejl} failed` : `Imported ${n} items from Todoist`);
+  });
 }

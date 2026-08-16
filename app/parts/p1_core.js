@@ -265,11 +265,15 @@ function shellHtml() {
       <div class="topbar">
         <div class="offline-mark meta" id="offlineMark" hidden></div>
         <div class="stats meta" id="statsHost">${statsHtml()}</div>
-        <div class="omni">
-          <span class="omni-icon">${icon('search', 20)}</span>
-          <input class="omni-input" id="omni" autocomplete="off" spellcheck="false"
-            placeholder="Search, capture, or jump to a project…">
+        <div class="omni-card" id="omniCard">
+          <div class="omni-field">
+            <span class="omni-icon">${icon('search', 22)}</span>
+            <span class="omni-mode" id="omniMode" hidden></span>
+            <input class="omni-input" id="omni" autocomplete="off" spellcheck="false"
+              placeholder="Just type to Capture, Navigate and Find">
+          </div>
           <div class="omni-panel" id="omniPanel" hidden></div>
+          <div class="omni-legend meta" id="omniLegend"></div>
         </div>
         <div class="omni-chips" id="omniChips"></div>
       </div>

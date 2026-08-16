@@ -13,9 +13,9 @@
 
 | | |
 |---|---|
-| **Fase** | F9 · Kalenderfeed, eksport/import, backup — **færdig og testet lokalt** |
-| **Næste** | F10 · Sikkerhedsgennemgang + udgivelse af v1 |
-| **Tilstand** | F0–F8 pushet. F9 ikke committet — venter på Andreas' ja. |
+| **Fase** | F10 · Kommandopalet + Todoist-import — **færdig og testet lokalt** |
+| **Næste** | F11 · Sikkerhedsgennemgang + udgivelse af v1 |
+| **Tilstand** | F0–F9 pushet. |
 | **Udgivet version** | — (`APP_VERSION = 1` er stadig ubrugt; bumpes først ved reel udgivelse) |
 | **Sidst opdateret** | 2026-08-16 |
 
@@ -131,6 +131,20 @@ kalendere poller hvert kvarter) · import i portioner à 100 på 0,1 s.
 `?files=1` har en hård spærre ved 150 MB med en besked, der peger på panelets backup —
 det er den vej, Kokkeri gik ned ad med 247,9 MB i ét svar.
 
+**Verificeret i F10:** paletten matcher skitserne — legende i bunden, tilstands-pille
+inde i feltet, okkerfarvet Quick Capture-række · `+` giver »+ New Task«, pladsholderen
+skifter til »Task title…«, og legenden skrumper til `/ project · # context ↵ Create` ·
+`/`, `#` og `:` slår op i projekter, kontekster og områder og springer dertil ·
+tom liste skelner mellem »der findes ingen« og »din søgning gav intet« · den inline
+genvejssyntaks virker uændret, fordi tilstanden kun vælges når feltet ellers er tomt ·
+**10 tests af Todoist-importen**: CSV med citater og komma, `@label` → `#kontekst`
+(begreberne er byttet om), `#projekt`-referencer fjernet, sektioner sprunget over,
+underopgaver fladlagt med besked, og »every 3 days« bliver en rigtig doda-gentagelse,
+fordi dataene går gennem dodas **egen** fangst-parser.
+
+**Pladsen løst:** ikonerne er skåret fra fire til to (192 dækker også apple-touch-icon,
+512 er både `any` og `maskable`). Install-scriptet gik fra 92 % tilbage til **83 %**.
+
 ### Faseoversigt
 
 | # | Fase | Leverance | Status |
@@ -145,7 +159,8 @@ det er den vej, Kokkeri gik ned ad med 247,9 MB i ét svar.
 | **F7** | Vedhæftninger | Billeder og filer på opgaver og noter | ✅ Færdig |
 | **F8** | Gennemgang, logbog, ventelister, fokus | Ugentlig gennemgang, Venter på, Engang måske, timer | ✅ Færdig |
 | **F9** | Kalenderfeed, eksport/import, backup | Data ind og ud, verificeret gendannelse | ✅ Færdig |
-| **F10** | Sikkerhedsgennemgang + udgivelse | Hærdning, README, v1 | ⬜ |
+| **F10** | Kommandopalet + Todoist-import | Paletten som Andreas' skitser, og data ind fra Todoist | ✅ Færdig |
+| **F11** | Sikkerhedsgennemgang + udgivelse | Hærdning, README, v1 | ⬜ |
 
 Hver fase leveres som noget, der **virker og kan tages i brug**. Ingen fase efterlader
 appen i en tilstand, hvor den ikke kan startes.
@@ -265,7 +280,68 @@ billeder inde i de items, listen henter, gav et login-svar på 247,9 MB.
       Send en eksportfil derfra, så bygger jeg importen mod den. Handoveren kalder
       det selv »hvis formatet er tilgængeligt«, og det er et separat, valgfrit trin
 
-## F10 · Sikkerhedsgennemgang + udgivelse
+## F10 · Kommandopalet + Todoist-import
+
+**Mål:** Paletten skal se ud og opføre sig som Andreas' skitser, og Todoist-data
+skal kunne komme ind. Erstatter den planlagte tingdo-import, hvis format er ukendt.
+
+### Paletten
+
+- [x] Ét kort med inputfelt, resultater og en **tastaturlegende** i bunden
+- [x] Pladsholder: »Just type to Capture, Navigate and Find«
+- [x] **Tilstande via første tegn**: `+` opgave · `*` note · `/` projekter ·
+      `#` kontekster · `:` områder. Tilstanden vises som en **pille inde i feltet**,
+      pladsholderen skifter, og legenden viser kun det, der giver mening dér
+- [x] Backspace i et tomt felt forlader tilstanden
+- [x] **Quick Capture-rækken** fremhævet i okker med et cirkel-plus, som i skitsen
+- [x] `/`, `#` og `:` navigerer: vælg et projekt, en kontekst eller et område og spring dertil
+- [x] Den inline genvejssyntaks (`#kontekst` midt i en sætning) skal virke uændret
+
+### Detaljeruden
+
+- [x] Layout efter tingdo: titlen som **overskrift** med afkrydsningsring og ×,
+      beskrivelsen som »Add details…« lige under, og felterne som **chips** man trykker på
+- [x] En chip bliver til det rigtige felt ved klik og tilbage til en chip bagefter
+- [x] Alt redigeres i et **udkast** og gemmes først ved Save — et fejlklik ændrer intet
+- [x] Beskrivelsesfeltet vokser med teksten og viser markdown, når det ikke har fokus
+- [x] »What you can set here«-forklaring, der vises indtil den er set én gang
+
+### Todoist-import
+
+- [x] Læs Todoists **CSV-eksport** (én fil pr. projekt, `Projekt.csv`)
+- [x] Oversæt begreberne: Todoists `@label` → dodas **kontekst**, Todoists projekt →
+      dodas projekt. **Bemærk at `@` og `#` betyder det modsatte i de to apps**
+- [x] `DATE` med »every …« bliver til en rigtig doda-gentagelse gennem samme parser
+- [x] `DESCRIPTION` → beskrivelse · `TYPE: note` → note · prioriteter **droppes**
+      bevidst (handover §10: ingen prioritetsniveauer)
+- [x] Underopgaver (`INDENT > 1`) fladlægges — doda har ikke underopgaver
+- [x] Vis en **forhåndsvisning** før noget gemmes, og importér gennem det eksisterende
+      idempotente import-endepunkt
+
+## F11 · Passkeys, sikkerhedsgennemgang + udgivelse
+
+### Passkeys
+
+Samme håndskrevne WebAuthn-stak som Andreas' øvrige runer (RUNE-ERFARINGER §3):
+CBOR-dekoder → `attestationObject`/`authData` → COSE→JWK → `crypto.verify`.
+Ingen pakker.
+
+- [ ] `credentials`-tabel + `/api/webauthn/register|login/options|verify`
+- [ ] **rpId og origin udledes pr. request** af `X-Forwarded-Host`/`-Proto`, så det
+      virker bag Cloudflare-tunnelen uden konfiguration. Husk at headeren kan være
+      en liste — tag første led
+- [ ] **Discoverable credentials + tom `allowCredentials`**: »Log ind med passkey«
+      kræver hverken brugernavn eller en forudgående forespørgsel
+- [ ] Counter-tjek: afvis kun hvis begge tællere er > 0 og den nye ≤ den gamle
+- [ ] Administration i Settings: opret, navngiv, se sidst brugt, fjern
+- [ ] **Passkeys må ALDRIG erstatte kodeordet.** Panelet tilgås på `IP:port` over
+      http, hvor WebAuthn ikke findes — et passkey-only login ville låse Andreas ude
+      af sin egen server. To spærrer: en server-side forklaring og
+      `window.isSecureContext` i browseren
+- [ ] Test med en **software-authenticator** (ES256-nøgle + håndlavet `authData`),
+      ikke med hardware — så dækker testen routes, challenge, database og scope
+
+### Udgivelse
 
 - [ ] `/security-review` på hele diffen
 - [ ] Verificér CSP, headers, rate-limits, token-scopes, iCal-token

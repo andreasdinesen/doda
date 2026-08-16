@@ -1,26 +1,41 @@
 'use strict';
-/* doda - kommandobaren. Ét felt der bade soeger og opretter.
+/* doda - kommandopaletten. Ét felt der bade soeger, opretter og navigerer.
    Oprettelse star altid oeverst og kan altid nas med Enter: soegning ma
    aldrig komme i vejen for fangst (handover §5.1). */
 
+/* Foerste tegn vaelger en TILSTAND. Pillen inde i feltet og legenden i bunden
+   viser hvilken - sa man aldrig er i tvivl om, hvad Enter kommer til at gore. */
+const MODER = {
+  '+': { id: 'task', pil: '+ New Task', ph: 'Task title…', legend: ['/ project', '# context'], enter: 'Create' },
+  '*': { id: 'note', pil: '* New Note', ph: 'Note title…', legend: ['/ project'], enter: 'Create' },
+  '/': { id: 'project', pil: '/ Projects', ph: 'Find a project…', legend: [], enter: 'Open' },
+  '#': { id: 'context', pil: '# Contexts', ph: 'Find a context…', legend: [], enter: 'Open' },
+  ':': { id: 'area', pil: ': Areas', ph: 'Find an area…', legend: [], enter: 'Open' },
+};
+
+const STANDARD_LEGEND = ['+ task', '* note', '/ projects', '# contexts', ': areas'];
+
 const omniState = {
+  mode: null,          // et tegn fra MODER, eller null
   tolket: null,
   resultater: [],
   valgt: 0,
   raekker: [],
-  bekraeft: null,   // {contexts:[], project} - ukendte navne der skal godkendes
+  bekraeft: null,      // {contexts:[], project} - ukendte navne der skal godkendes
   soegeTimer: null,
   soegeToken: 0,
 };
 
 function omniEl() { return document.getElementById('omni'); }
+function omniKort() { return document.getElementById('omniCard'); }
 
 /* Tolkningen sker LOKALT med den samme parser, serveren bruger. Ingen
    netvaerkskald pr. tastetryk - chipsene skal foelge fingrene. */
 function tolkNu(tekst) {
   const p = (typeof dodaParse !== 'undefined') ? dodaParse : null;
   if (!p) return null;
-  return p.tolkFangst(tekst);
+  // I note-tilstand tolkes teksten, som om praefikset stod der.
+  return p.tolkFangst(omniState.mode === '*' ? `* ${tekst}` : tekst);
 }
 
 function ukendteNavne(tolket) {
@@ -33,6 +48,35 @@ function ukendteNavne(tolket) {
   };
 }
 
+/* ------------------------------------------------------------ tilstand */
+
+function saetMode(tegn) {
+  omniState.mode = tegn;
+  const el = omniEl();
+  const pil = document.getElementById('omniMode');
+  if (!el || !pil) return;
+  const m = tegn ? MODER[tegn] : null;
+  pil.hidden = !m;
+  pil.textContent = m ? m.pil : '';
+  el.placeholder = m ? m.ph : 'Just type to Capture, Navigate and Find';
+  omniKort().classList.toggle('moded', !!m);
+}
+
+function tegnLegend() {
+  const host = document.getElementById('omniLegend');
+  if (!host) return;
+  const m = omniState.mode ? MODER[omniState.mode] : null;
+  const dele = m ? m.legend : STANDARD_LEGEND;
+  const enter = m ? m.enter : 'Select';
+  host.innerHTML = `
+    <span class="legend-keys">${dele.map((d) => {
+    const mellemrum = d.indexOf(' ');
+    return `<span class="legend-item"><kbd>${esc(d.slice(0, mellemrum))}</kbd>${esc(d.slice(mellemrum + 1))}</span>`;
+  }).join('<span class="legend-dot">·</span>')}</span>
+    <span class="legend-nav"><span class="legend-item">↑ ↓ Navigate</span>
+      <span class="legend-item">↵ ${esc(enter)}</span></span>`;
+}
+
 /* ------------------------------------------------------------- chips */
 
 function tegnChips() {
@@ -40,10 +84,10 @@ function tegnChips() {
   if (!host) return;
   const t = omniState.tolket;
   const raa = omniEl() ? omniEl().value.trim() : '';
-  if (!raa || !t) { host.innerHTML = ''; return; }
+  // Navigations-tilstandene har ingen tolkning at vise.
+  if (!raa || !t || (omniState.mode && !'+*'.includes(omniState.mode))) { host.innerHTML = ''; return; }
 
   const chips = [];
-  chips.push([t.kind === 'note' ? 'Note' : 'Task', 'accent']);
   for (const c of t.contexts) chips.push([`#${c}`, 'accent']);
   if (t.project) chips.push([`@${t.project}`, 'accent']);
   if (t.due) chips.push([`⏰ ${visDato(t.due.dato)}${t.due.tid ? ` ${t.due.tid}` : ''}`, 'accent']);
@@ -58,7 +102,6 @@ function tegnChips() {
     chips.push(g ? [`↻ ${dodaParse.beskrivGentagelse(g)}`, 'accent']
       : [`↻ didn't understand "${t.recurrenceText}"`, 'neutral']);
   }
-
   for (const w of t.warnings) {
     if (w !== 'gentagelse') chips.push([w.replace('forstod ikke datoen', "didn't understand the date"), 'neutral']);
   }
@@ -80,11 +123,37 @@ function visDato(iso) {
   return dato.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
-/* ------------------------------------------------------------ panelet */
+/* ------------------------------------------------------------ raekker */
 
 function byggRaekker() {
   const raa = omniEl().value.trim();
   const raekker = [];
+  const mode = omniState.mode;
+
+  // Navigation: vis det, man kan springe til.
+  if (mode === '/' || mode === '#' || mode === ':') {
+    const kilde = mode === '/' ? state.projects : mode === '#' ? state.contexts : state.areas;
+    const traf = kilde.filter((x) => !raa || x.name.toLowerCase().includes(raa.toLowerCase()));
+    for (const x of traf.slice(0, 12)) {
+      raekker.push({
+        type: 'goto', mode, id: x.id, titel: x.name,
+        under: mode === '/' ? `${x.open_count || 0} open` : mode === '#' ? 'context' : 'area',
+        ikon: mode === '/' ? 'projects' : mode === '#' ? 'contexts' : 'someday',
+      });
+    }
+    if (!traf.length) {
+      const hvad = mode === '/' ? 'projects' : mode === '#' ? 'contexts' : 'areas';
+      // Skeln mellem "der findes ingen" og "din soegning gav intet" - to
+      // vidt forskellige situationer for brugeren.
+      raekker.push(raa
+        ? { type: 'tom', titel: `No ${hvad} matching “${raa}”`, under: 'Try another name' }
+        : { type: 'tom', titel: `No ${hvad} yet`,
+          under: mode === ':' ? 'Add one under Projects → Manage areas'
+            : `Type ${mode === '/' ? '@Name' : '#name'} when you capture, and it appears here` });
+    }
+    return raekker;
+  }
+
   if (!raa) return raekker;
 
   if (omniState.bekraeft) {
@@ -100,8 +169,7 @@ function byggRaekker() {
     raekker.push({
       type: 'create',
       titel: t && t.title ? t.title : raa,
-      under: t && t.kind === 'note' ? 'New note' : 'New task in Inbox',
-      ikon: t && t.kind === 'note' ? 'note' : 'plus',
+      under: mode === '*' ? 'NEW NOTE' : mode === '+' ? 'NEW TASK' : 'QUICK CAPTURE',
     });
   }
 
@@ -127,16 +195,30 @@ function tegnPanel() {
         <span class="omni-row-sub">${esc(statusNavn(it.status))}${it.contexts.length ? ` · ${it.contexts.map((c) => `#${c.name}`).join(' ')}` : ''}</span></span>
       </button>`;
     }
-    return `<button class="omni-row${r.type === 'confirm' ? ' confirm' : ''}"${valgt} data-i="${i}">
-      ${icon(r.ikon || 'plus')}
+    if (r.type === 'tom') {
+      return `<div class="omni-row empty-row"><span class="omni-row-main">
+        <span class="omni-row-title">${esc(r.titel)}</span>
+        <span class="omni-row-sub">${esc(r.under)}</span></span></div>`;
+    }
+    if (r.type === 'goto') {
+      return `<button class="omni-row"${valgt} data-i="${i}">
+        ${icon(r.ikon)}<span class="omni-row-main">
+        <span class="omni-row-title">${esc(r.titel)}</span>
+        <span class="omni-row-sub">${esc(r.under)}</span></span></button>`;
+    }
+    // Quick Capture: den store, fremhaevede raekke.
+    return `<button class="omni-row big${r.type === 'confirm' ? ' confirm' : ''}"${valgt} data-i="${i}">
+      <span class="omni-plus">${icon(r.type === 'confirm' ? 'next' : 'plus', 20)}</span>
       <span class="omni-row-main"><span class="omni-row-title">${esc(r.titel)}</span>
-      <span class="omni-row-sub">${esc(r.under)}</span></span>
+      ${r.type === 'confirm' ? `<span class="omni-row-sub">${esc(r.under)}</span>` : ''}</span>
+      ${r.type === 'confirm' ? '' : `<span class="omni-badge">${esc(r.under)}</span>`}
     </button>`;
   }).join('');
   panel.hidden = false;
 
-  panel.querySelectorAll('.omni-row').forEach((el) => {
+  panel.querySelectorAll('button.omni-row').forEach((el) => {
     el.addEventListener('mouseenter', () => { omniState.valgt = Number(el.dataset.i); markerValgt(); });
+    el.addEventListener('mousedown', (e) => e.preventDefault());   // behold fokus i feltet
     el.addEventListener('click', () => { omniState.valgt = Number(el.dataset.i); aktiver(); });
   });
 }
@@ -159,7 +241,8 @@ const statusNavn = (s) => STATUS_NAVNE[s] || s;
 function planlaegSoegning() {
   clearTimeout(omniState.soegeTimer);
   const q = omniEl().value.trim();
-  if (q.length < 2 || q.startsWith('*') || q.startsWith('+')) {
+  // Navigation soeger lokalt; kun fritekst og opgave-tilstand spoerger serveren.
+  if (q.length < 2 || (omniState.mode && omniState.mode !== '+')) {
     omniState.resultater = [];
     tegnPanel();
     return;
@@ -183,17 +266,23 @@ async function aktiver() {
   const raekke = omniState.raekker[omniState.valgt];
   if (!raekke) return;
 
-  if (raekke.type === 'item') {
-    aabnElement(raekke.item);
+  if (raekke.type === 'item') { aabnElement(raekke.item); luk(); return; }
+  if (raekke.type === 'tom') return;
+  if (raekke.type === 'goto') {
     luk();
+    if (raekke.mode === '/') gaaTilProjekt(raekke.id);
+    else if (raekke.mode === '#') gaaTil('next', { context: raekke.id });
+    else { state.filterArea = raekke.id; gaaTil('projects'); }
     return;
   }
   await fangstNu(raekke.type === 'confirm');
 }
 
 async function fangstNu(bekraeftet) {
-  const tekst = omniEl().value.trim();
+  let tekst = omniEl().value.trim();
   if (!tekst) return;
+  // Tilstanden oversaettes til det praefiks, parseren og serveren forstar.
+  if (omniState.mode === '*') tekst = `* ${tekst}`;
 
   // Kendes alle navne i forvejen, er der intet at bekraefte - saa skal ét
   // Enter vaere nok. Det er hele pointen med "fangst pa ét trin".
@@ -213,10 +302,7 @@ async function fangstNu(bekraeftet) {
     await genindlaes();
     toast(it.kind === 'note' ? 'Note saved' : `Added to ${statusNavn(it.status)}`, {
       label: 'Undo',
-      run: async () => {
-        await api('DELETE', `/api/v1/items/${it.id}`, {});
-        await genindlaes();
-      },
+      run: async () => { await api('DELETE', `/api/v1/items/${it.id}`, {}); await genindlaes(); },
     });
   } catch (ex) {
     // Netvaerksbrud: gem lokalt og send, naar der er forbindelse igen.
@@ -234,20 +320,31 @@ async function fangstNu(bekraeftet) {
 function luk() {
   const el = omniEl();
   if (el) { el.value = ''; el.blur(); }
+  saetMode(null);
   omniState.tolket = null;
   omniState.resultater = [];
   omniState.bekraeft = null;
   omniState.valgt = 0;
   tegnChips();
   tegnPanel();
+  tegnLegend();
 }
 
 function opdaterOmni() {
   const el = omniEl();
+
+  // Foerste tegn kan vaelge en tilstand - men KUN naar feltet ellers er tomt.
+  // Ellers ville "#hjem" midt i en saetning skifte tilstand, og den inline
+  // genvejssyntaks ville holde op med at virke.
+  if (!omniState.mode && el.value.length === 1 && MODER[el.value]) {
+    saetMode(el.value);
+    el.value = '';
+  }
+
   omniState.tolket = tolkNu(el.value);
-  // En aendring i teksten gor en tidligere bekraeftelse ugyldig.
-  omniState.bekraeft = null;
+  omniState.bekraeft = null;   // en aendring i teksten gor bekraeftelsen ugyldig
   tegnChips();
+  tegnLegend();
   tegnPanel();
   planlaegSoegning();
 }
@@ -255,15 +352,29 @@ function opdaterOmni() {
 function bindOmni() {
   const el = omniEl();
   if (!el) return;
+  saetMode(null);
+  tegnLegend();
+
   el.addEventListener('input', opdaterOmni);
-  el.addEventListener('focus', () => { if (el.value.trim()) tegnPanel(); });
+  el.addEventListener('focus', tegnPanel);
   el.addEventListener('blur', () => {
     // Lille forsinkelse, sa et klik pa en raekke nar at blive registreret.
-    setTimeout(() => { const p = document.getElementById('omniPanel'); if (p) p.hidden = true; }, 150);
+    setTimeout(() => {
+      if (document.activeElement === el) return;
+      const p = document.getElementById('omniPanel');
+      if (p) p.hidden = true;
+    }, 150);
   });
 
   el.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { e.preventDefault(); luk(); return; }
+    // Backspace i et tomt felt forlader tilstanden i stedet for ingenting.
+    if (e.key === 'Backspace' && !el.value && omniState.mode) {
+      e.preventDefault();
+      saetMode(null);
+      opdaterOmni();
+      return;
+    }
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       if (!omniState.raekker.length) return;
       e.preventDefault();
@@ -276,7 +387,7 @@ function bindOmni() {
   });
 }
 
-/* Signaturen: begynd bare at skrive, sa aabner kommandobaren.
+/* Signaturen: begynd bare at skrive, sa aabner paletten.
    Undtagelserne er vigtigere end reglen - uden dem stjaeler den tastetryk
    fra ethvert felt i appen. */
 document.addEventListener('keydown', (e) => {
@@ -292,8 +403,6 @@ document.addEventListener('keydown', (e) => {
 
   const omni = omniEl();
   if (!omni) return;
-
-  if (e.key === '/') { e.preventDefault(); omni.focus(); return; }
   if (e.key.length !== 1) return;
   e.preventDefault();
   omni.focus();
