@@ -50,6 +50,29 @@ I Inbox og Næste handlinger kan alt klares uden mus:
 
 ---
 
+## API, iPhone og Siri
+
+doda har et API under `/api/v1/`, så du kan fange fra iOS Shortcuts og Siri, og
+spørge »hvad kan jeg lave nu« uden at åbne appen.
+
+**Webgrænsefladen bruger nøjagtig samme API** — der er ingen intern bagvej. Alt
+hvad appen kan, kan du også udefra.
+
+Adgangsnøgler laves under **Settings → Access keys**. Vælg det snævreste scope,
+der løser opgaven: en `capture`-nøgle kan tilføje, men kan ikke læse en eneste
+opgave, så en mistet telefon ikke åbner hele systemet.
+
+Fangst-genvejen kræver kun ét felt — API'et tager imod en ren tekststreng:
+
+```bash
+curl -X POST https://DIN-ADRESSE/api/v1/capture -H "Authorization: Bearer doda_DIN-NØGLE" -d "ring til tandlægen #telefon !tomorrow"
+```
+
+Trin-for-trin-opsætning af begge genveje, den fulde endepunktsliste og
+fejlkoderne står i **[docs/SHORTCUTS.md](docs/SHORTCUTS.md)**.
+
+---
+
 ## Installation
 
 1. **Runes → Browse GitHub** → pegn på `andreasdinesen/doda` → *Reload*.
@@ -134,8 +157,13 @@ Ud over panelets backup kan alt eksporteres i et åbent format inde i appen
 - Mislykkede login og rate-limit-spærringer rapporteres til panelets
   **sikkerhedshistorik** pr. IP via runens `events:`-blok, og serverfejl udløser en
   watcher-notifikation.
-- Adgangsnøgler til API'et gemmes kun som `sha256` og kan tilbagekaldes
-  øjeblikkeligt (kommer i F2).
+- **Adgangsnøgler** gemmes kun som `sha256` og vises én eneste gang. De har
+  scopes (`capture` / `read` / `full`), et `sidst brugt`-stempel og kan
+  tilbagekaldes øjeblikkeligt — der er ingen cache, så næste kald slår op i
+  databasen og finder ingenting. Hver nøgle har sin egen timegrænse på antal kald.
+- **En adgangsnøgle kan aldrig lave nye nøgler eller skifte kodeordet**, uanset
+  scope. Det kræver en rigtig browser-session. Ellers ville én lækket nøgle være
+  nok til at give sig selv varig adgang — eller til at låse dig ude.
 
 ---
 

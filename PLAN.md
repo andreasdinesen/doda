@@ -13,9 +13,9 @@
 
 | | |
 |---|---|
-| **Fase** | F1 · Fangst + Inbox + Næste — **færdig og testet lokalt** |
-| **Næste** | F2 · API + adgangsnøgler + iOS Shortcuts |
-| **Tilstand** | F0 pushet. F1 ikke committet — venter på Andreas' ja. |
+| **Fase** | F2 · API + adgangsnøgler + Shortcuts — **færdig og testet lokalt** |
+| **Næste** | F3 · Projekter, områder, kontekster, noter |
+| **Tilstand** | F0 og F1 pushet. F2 ikke committet — venter på Andreas' ja. |
 | **Udgivet version** | — (`APP_VERSION = 1` er stadig ubrugt; bumpes først ved reel udgivelse) |
 | **Sidst opdateret** | 2026-08-16 |
 
@@ -36,13 +36,22 @@ tastaturafklaring (`n`/`w`/`s`/`x`/mellemrum) uden at fangstfeltet opsnapper tas
 `~skjul indtil` holder opgaver ude af næste-listen · søgning dækker beskrivelser og
 escaper LIKE-jokertegn · fortryd på både fangst og fuldførelse · mobil uden overløb.
 
+**Verificeret i F2:** hele scope-matricen målt **uden cookie** (som en rigtig iPhone):
+en `capture`-nøgle kan oprette, men får 403 på al læsning · en `read`-nøgle får 403 på
+oprettelse · **ingen nøgle kan lave nye nøgler eller skifte kodeord** (401
+`session_required`) · ugyldig nøgle giver 401 · tilbagekaldelse virker øjeblikkeligt
+(200 → 401 på næste kald) · `sidst brugt`-stempel skrives · fangst virker med ren tekst
+uden Content-Type, med formulardata og med `?text=` · CSRF-barrieren holder stadig for
+cookie-adgang (415) · `?format=text` og kontekst ved navn · `changes?since=` inkl.
+slettede id'er.
+
 ### Faseoversigt
 
 | # | Fase | Leverance | Status |
 |---|---|---|---|
 | **F0** | Fundament | Rune installerer, login virker, tom app-skal med tingdo-design | ✅ Færdig |
 | **F1** | Fangst + Inbox + Næste | **Appen kan bruges dagligt.** Datamodel, parser, kommandobar, afklaring | ✅ Færdig |
-| **F2** | API + adgangsnøgler + Shortcuts | iPhone/Siri kan fange og læse. Handover: *prioritér højt* | ⬜ |
+| **F2** | API + adgangsnøgler + Shortcuts | iPhone/Siri kan fange og læse. Handover: *prioritér højt* | ✅ Færdig |
 | **F3** | Projekter, områder, kontekster, noter | Fuld GTD-struktur, markdown-noter | ⬜ |
 | **F4** | Gentagelser | Todoist-syntaks med `!`, to tilstande, gentagelses-skærm | ⬜ |
 | **F5** | MCP-server | Claude kan forbinde til appen | ⬜ |
@@ -85,11 +94,11 @@ det færdige tingdo-design. Ingen opgavefunktioner endnu.
 
 **Mål:** Handover §5.10. Webgrænsefladen bruger **samme** API — ingen intern bagvej.
 
-- [ ] Adgangsnøgler: kun `sha256` gemmes, vises én gang, scopes (`capture`/`read`/`full`), `sidst brugt`, øjeblikkelig tilbagekaldelse
-- [ ] `POST /api/v1/capture` (kun titel påkrævet, samme genvejssyntaks i teksten)
-- [ ] `GET /api/v1/next?context=`, `POST /api/v1/items/:id/complete`, noter, `GET /api/v1/changes?since=`
-- [ ] Tilgivende input + fejlsvar en genvej kan vise
-- [ ] `docs/SHORTCUTS.md` med konkrete værdier til iPhone
+- [x] Adgangsnøgler: kun `sha256` gemmes, vises én gang, scopes (`capture`/`read`/`full`), `sidst brugt`, øjeblikkelig tilbagekaldelse
+- [x] `POST /api/v1/capture` (kun titel påkrævet, samme genvejssyntaks i teksten)
+- [x] `GET /api/v1/next?context=`, `POST /api/v1/items/:id/complete`, noter, `GET /api/v1/changes?since=`
+- [x] Tilgivende input + fejlsvar en genvej kan vise
+- [x] `docs/SHORTCUTS.md` med konkrete værdier til iPhone
 
 ## F3 · Projekter, områder, kontekster, noter
 

@@ -162,7 +162,7 @@ function planlaegSoegning() {
   omniState.soegeTimer = setTimeout(async () => {
     const token = ++omniState.soegeToken;
     try {
-      const d = await api('GET', `/api/search?q=${encodeURIComponent(q)}`);
+      const d = await api('GET', `/api/v1/search?q=${encodeURIComponent(q)}`);
       // Et aeldre svar ma aldrig overskrive et nyere - ellers blinker
       // resultaterne tilbage til noget, brugeren er holdt op med at skrive.
       if (token !== omniState.soegeToken) return;
@@ -196,7 +196,7 @@ async function fangstNu(bekraeftet) {
   const skalSpoerge = !bekraeftet && (ukendte.contexts.length > 0 || ukendte.project);
 
   try {
-    const svar = await api('POST', '/api/capture', { text: tekst, createNew: !skalSpoerge });
+    const svar = await api('POST', '/api/v1/capture', { text: tekst, createNew: !skalSpoerge });
     if (svar.needsConfirm) {
       omniState.bekraeft = svar.needsConfirm;
       omniState.valgt = 0;
@@ -209,7 +209,7 @@ async function fangstNu(bekraeftet) {
     toast(it.kind === 'note' ? 'Note saved' : `Added to ${statusNavn(it.status)}`, {
       label: 'Undo',
       run: async () => {
-        await api('DELETE', `/api/items/${it.id}`, {});
+        await api('DELETE', `/api/v1/items/${it.id}`, {});
         await genindlaes();
       },
     });

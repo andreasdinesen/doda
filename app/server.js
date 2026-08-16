@@ -130,11 +130,28 @@ const MIGRATIONS = [
       CREATE INDEX item_contexts_kontekst ON item_contexts(context_id);
     `);
   },
+
+  function m3(d) {
+    // Kun hashen gemmes. Mistes databasen, kan ingen noegle bruges igen -
+    // og selv jeg kan ikke vise en noegle frem efter oprettelsen.
+    d.exec(`
+      CREATE TABLE tokens (
+        id         TEXT PRIMARY KEY,
+        name       TEXT NOT NULL,
+        hash       TEXT NOT NULL UNIQUE,
+        prefix     TEXT NOT NULL,
+        scope      TEXT NOT NULL DEFAULT 'full',
+        created_at INTEGER NOT NULL,
+        last_used_at INTEGER,
+        revoked_at INTEGER
+      );
+      CREATE INDEX tokens_hash ON tokens(hash) WHERE revoked_at IS NULL;
+    `);
+  },
 ];
 
 // Statusser. Raekkefoelgen er ogsaa den, lister sorteres efter.
 const STATUSSER = ['inbox', 'next', 'queued', 'waiting', 'someday', 'done', 'dropped'];
-const AABNE_STATUSSER = ['inbox', 'next', 'queued', 'waiting', 'someday'];
 
 function migrate() {
   const cur = db.prepare('PRAGMA user_version').get().user_version || 0;
@@ -337,13 +354,21 @@ function sendJson(res, status, body, extraHeaders) {
 
 const MAX_BODY = 2 * 1024 * 1024;
 
-function readJsonBody(req) {
+/**
+ * Laeser kroppen.
+ *
+ * @param {boolean} tilgivende  Saettes KUN naar forespoergslen er godkendt med
+ *   en adgangsnoegle. Kravet om application/json er en CSRF-barriere, og CSRF
+ *   forudsaetter en ambient legitimation (cookien). En Bearer-noegle sendes
+ *   aktivt af klienten, sa der er intet at forfalske - og sa skal en genvej,
+ *   der bare sender en tekststreng, kunne virke (handover §5.10).
+ */
+function readJsonBody(req, tilgivende) {
   return new Promise((resolve, reject) => {
     const type = String(req.headers['content-type'] || '');
-    // CSRF-barriere oven paa SameSite=Lax: en formular kan ikke saette denne
-    // header pa tvaers af oprindelser uden en preflight.
-    if (!type.includes('application/json')) {
-      reject(Object.assign(new Error('kraever application/json'), { status: 415 }));
+    const erJson = type.includes('application/json');
+    if (!erJson && !tilgivende) {
+      reject(Object.assign(new Error('Content-Type must be application/json'), { status: 415 }));
       return;
     }
     const chunks = [];
@@ -360,12 +385,26 @@ function readJsonBody(req) {
     req.on('end', () => {
       const raw = Buffer.concat(chunks).toString('utf8').trim();
       if (!raw) { resolve({}); return; }
-      try {
-        const parsed = JSON.parse(raw);
-        resolve(parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {});
-      } catch {
-        reject(Object.assign(new Error('ugyldig JSON'), { status: 400 }));
+
+      if (erJson || raw.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(raw);
+          resolve(parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {});
+        } catch {
+          reject(Object.assign(new Error('The body is not valid JSON.'), { status: 400 }));
+        }
+        return;
       }
+
+      // Tilgivende tilstand: en genvej, der sender formulardata eller bare en
+      // raa tekststreng, skal virke.
+      if (type.includes('application/x-www-form-urlencoded')) {
+        const felter = {};
+        for (const [n, v] of new URLSearchParams(raw)) felter[n] = v;
+        resolve(felter);
+        return;
+      }
+      resolve({ text: raw });
     });
     req.on('error', reject);
   });
@@ -434,15 +473,112 @@ function serveStatic(req, res, urlPath) {
   fs.createReadStream(full).pipe(res);
 }
 
+/* ------------------------------------------------- adgangsnoegler */
+
+/* Scopes. En mistet telefon ma ikke kunne laese hele systemet, sa en
+   capture-noegle kan KUN oprette - den kan ikke se noget som helst
+   (handover §5.10). */
+const SCOPE_TILLADER = {
+  capture: new Set(['capture']),
+  read: new Set(['read']),
+  full: new Set(['capture', 'read', 'write']),
+};
+const SCOPES = Object.keys(SCOPE_TILLADER);
+
+function hashToken(raa) {
+  return crypto.createHash('sha256').update(String(raa), 'utf8').digest('hex');
+}
+
+function opretToken(navn, scope) {
+  const hemmelig = crypto.randomBytes(32).toString('base64url');
+  const noegle = `doda_${hemmelig}`;
+  const id = newId();
+  db.prepare('INSERT INTO tokens (id, name, hash, prefix, scope, created_at) VALUES (?,?,?,?,?,?)')
+    .run(id, navn, hashToken(noegle), hemmelig.slice(0, 6), scope, now());
+  audit('noegle-oprettet', navn, scope);
+  // Noeglen returneres ÉN gang og gemmes aldrig i klartekst.
+  return { id, key: noegle };
+}
+
+function findToken(raa) {
+  if (typeof raa !== 'string' || !raa.startsWith('doda_')) return null;
+  const row = db.prepare(`
+    SELECT id, name, scope, last_used_at FROM tokens
+     WHERE hash = ? AND revoked_at IS NULL`).get(hashToken(raa));
+  return row || null;
+}
+
+function stemplBrug(token) {
+  // Hoejst ét skriv i minuttet - ellers koster hvert API-kald en skrivning.
+  const t = now();
+  if (token.last_used_at && t - token.last_used_at < 60) return;
+  db.prepare('UPDATE tokens SET last_used_at = ? WHERE id = ?').run(t, token.id);
+}
+
 /* ------------------------------------------------------------ api */
 
+/**
+ * Godkender en forespoergsel via adgangsnoegle ELLER session-cookie.
+ *
+ * Det er hele pointen i handover §5.10: webgraensefladen bruger samme API som
+ * eksterne klienter. Der er ingen intern bagvej.
+ *
+ * @returns {{user, token, viaToken}|null} - null naar svaret allerede er sendt
+ */
+function godkend(req, res, kraevetScope) {
+  const auth = String(req.headers.authorization || '');
+  const bearer = auth.match(/^Bearer\s+(\S+)$/i);
+  const raaNoegle = bearer ? bearer[1] : String(req.headers['x-api-key'] || '');
+
+  if (raaNoegle) {
+    const token = findToken(raaNoegle);
+    if (!token) {
+      logSecurity(`noegle-afvist ip=${clientIp(req)}`);
+      apiFejl(res, 401, 'invalid_key', 'That access key is not valid. It may have been revoked.');
+      return null;
+    }
+    if (!rateAllow(`api:${token.id}`, 600, 3600)) {
+      apiFejl(res, 429, 'rate_limited', 'Too many requests with this key. Try again shortly.');
+      return null;
+    }
+    if (!SCOPE_TILLADER[token.scope].has(kraevetScope)) {
+      apiFejl(res, 403, 'wrong_scope',
+        `This key is "${token.scope}" and cannot ${kraevetScope}. Create a key with a wider scope.`);
+      return null;
+    }
+    stemplBrug(token);
+    const bruger = db.prepare('SELECT id, username FROM users LIMIT 1').get();
+    return { user: bruger, token, viaToken: true };
+  }
+
+  const user = sessionUser(req);
+  if (!user) {
+    apiFejl(res, 401, 'not_signed_in', 'You are not signed in.');
+    return null;
+  }
+  return { user, token: null, viaToken: false };
+}
+
+/**
+ * Kraever en rigtig SESSION - en adgangsnoegle er ikke nok.
+ *
+ * Bruges kun til kodeordsskift og til administration af noeglerne selv.
+ * Ellers ville én laekket noegle vaere nok til at give sig selv fuld og
+ * varig adgang, eller til at laase mig ude af min egen app.
+ */
 function requireUser(req, res) {
   const user = sessionUser(req);
   if (!user) {
-    sendJson(res, 401, { error: 'ikke logget ind' });
+    apiFejl(res, 401, 'session_required',
+      'This needs a signed-in browser session — an access key cannot do it.');
     return null;
   }
   return user;
+}
+
+/** Fejlsvar en iOS-genvej kan vise direkte: kort kode + laesbar besked. */
+function apiFejl(res, status, kode, besked) {
+  sendJson(res, status, { error: kode, message: besked });
 }
 
 function userCount() {
@@ -741,8 +877,8 @@ const ROUTES = {
   /* --- data ------------------------------------------------------- */
 
   // Ét kald der giver skallen alt, den skal bruge for at tegne sig.
-  'GET /api/state': (req, res) => {
-    const user = requireUser(req, res);
+  'GET /api/v1/state': (req, res) => {
+    const user = godkend(req, res, 'read');
     if (!user) return;
     const tal = db.prepare(`
       SELECT status, COUNT(*) AS n FROM items
@@ -758,8 +894,8 @@ const ROUTES = {
     });
   },
 
-  'GET /api/items': (req, res, ctx) => {
-    const user = requireUser(req, res);
+  'GET /api/v1/items': (req, res, ctx) => {
+    const user = godkend(req, res, 'read');
     if (!user) return;
     const q = ctx.query;
     sendJson(res, 200, {
@@ -775,21 +911,45 @@ const ROUTES = {
     });
   },
 
-  'POST /api/capture': async (req, res) => {
-    const user = requireUser(req, res);
-    if (!user) return;
-    const body = await readJsonBody(req);
-    const tekst = typeof body.text === 'string' ? body.text : '';
-    const svar = fangst(tekst, body.createNew === true);
-    if (svar.fejl) { sendJson(res, 400, { error: svar.fejl }); return; }
-    sendJson(res, 200, svar.skalBekraeftes
-      ? { needsConfirm: svar.skalBekraeftes, parsed: svar.tolket }
-      : { item: svar.item, parsed: svar.tolket });
+  'POST /api/v1/capture': async (req, res, ctx) => {
+    const auth = godkend(req, res, 'capture');
+    if (!auth) return;
+    const body = await readJsonBody(req, auth.viaToken);
+
+    // Tilgivende: teksten ma komme som JSON-felt, som formularfelt, som ren
+    // krop eller endda som ?text= i adressen. En genvej med ét tekstfelt
+    // skal bare virke (handover §5.10).
+    let tekst = '';
+    for (const kandidat of [body.text, body.title, body.note, ctx.query.get('text')]) {
+      if (typeof kandidat === 'string' && kandidat.trim()) { tekst = kandidat; break; }
+    }
+    if (!tekst.trim()) {
+      apiFejl(res, 400, 'no_text', 'Nothing to capture — send some text.');
+      return;
+    }
+
+    // Udefra oprettes ukendte kontekster og projekter uden at spoerge: en
+    // genvej kan ikke svare pa et bekraeftelsesspoergsmal. Webappen sender
+    // createNew: false og haandterer bekraeftelsen selv.
+    const opretNye = auth.viaToken ? body.createNew !== false : body.createNew === true;
+    const svar = fangst(tekst, opretNye);
+    if (svar.fejl) { apiFejl(res, 400, 'no_text', svar.fejl); return; }
+    if (svar.skalBekraeftes) {
+      sendJson(res, 200, { needsConfirm: svar.skalBekraeftes, parsed: svar.tolket });
+      return;
+    }
+    if (auth.viaToken) audit('fangst-via-api', auth.token.name, svar.item.title.slice(0, 80));
+    sendJson(res, 200, {
+      item: svar.item,
+      parsed: svar.tolket,
+      // Genveje viser gerne et svar. Giv dem én faerdig linje.
+      message: `Added: ${svar.item.title}`,
+    });
   },
 
   // Tolkning uden at gemme - bruges til at vise chips, mens der skrives.
-  'POST /api/parse': async (req, res) => {
-    const user = requireUser(req, res);
+  'POST /api/v1/parse': async (req, res) => {
+    const user = godkend(req, res, 'read');
     if (!user) return;
     const body = await readJsonBody(req);
     const tolket = parse.tolkFangst(typeof body.text === 'string' ? body.text : '');
@@ -800,8 +960,8 @@ const ROUTES = {
     });
   },
 
-  'POST /api/items': async (req, res) => {
-    const user = requireUser(req, res);
+  'POST /api/v1/items': async (req, res) => {
+    const user = godkend(req, res, 'write');
     if (!user) return;
     const body = await readJsonBody(req);
     const felter = renseItem(body);
@@ -812,8 +972,8 @@ const ROUTES = {
     sendJson(res, 200, { item: opretItem(felter, kontekstIder) });
   },
 
-  'GET /api/search': (req, res, ctx) => {
-    const user = requireUser(req, res);
+  'GET /api/v1/search': (req, res, ctx) => {
+    const user = godkend(req, res, 'read');
     if (!user) return;
     const q = String(ctx.query.get('q') || '').trim().slice(0, 200);
     if (q.length < 1) { sendJson(res, 200, { items: [] }); return; }
@@ -828,8 +988,121 @@ const ROUTES = {
     sendJson(res, 200, { items: medKontekster(raekker) });
   },
 
-  'POST /api/contexts': async (req, res) => {
+  /* Genvejs-venligt: kun det man kan gore nu, valgfrit én kontekst, og
+     ?format=text giver en faerdig liste en genvej kan vise direkte. */
+  'GET /api/v1/next': (req, res, ctx) => {
+    const auth = godkend(req, res, 'read');
+    if (!auth) return;
+    const oensket = String(ctx.query.get('context') || '').trim();
+    let kontekstId = null;
+    if (oensket) {
+      const k = findKontekst(oensket) || db.prepare('SELECT id FROM contexts WHERE id = ?').get(oensket);
+      if (!k) {
+        apiFejl(res, 404, 'unknown_context',
+          `No context called "${oensket}". Known contexts: ${hentKontekster().map((c) => c.name).join(', ') || 'none yet'}.`);
+        return;
+      }
+      kontekstId = k.id;
+    }
+    const items = hentItems({ status: 'next', skjulUdskudte: true, context: kontekstId, limit: ctx.query.get('limit') });
+
+    if (ctx.query.get('format') === 'text') {
+      const linjer = items.map((i) => {
+        const dele = [i.title];
+        if (i.contexts.length) dele.push(i.contexts.map((c) => `#${c.name}`).join(' '));
+        if (i.due_date) dele.push(i.due_date + (i.due_time ? ` ${i.due_time}` : ''));
+        return `• ${dele.join('  ·  ')}`;
+      });
+      const krop = linjer.length ? linjer.join('\n') : 'Nothing to do right now.';
+      res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(krop);
+      return;
+    }
+    sendJson(res, 200, { items, count: items.length });
+  },
+
+  /* Lad en klient holde sig opdateret uden at hente alt. Slettede elementer
+     kommer med som id'er, sa klienten kan fjerne dem igen. */
+  'GET /api/v1/changes': (req, res, ctx) => {
+    const auth = godkend(req, res, 'read');
+    if (!auth) return;
+    const raa = String(ctx.query.get('since') || '0');
+    const since = /^\d+$/.test(raa) ? Number(raa) : Math.floor(Date.parse(raa) / 1000);
+    if (!Number.isFinite(since)) {
+      apiFejl(res, 400, 'bad_since', 'The "since" value must be a unix timestamp or an ISO date.');
+      return;
+    }
+    const raekker = db.prepare(`
+      SELECT ${ITEM_FELTER}, i.deleted FROM items i
+       WHERE i.updated_at > ? ORDER BY i.updated_at LIMIT 1000`).all(since);
+    const levende = raekker.filter((r) => !r.deleted);
+    medKontekster(levende);
+    sendJson(res, 200, {
+      now: now(),
+      items: levende.map((r) => { delete r.deleted; return r; }),
+      deleted: raekker.filter((r) => r.deleted).map((r) => r.id),
+    });
+  },
+
+  'GET /api/v1/contexts': (req, res) => {
+    const auth = godkend(req, res, 'read');
+    if (!auth) return;
+    sendJson(res, 200, { contexts: hentKontekster() });
+  },
+
+  'GET /api/v1/projects': (req, res) => {
+    const auth = godkend(req, res, 'read');
+    if (!auth) return;
+    sendJson(res, 200, { projects: hentProjekter() });
+  },
+
+  'GET /api/v1/notes': (req, res, ctx) => {
+    const auth = godkend(req, res, 'read');
+    if (!auth) return;
+    sendJson(res, 200, { items: hentItems({ kind: 'note', limit: ctx.query.get('limit') }) });
+  },
+
+  'POST /api/v1/notes': async (req, res) => {
+    const auth = godkend(req, res, 'capture');
+    if (!auth) return;
+    const body = await readJsonBody(req, auth.viaToken);
+    const tekst = typeof body.text === 'string' ? body.text : '';
+    const titel = str(body.title, GRAENSER.title) || tekst.split('\n')[0].slice(0, GRAENSER.title);
+    if (!titel) { apiFejl(res, 400, 'no_text', 'A note needs at least a title.'); return; }
+    const item = opretItem({
+      kind: 'note', status: 'queued', title: titel,
+      note: str(body.note, GRAENSER.note) || (tekst.includes('\n') ? tekst.slice(tekst.indexOf('\n') + 1) : ''),
+    }, []);
+    sendJson(res, 200, { item, message: `Saved note: ${item.title}` });
+  },
+
+  /* --- adgangsnoegler ---------------------------------------------
+     BEVIDST session-only (requireUser, ikke godkend): en adgangsnoegle ma
+     hverken kunne lave nye noegler eller se de eksisterende. Ellers er en
+     laekket noegle nok til at give sig selv fuld og varig adgang. */
+  'GET /api/v1/tokens': (req, res) => {
     const user = requireUser(req, res);
+    if (!user) return;
+    sendJson(res, 200, {
+      tokens: db.prepare(`
+        SELECT id, name, prefix, scope, created_at, last_used_at FROM tokens
+         WHERE revoked_at IS NULL ORDER BY created_at DESC`).all(),
+    });
+  },
+
+  'POST /api/v1/tokens': async (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    const body = await readJsonBody(req);
+    const navn = str(body.name, 60);
+    const scope = SCOPES.includes(body.scope) ? body.scope : 'capture';
+    if (!navn) { apiFejl(res, 400, 'no_name', 'Give the key a name, so you know what to revoke later.'); return; }
+    const ny = opretToken(navn, scope);
+    sendJson(res, 200, { id: ny.id, key: ny.key, name: navn, scope });
+  },
+
+  'POST /api/v1/contexts': async (req, res) => {
+    const user = godkend(req, res, 'write');
     if (!user) return;
     const body = await readJsonBody(req);
     const navn = str(body.name, 60);
@@ -837,8 +1110,8 @@ const ROUTES = {
     sendJson(res, 200, { context: findKontekst(navn) || opretKontekst(navn) });
   },
 
-  'POST /api/projects': async (req, res) => {
-    const user = requireUser(req, res);
+  'POST /api/v1/projects': async (req, res) => {
+    const user = godkend(req, res, 'write');
     if (!user) return;
     const body = await readJsonBody(req);
     const navn = str(body.name, 120);
@@ -846,8 +1119,8 @@ const ROUTES = {
     sendJson(res, 200, { project: findProjekt(navn) || opretProjekt(navn) });
   },
 
-  'GET /api/settings': (req, res) => {
-    const user = requireUser(req, res);
+  'GET /api/v1/settings': (req, res) => {
+    const user = godkend(req, res, 'read');
     if (!user) return;
     const rows = db.prepare('SELECT key, value FROM settings').all();
     const out = {};
@@ -855,8 +1128,8 @@ const ROUTES = {
     sendJson(res, 200, { settings: out });
   },
 
-  'POST /api/settings': async (req, res) => {
-    const user = requireUser(req, res);
+  'POST /api/v1/settings': async (req, res) => {
+    const user = godkend(req, res, 'write');
     if (!user) return;
     const body = await readJsonBody(req);
     // Whitelist - aldrig blind gennemskrivning af klientens noegler.
@@ -874,11 +1147,27 @@ const ROUTES = {
 /* Ruter med sti-parametre. Rakkefolgen er den, de proves i. */
 const MOENSTRE = [
   {
-    metode: 'POST', re: /^\/api\/items\/([\w-]{1,64})$/,
+    // Tilbagekaldelse skal virke OEJEBLIKKELIGT: der er ingen cache af
+    // noegler, sa naeste kald slar op i databasen og finder ingenting.
+    metode: 'DELETE', re: /^\/api\/v1\/tokens\/([\w-]{1,64})$/,
     async kald(req, res, ctx) {
       const user = requireUser(req, res);
       if (!user) return;
-      const body = await readJsonBody(req);
+      await readJsonBody(req);
+      const t = db.prepare('SELECT name FROM tokens WHERE id = ? AND revoked_at IS NULL').get(ctx.params[0]);
+      if (!t) { apiFejl(res, 404, 'not_found', 'No such key.'); return; }
+      db.prepare('UPDATE tokens SET revoked_at = ? WHERE id = ?').run(now(), ctx.params[0]);
+      audit('noegle-tilbagekaldt', t.name, clientIp(req));
+      logSecurity(`noegle-tilbagekaldt navn=${t.name}`);
+      sendJson(res, 200, { ok: true });
+    },
+  },
+  {
+    metode: 'POST', re: /^\/api\/v1\/items\/([\w-]{1,64})$/,
+    async kald(req, res, ctx) {
+      const auth = godkend(req, res, 'write');
+      if (!auth) return;
+      const body = await readJsonBody(req, auth.viaToken);
       const felter = renseItem(body);
       if (Array.isArray(body.contexts)) {
         const gyldige = body.contexts.filter((id) => typeof id === 'string'
@@ -892,10 +1181,10 @@ const MOENSTRE = [
     },
   },
   {
-    metode: 'POST', re: /^\/api\/items\/([\w-]{1,64})\/complete$/,
+    metode: 'POST', re: /^\/api\/v1\/items\/([\w-]{1,64})\/complete$/,
     kald(req, res, ctx) {
-      const user = requireUser(req, res);
-      if (!user) return;
+      const auth = godkend(req, res, 'write');
+      if (!auth) return;
       const item = hentItem(ctx.params[0]);
       if (!item) { sendJson(res, 404, { error: 'not found' }); return; }
       // Én fuldfoerelse pr. element. Er den allerede udfoert, er svaret det
@@ -905,31 +1194,31 @@ const MOENSTRE = [
     },
   },
   {
-    metode: 'POST', re: /^\/api\/items\/([\w-]{1,64})\/uncomplete$/,
+    metode: 'POST', re: /^\/api\/v1\/items\/([\w-]{1,64})\/uncomplete$/,
     kald(req, res, ctx) {
-      const user = requireUser(req, res);
-      if (!user) return;
+      const auth = godkend(req, res, 'write');
+      if (!auth) return;
       const item = hentItem(ctx.params[0]);
       if (!item) { sendJson(res, 404, { error: 'not found' }); return; }
       sendJson(res, 200, { item: opdaterItem(item.id, { status: 'next', completed_at: null }) });
     },
   },
   {
-    metode: 'GET', re: /^\/api\/items\/([\w-]{1,64})$/,
+    metode: 'GET', re: /^\/api\/v1\/items\/([\w-]{1,64})$/,
     kald(req, res, ctx) {
-      const user = requireUser(req, res);
-      if (!user) return;
+      const auth = godkend(req, res, 'read');
+      if (!auth) return;
       const item = hentItem(ctx.params[0]);
       if (!item) { sendJson(res, 404, { error: 'not found' }); return; }
       sendJson(res, 200, { item });
     },
   },
   {
-    metode: 'DELETE', re: /^\/api\/items\/([\w-]{1,64})$/,
+    metode: 'DELETE', re: /^\/api\/v1\/items\/([\w-]{1,64})$/,
     async kald(req, res, ctx) {
-      const user = requireUser(req, res);
-      if (!user) return;
-      await readJsonBody(req); // haandhaever JSON-headeren ogsaa pa DELETE
+      const auth = godkend(req, res, 'write');
+      if (!auth) return;
+      await readJsonBody(req, auth.viaToken); // haandhaever JSON-headeren ogsaa pa DELETE
       // Bloed sletning: intet forsvinder for altid, og logbogen bliver sand.
       const item = opdaterItem(ctx.params[0], { deleted: 1 });
       if (!item) { sendJson(res, 404, { error: 'not found' }); return; }
@@ -979,8 +1268,13 @@ const server = http.createServer(async (req, res) => {
   } catch (err) {
     const status = err && err.status ? err.status : 500;
     if (status >= 500) logError(`${req.method} ${urlPath}: ${err && err.stack ? err.stack : err}`);
-    if (!res.headersSent) sendJson(res, status, { error: err && err.message ? err.message : 'serverfejl' });
-    else res.end();
+    if (!res.headersSent) {
+      // Samme form som resten af API'et, sa en genvej altid har noget at vise.
+      // En 500 rober aldrig sin egen besked - den star i serverloggen.
+      const KODER = { 400: 'bad_request', 413: 'too_large', 415: 'wrong_content_type' };
+      apiFejl(res, status, KODER[status] || 'server_error',
+        status >= 500 ? 'Something went wrong on the server.' : (err && err.message) || 'Bad request.');
+    } else res.end();
   }
 });
 

@@ -80,7 +80,12 @@ async function api(method, path, body) {
   const res = await fetch(path, opts);
   let data = {};
   try { data = await res.json(); } catch { /* tomt svar er i orden */ }
-  if (!res.ok) throw Object.assign(new Error(data.error || `Error ${res.status}`), { status: res.status });
+  // API'et svarer {error: kode, message: laesbar tekst}. Mennesket skal se
+  // beskeden; koden er til klienter.
+  if (!res.ok) {
+    throw Object.assign(new Error(data.message || data.error || `Error ${res.status}`),
+      { status: res.status, code: data.error });
+  }
   return data;
 }
 
@@ -322,7 +327,7 @@ async function genindlaes() {
 
 async function hentState() {
   try {
-    const d = await api('GET', '/api/state');
+    const d = await api('GET', '/api/v1/state');
     state.contexts = d.contexts;
     state.projects = d.projects;
     state.counts = d.counts;

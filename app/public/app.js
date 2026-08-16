@@ -405,7 +405,12 @@ async function api(method, path, body) {
   const res = await fetch(path, opts);
   let data = {};
   try { data = await res.json(); } catch { /* tomt svar er i orden */ }
-  if (!res.ok) throw Object.assign(new Error(data.error || `Error ${res.status}`), { status: res.status });
+  // API'et svarer {error: kode, message: laesbar tekst}. Mennesket skal se
+  // beskeden; koden er til klienter.
+  if (!res.ok) {
+    throw Object.assign(new Error(data.message || data.error || `Error ${res.status}`),
+      { status: res.status, code: data.error });
+  }
   return data;
 }
 
@@ -647,7 +652,7 @@ async function genindlaes() {
 
 async function hentState() {
   try {
-    const d = await api('GET', '/api/state');
+    const d = await api('GET', '/api/v1/state');
     state.contexts = d.contexts;
     state.projects = d.projects;
     state.counts = d.counts;
@@ -841,7 +846,7 @@ function planlaegSoegning() {
   omniState.soegeTimer = setTimeout(async () => {
     const token = ++omniState.soegeToken;
     try {
-      const d = await api('GET', `/api/search?q=${encodeURIComponent(q)}`);
+      const d = await api('GET', `/api/v1/search?q=${encodeURIComponent(q)}`);
       // Et aeldre svar ma aldrig overskrive et nyere - ellers blinker
       // resultaterne tilbage til noget, brugeren er holdt op med at skrive.
       if (token !== omniState.soegeToken) return;
@@ -875,7 +880,7 @@ async function fangstNu(bekraeftet) {
   const skalSpoerge = !bekraeftet && (ukendte.contexts.length > 0 || ukendte.project);
 
   try {
-    const svar = await api('POST', '/api/capture', { text: tekst, createNew: !skalSpoerge });
+    const svar = await api('POST', '/api/v1/capture', { text: tekst, createNew: !skalSpoerge });
     if (svar.needsConfirm) {
       omniState.bekraeft = svar.needsConfirm;
       omniState.valgt = 0;
@@ -888,7 +893,7 @@ async function fangstNu(bekraeftet) {
     toast(it.kind === 'note' ? 'Note saved' : `Added to ${statusNavn(it.status)}`, {
       label: 'Undo',
       run: async () => {
-        await api('DELETE', `/api/items/${it.id}`, {});
+        await api('DELETE', `/api/v1/items/${it.id}`, {});
         await genindlaes();
       },
     });
@@ -989,12 +994,12 @@ async function tegnSide() {
 
   try {
     if (view.id === 'inbox') {
-      const d = await api('GET', '/api/items?status=inbox');
+      const d = await api('GET', '/api/v1/items?status=inbox');
       state.items = d.items;
       host.innerHTML = sideInbox();
     } else {
       const q = state.filterContext ? `&context=${encodeURIComponent(state.filterContext)}` : '';
-      const d = await api('GET', `/api/items?status=next&hideDeferred=1${q}`);
+      const d = await api('GET', `/api/v1/items?status=next&hideDeferred=1${q}`);
       state.items = d.items;
       host.innerHTML = sideNext();
     }
@@ -1179,18 +1184,18 @@ async function raekkeTaster(e) {
 async function fuldfoer(id) {
   const it = state.items.find((x) => x.id === id);
   try {
-    await api('POST', `/api/items/${id}/complete`, {});
+    await api('POST', `/api/v1/items/${id}/complete`, {});
     await genindlaes();
     toast(`Done: ${it ? it.title : 'item'}`, {
       label: 'Undo',
-      run: async () => { await api('POST', `/api/items/${id}/uncomplete`, {}); await genindlaes(); },
+      run: async () => { await api('POST', `/api/v1/items/${id}/uncomplete`, {}); await genindlaes(); },
     });
   } catch (ex) { toast(ex.message); }
 }
 
 async function saetStatus(id, status) {
   try {
-    await api('POST', `/api/items/${id}`, { status });
+    await api('POST', `/api/v1/items/${id}`, { status });
     await genindlaes();
     toast(`Moved to ${statusNavn(status)}`);
   } catch (ex) { toast(ex.message); }
@@ -1198,7 +1203,7 @@ async function saetStatus(id, status) {
 
 async function slet(id) {
   try {
-    await api('DELETE', `/api/items/${id}`, {});
+    await api('DELETE', `/api/v1/items/${id}`, {});
     await genindlaes();
     toast('Deleted');
   } catch (ex) { toast(ex.message); }
@@ -1275,7 +1280,7 @@ function aabnElement(it) {
 
   host.querySelector('#edSave').addEventListener('click', async () => {
     try {
-      await api('POST', `/api/items/${it.id}`, {
+      await api('POST', `/api/v1/items/${it.id}`, {
         title: host.querySelector('#edTitle').value,
         note: noteEl.value,
         status: host.querySelector('#edStatus').value,
@@ -1324,6 +1329,24 @@ function sideSettings() {
       <p class="gate-note" style="text-align:left">Danish words work too: <code>!i morgen</code>, <code>!om 2 uger</code>.</p>
     </div>
 
+    <div class="card"><h2>Access keys</h2>
+      <p class="lead" style="margin:6px 0 0">For iOS Shortcuts, Siri and anything else
+      that talks to doda from outside. One key per device or purpose, so you can revoke
+      a single one without touching the rest.</p>
+      <div id="keyList" class="keylist">Loading…</div>
+      <form id="keyForm" class="keyform">
+        <input class="input" id="keyName" placeholder="What is it for? e.g. iPhone Shortcut" maxlength="60" required>
+        <select class="input" id="keyScope">
+          <option value="capture">Capture only — can add, cannot read</option>
+          <option value="read">Read only</option>
+          <option value="full">Full access</option>
+        </select>
+        <button class="btn primary" type="submit">Create key</button>
+      </form>
+      <p class="gate-note" style="text-align:left">A lost phone should not be able to
+      read your whole system — prefer <strong>capture only</strong> unless you need more.</p>
+    </div>
+
     <div class="card"><h2>Change password</h2>
       <p class="gate-error" id="pwMsg" hidden></p>
       <form id="pwForm" style="margin-top:12px">
@@ -1346,7 +1369,104 @@ function sideSettings() {
   </section>`;
 }
 
+/* ------------------------------------------------------ adgangsnoegler */
+
+const SCOPE_TEKST = {
+  capture: 'capture only', read: 'read only', full: 'full access',
+};
+
+async function tegnNoegler() {
+  const host = document.getElementById('keyList');
+  if (!host) return;
+  try {
+    const d = await api('GET', '/api/v1/tokens');
+    if (!d.tokens.length) {
+      host.innerHTML = '<p class="lead" style="margin:14px 0 0">No keys yet.</p>';
+      return;
+    }
+    host.innerHTML = d.tokens.map((t) => `
+      <div class="keyrow">
+        <div class="keyrow-main">
+          <div class="keyrow-name">${esc(t.name)}</div>
+          <div class="meta">doda_${esc(t.prefix)}… · ${esc(SCOPE_TEKST[t.scope] || t.scope)} ·
+            ${t.last_used_at ? `last used ${visTid(t.last_used_at)}` : 'never used'}</div>
+        </div>
+        <button class="btn ghost" data-revoke="${esc(t.id)}">Revoke</button>
+      </div>`).join('');
+    host.querySelectorAll('[data-revoke]').forEach((el) => {
+      el.addEventListener('click', async () => {
+        await api('DELETE', `/api/v1/tokens/${el.dataset.revoke}`, {});
+        toast('Key revoked — it stopped working immediately');
+        tegnNoegler();
+      });
+    });
+  } catch (ex) { host.innerHTML = `<p class="lead">${esc(ex.message)}</p>`; }
+}
+
+function visTid(unix) {
+  const d = new Date(unix * 1000);
+  const timer = (Date.now() / 1000 - unix) / 3600;
+  if (timer < 1) return 'just now';
+  if (timer < 24) return `${Math.floor(timer)}h ago`;
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
+/* Noeglen vises ÉN gang. Den findes ikke i klartekst nogen steder bagefter -
+   heller ikke i databasen (handover §5.10). */
+function visNyNoegle(noegle, navn) {
+  const host = document.createElement('div');
+  host.className = 'modal';
+  host.innerHTML = `
+  <div class="modal-card" role="dialog" aria-modal="true">
+    <h2>Key created: ${esc(navn)}</h2>
+    <p class="lead" style="margin:6px 0 16px">Copy it now — this is the only time it is
+    ever shown. Only a hash of it is stored, so it cannot be recovered.</p>
+    <div class="keyshow" id="keyValue">${esc(noegle)}</div>
+    <div class="modal-foot">
+      <span style="flex:1"></span>
+      <button class="btn" id="keyCopy">Copy</button>
+      <button class="btn primary" id="keyDone">Done</button>
+    </div>
+  </div>`;
+  document.body.appendChild(host);
+  host.querySelector('#keyDone').addEventListener('click', () => host.remove());
+  host.querySelector('#keyCopy').addEventListener('click', async () => {
+    try {
+      // navigator.clipboard kraever secure context - panelets IP:port er http.
+      if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(noegle);
+      else {
+        const r = document.createRange();
+        r.selectNodeContents(host.querySelector('#keyValue'));
+        const s = getSelection();
+        s.removeAllRanges();
+        s.addRange(r);
+        document.execCommand('copy');
+      }
+      toast('Copied');
+    } catch { toast('Could not copy — select the text manually'); }
+  });
+}
+
+function bindNoegler() {
+  const form = document.getElementById('keyForm');
+  if (!form) return;
+  tegnNoegler();
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      const d = await api('POST', '/api/v1/tokens', {
+        name: document.getElementById('keyName').value,
+        scope: document.getElementById('keyScope').value,
+      });
+      form.reset();
+      visNyNoegle(d.key, d.name);
+      tegnNoegler();
+    } catch (ex) { toast(ex.message); }
+  });
+}
+
 function bindSettings() {
+  bindNoegler();
   document.querySelectorAll('[data-tema]').forEach((el) => {
     el.addEventListener('click', () => { anvendTema(el.dataset.tema); tegnSide(); });
   });
