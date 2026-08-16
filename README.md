@@ -166,7 +166,9 @@ I Inbox og Næste handlinger kan alt klares uden mus:
 
 | Tast | Handling |
 |---|---|
+| `↑` `↓` | **gå ind i listen** — uden at åbne noget |
 | `↑` `↓` (eller `k` `j`) | flyt mellem elementer |
+| `Esc` | forlad listen igen, så bogstaverne fanger som normalt |
 | `Enter` | åbn elementet |
 | `mellemrum` | markér udført |
 | `n` `w` `s` `q` | Next · Waiting for · Someday · Queued |
@@ -385,6 +387,7 @@ Se `PLAN.md` for faseoversigt og status, `DESIGN.md` for de trufne beslutninger 
 
 | Version | Ændringer |
 |---|---|
+| 9 | **Genvejssyntaksen virker nu også, når du retter en titel.** `/projekt`, `@projekt`, `#kontekst` og `!dato` i en opgaves titel bliver til chips, præcis som når du fanger — hjælpeteksten i ruden lovede det allerede for `#`. Kun det, doda faktisk kan tolke, fjernes fra titlen: `Husk !vigtigt` bliver stående, som du skrev det. Et projekt, der ikke findes, oprettes først når du trykker Save — aldrig ved Cancel. Dertil: **gentagende opgaver kan nu få kontekster** (serveren tog imod dem, men de kunne ikke sættes fra UI'et). |
 | 8 | **Rettelse:** `x` (slet) svarede »not found«, selvom sletningen lykkedes — og fordi frontenden så en fejl, sprang den genindlæsningen over, så rækken blev stående på skærmen. Årsagen: opdateringsfunktionen læser rækken frisk bagefter, og en slettet række er netop filtreret fra. Fejlen havde ligget der hele tiden, men kunne først nås, da v7 gjorde genvejstasterne brugbare. Sideoversigten kan nu også nås med tabulator. |
 | 7 | **Skallen.** Sidebaren kan foldes væk til en hamburger (nålen i toppen), og den lægger sig som et overlay i stedet for at skubbe siden. Ny **sideoversigt i højre side** — én streg pr. afsnit, som folder sig ud på hover og markerer, hvor du er. **Versionsnummeret** står nederst i sidebaren og siger til, hvis browseren kører en ældre udgave end serveren. **Tema skiftes med ét klik** ved siden af det, og **log ud** ligger nu i en menu på brugerknappen. `↑`/`↓` går ind i listen uden at åbne noget, så `n`/`w`/`s`/`x` kan bruges uden mus — `esc` slipper den igen. Og `/`, `#` og `:` i paletten kan nu **oprette**, ikke kun søge. |
 | 6 | **Rettelse:** *Allow* på samtykkesiden gjorde ingenting. CSP'ens `form-action 'self'` håndhæves også på den **omdirigering**, indsendelsen fører til — og den peger på `claude.ai`. Browseren blokerede hele POST'en, og fejlen pegede på doda's egen adresse. Siden tillader nu præcis den oprindelse, klienten er registreret med. |

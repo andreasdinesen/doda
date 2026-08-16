@@ -15,8 +15,8 @@
 |---|---|
 | **Fase** | **v8 udgivet.** Connector (v5–v6), skallen (v7), slette-rettelsen (v8). |
 | **Næste** | Andreas bruger den — og **pladsen i runen** skal løses inden næste større funktion |
-| **Tilstand** | 139 tests grønne, install-script **119.575 / 126.000 (94 %)** |
-| **Udgivet version** | **8** |
+| **Tilstand** | 142 tests grønne, install-script **122.057 / 126.000 (96 %)** |
+| **Udgivet version** | **9** |
 | **Sidst opdateret** | 2026-08-17 |
 
 **Sprog:** interfacet er **engelsk** (Andreas' valg — æøå er besværligt at taste).

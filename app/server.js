@@ -1174,6 +1174,9 @@ function hentGentagelser() {
       skips: r.skips,
       last_completed_at: r.last_completed_at,
       project_id: skabelon.project_id || null,
+      // Skabelonens kontekster kunne saettes gennem API'et, men blev aldrig
+      // sendt UD igen - saa ruden kunne hverken vise eller rette dem.
+      contexts: Array.isArray(skabelon.contexts) ? skabelon.contexts : [],
       open_item_id: aaben ? aaben.id : null,
       due_today: !!aaben && aaben.due_date <= iDag(),
     };

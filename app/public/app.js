@@ -555,8 +555,30 @@
     return ud;
   }
 
+  /**
+   * Fjerner PRAECIS én markoer med en kendt vaerdi fra en tekst.
+   *
+   * Bruges naar en titel, der ALLEREDE findes, redigeres: dér ma kun det,
+   * der faktisk kunne tolkes, forsvinde. tolkFangst spiser fx `!vigtigt` og
+   * noejes med en advarsel - fint i paletten, hvor chippen ses med det samme,
+   * men tavst datatab i en titel, man retter.
+   *
+   * @param {string} tegn  Ét eller flere markoer-tegn, fx '#' eller '@/'.
+   */
+  function fjernMarkoer(tekst, tegn, vaerdi) {
+    if (!tekst || !vaerdi) return tekst;
+    const undslip = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Vaerdier med mellemrum staar i anfoerselstegn: /"Sommerhus i Rørvig".
+    const v = `(?:"${undslip(vaerdi)}"|${undslip(vaerdi)})`;
+    // Samme regel som i tolkFangst: en markoer skal have linjestart eller et
+    // mellemrum foran sig, ellers er andreas@omlidt.dk et projekt.
+    const re = new RegExp(`(^|\\s)[${undslip(tegn)}]${v}(?=\\s|$)`, 'i');
+    return tekst.replace(re, '$1').replace(/\s{2,}/g, ' ').trim();
+  }
+
   return {
     tolkFangst,
+    fjernMarkoer,
     tolkDato,
     tolkGentagelse,
     naesteForekomst,
@@ -714,7 +736,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 8;
+const APP_VERSION = 9;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -2259,6 +2281,59 @@ async function slet(id) {
   } catch (ex) { toast(ex.message); }
 }
 
+/* --------------------------------------------- genvejssyntaks i titlen */
+
+/**
+ * Tolker genvejssyntaks i en titel, man REDIGERER, og skriver resultatet ind
+ * i udkastet. Returnerer den nye titel, eller null hvis intet blev fundet.
+ *
+ * Forskellen fra fangst er, at teksten allerede findes: derfor fjernes KUN
+ * det, der faktisk kunne tolkes. "Husk !vigtigt" er en gyldig titel, og
+ * parseren spiser ellers `!vigtigt` og noejes med en advarsel - i paletten
+ * ser man chippen med det samme, men i en titel man retter, ville det vaere
+ * tavst datatab.
+ *
+ * Navne, der ikke findes endnu, oprettes ikke her. De staar i udkastet som
+ * `nytProjekt`/`nyeKontekster` og bliver foerst til noget ved Save - ruden
+ * ma ikke aendre noget bag om et Cancel.
+ */
+function anvendSyntaks(u, raa) {
+  const p = (typeof dodaParse !== 'undefined') ? dodaParse : null;
+  if (!p || !raa || !raa.trim()) return null;
+  const r = p.tolkFangst(raa);
+  let fandt = false;
+  let titel = raa;
+
+  const findProjekt = (navn) => state.projects.find((x) => x.name.toLowerCase() === navn.toLowerCase());
+  const findKontekst = (navn) => state.contexts.find((x) => x.name.toLowerCase() === navn.toLowerCase());
+
+  if (r.project) {
+    const fundet = findProjekt(r.project);
+    if (fundet) { u.project_id = fundet.id; u.nytProjekt = null; }
+    else { u.project_id = null; u.nytProjekt = r.project; }
+    titel = p.fjernMarkoer(titel, '@/', r.project);
+    fandt = true;
+  }
+  for (const navn of r.contexts) {
+    const fundet = findKontekst(navn);
+    if (fundet) { if (!u.contexts.includes(fundet.id)) u.contexts.push(fundet.id); }
+    else if (!u.nyeKontekster.some((n) => n.toLowerCase() === navn.toLowerCase())) u.nyeKontekster.push(navn);
+    titel = p.fjernMarkoer(titel, '#', navn);
+    fandt = true;
+  }
+
+  // Datoerne tages kun, naar ALT kunne tolkes. Er der en advarsel, staar der
+  // en `!`-tekst tilbage, parseren ikke forstod - og saa skal titlen blive,
+  // som brugeren skrev den.
+  if (!r.warnings.length) {
+    if (r.due) { u.due_date = r.due.dato; u.due_time = r.due.tid || null; titel = r.title; fandt = true; }
+    if (r.defer) { u.defer_date = r.defer; titel = r.title; fandt = true; }
+  }
+
+  if (!fandt) return null;
+  return titel.replace(/\s{2,}/g, ' ').trim() || raa.trim();
+}
+
 /* ------------------------------------------------------ detaljeruden */
 
 /* ------------------------------------------------------- detaljeruden */
@@ -2290,8 +2365,13 @@ async function aabnElement(listeItem) {
     status: it.status,
     project_id: it.project_id,
     due_date: it.due_date,
+    due_time: it.due_time,
     defer_date: it.defer_date,
     contexts: it.contexts.map((c) => c.id),
+    // Navne fra genvejssyntaksen, der ikke findes endnu. De oprettes foerst
+    // ved Save - ruden ma ikke aendre noget bag om et Cancel.
+    nytProjekt: null,
+    nyeKontekster: [],
   };
 
   const host = document.createElement('div');
@@ -2326,7 +2406,12 @@ async function aabnElement(listeItem) {
           until then, and nothing is ever marked late.</dd>
         <dt><span class="helphash">#</span></dt>
         <dd><strong>Context.</strong> Where or with what you get things done: #home, #computer,
-          #calls. Type <code>#</code> in the title to add one.</dd>
+          #calls. Type <code>#name</code> in the title to add one.</dd>
+        <dt><span class="helphash">/</span></dt>
+        <dd><strong>The same shortcuts work here as when you capture.</strong>
+          <code>/project</code> or <code>@project</code> files it, <code>#context</code> adds one,
+          <code>!friday</code> sets the date. The marker disappears from the title and turns
+          into a chip — and anything doda cannot read is left exactly as you typed it.</dd>
         <dt><span class="meta">Focus</span></dt>
         <dd><strong>Everything else out of the way.</strong> This task on a screen of its own,
           with a timer that keeps running.</dd>
@@ -2362,15 +2447,17 @@ async function aabnElement(listeItem) {
   };
 
   const tegnChipsRow = () => {
-    const projekt = u.project_id ? (state.projects.find((p) => p.id === u.project_id) || {}).name : null;
+    const projekt = u.nytProjekt || (u.project_id ? (state.projects.find((p) => p.id === u.project_id) || {}).name : null);
     const kontekster = state.contexts.filter((c) => u.contexts.includes(c.id));
+    // Nye navne vises som chips med det samme, saa man kan se hvad Save laver.
+    const nye = u.nyeKontekster.map((n) => `<span class="chip">#${esc(n)}</span>`).join('');
     host.querySelector('#dChips').innerHTML = `
       <button class="chip flat" data-edit="project">${esc(projekt || 'no project')}</button>
       <button class="chip flat" data-edit="status">${esc(statusNavn(u.status))}</button>
       <button class="chip flat${u.due_date ? ' set' : ''}" data-edit="due">${esc(visDatoKort(u.due_date) || 'no date')}</button>
       ${u.defer_date ? `<button class="chip flat set" data-edit="defer">hidden until ${esc(visDatoKort(u.defer_date))}</button>`
     : '<button class="chip flat" data-edit="defer">no hide-until</button>'}
-      ${kontekster.map((c) => `<button class="chip" data-ctx="${esc(c.id)}">#${esc(c.name)}</button>`).join('')}
+      ${kontekster.map((c) => `<button class="chip" data-ctx="${esc(c.id)}">#${esc(c.name)}</button>`).join('')}${nye}
       <button class="chip flat" data-edit="contexts">${kontekster.length ? '+' : '# context'}</button>
       <span style="flex:1"></span>
       ${it.kind === 'task' && u.status !== 'done' ? `<button class="chip flat" id="dFocus">${icon('clock', 13)} Focus</button>` : ''}
@@ -2402,7 +2489,7 @@ async function aabnElement(listeItem) {
             tag: 'select',
             options: `<option value="">— no project —</option>${state.projects.map((p) =>
               `<option value="${esc(p.id)}"${p.id === u.project_id ? ' selected' : ''}>${esc(p.name)}</option>`).join('')}`,
-            onchange: (v) => { u.project_id = v || null; },
+            onchange: (v) => { u.project_id = v || null; u.nytProjekt = null; },
           });
         } else if (hvad === 'status') {
           redigerInline(knap, {
@@ -2461,6 +2548,21 @@ async function aabnElement(listeItem) {
 
   titelEl.addEventListener('input', () => { u.title = titelEl.value; });
 
+  // Genvejssyntaksen skal virke HER ogsaa. Hjaelpeteksten i ruden lover
+  // allerede "type # in the title to add one", og efter v4 lover paletten
+  // baade @ og / for projekter - men titlen blev gemt raat.
+  //
+  // Tolkningen sker ved blur (og dermed ogsaa naar man klikker Save, som
+  // blurrer feltet foerst): sa naar man at se markoeren forsvinde og chippen
+  // dukke op, foer noget gemmes.
+  titelEl.addEventListener('blur', () => {
+    const ny = anvendSyntaks(u, titelEl.value);
+    if (ny === null) return;
+    titelEl.value = ny;
+    u.title = ny;
+    tegnChipsRow();
+  });
+
   // Feltet vokser med teksten - en fast hoejde ville enten spilde plads
   // eller klemme en lang note sammen.
   const voks = () => { noteEl.style.height = 'auto'; noteEl.style.height = `${Math.max(noteEl.scrollHeight, 28)}px`; };
@@ -2486,17 +2588,40 @@ async function aabnElement(listeItem) {
 
   /* --- gem, slet, konvertér -------------------------------------- */
 
+  /**
+   * Opretter de navne fra genvejssyntaksen, der ikke fandtes i forvejen.
+   * Sker FOERST her - et Cancel maa ikke efterlade et tomt projekt.
+   * Endepunkterne er idempotente pa navnet, sa to hurtige klik er ufarlige.
+   */
+  const opretNyeNavne = async () => {
+    if (u.nytProjekt) {
+      const svar = await api('POST', '/api/v1/projects', { name: u.nytProjekt });
+      if (svar.project) { u.project_id = svar.project.id; u.nytProjekt = null; }
+    }
+    for (const navn of u.nyeKontekster.slice()) {
+      const svar = await api('POST', '/api/v1/contexts', { name: navn });
+      if (svar.context && !u.contexts.includes(svar.context.id)) u.contexts.push(svar.context.id);
+    }
+    u.nyeKontekster = [];
+  };
+
   const gem = async (ekstra) => api('POST', `/api/v1/items/${it.id}`, Object.assign({
     title: u.title,
     note: u.note,
     status: u.status,
     project_id: u.project_id,
     due_date: u.due_date,
+    due_time: u.due_time,
     defer_date: u.defer_date,
     contexts: u.contexts,
   }, ekstra || {}));
 
   host.querySelector('#edSave').addEventListener('click', async () => {
+    // Klikkes der paa Save uden at forlade titelfeltet foerst, naar blur
+    // ikke at koere. Tolk derfor ogsaa her - ellers gemmes "/doda" som tekst.
+    const nyTitel = anvendSyntaks(u, titelEl.value);
+    if (nyTitel !== null) { u.title = nyTitel; titelEl.value = nyTitel; }
+
     // Hoerer elementet til en gentagelse, skal brugeren tage stilling:
     // gaelder aendringen kun denne gang, eller alle fremtidige? (handover §5.6)
     let tilSerien = false;
@@ -2506,6 +2631,7 @@ async function aabnElement(listeItem) {
       tilSerien = svar;
     }
     try {
+      await opretNyeNavne();
       await gem({ applyToSeries: tilSerien });
       luk();
       await genindlaes();
@@ -3359,6 +3485,9 @@ function aabnGentagelse(r) {
         ${state.projects.map((p) => `<option value="${esc(p.id)}"${p.id === r.project_id ? ' selected' : ''}>${esc(p.name)}</option>`).join('')}
       </select></label>
 
+    <div class="field"><span>Contexts (every future one)</span>
+      <div class="chiprow" id="rChips" style="margin-top:6px"></div></div>
+
     <div class="card" style="margin:4px 0 6px;padding:14px 18px">
       <div class="meta">Next due</div>
       <div style="font-weight:600;margin-top:2px">
@@ -3383,12 +3512,42 @@ function aabnGentagelse(r) {
 
   const efter = async (besked) => { luk(); await genindlaes(); if (besked) toast(besked); };
 
+  /* Kontekster paa skabelonen. Samme chip-moenster som detaljeruden: klik pa
+     en chip fjerner den, plus-chippen tilfoejer. Serveren kunne modtage dem
+     hele tiden - de manglede bare en vej ind. */
+  const valgte = r.contexts.slice();
+  const tegnKontekster = () => {
+    const kendte = state.contexts.filter((c) => valgte.includes(c.id));
+    host.querySelector('#rChips').innerHTML = `
+      ${kendte.map((c) => `<button class="chip" data-fjern="${esc(c.id)}" title="Remove">#${esc(c.name)}</button>`).join('')}
+      <button class="chip flat" id="rAddCtx">${kendte.length ? '+' : '# context'}</button>`;
+    host.querySelectorAll('[data-fjern]').forEach((el) => el.addEventListener('click', () => {
+      const i = valgte.indexOf(el.dataset.fjern);
+      if (i >= 0) valgte.splice(i, 1);
+      tegnKontekster();
+    }));
+    host.querySelector('#rAddCtx').addEventListener('click', () => {
+      const rest = state.contexts.filter((c) => !valgte.includes(c.id));
+      if (!rest.length) { toast('No more contexts — type #name when you capture'); return; }
+      const sel = document.createElement('select');
+      sel.className = 'chipedit';
+      sel.innerHTML = `<option value="">— add a context —</option>${rest.map((c) =>
+        `<option value="${esc(c.id)}">#${esc(c.name)}</option>`).join('')}`;
+      host.querySelector('#rAddCtx').replaceWith(sel);
+      sel.focus();
+      sel.addEventListener('change', () => { if (sel.value) valgte.push(sel.value); tegnKontekster(); });
+      sel.addEventListener('blur', () => setTimeout(tegnKontekster, 120));
+    });
+  };
+  tegnKontekster();
+
   host.querySelector('#rSave').addEventListener('click', async () => {
     try {
       await api('POST', `/api/v1/recurrences/${r.id}`, {
         title: host.querySelector('#rTitle').value,
         rule_text: host.querySelector('#rRule').value,
         project_id: host.querySelector('#rProject').value || null,
+        contexts: valgte,
       });
       await efter('Saved — applies to every future one');
     } catch (ex) { toast(ex.message); }

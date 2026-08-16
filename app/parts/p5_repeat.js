@@ -104,6 +104,9 @@ function aabnGentagelse(r) {
         ${state.projects.map((p) => `<option value="${esc(p.id)}"${p.id === r.project_id ? ' selected' : ''}>${esc(p.name)}</option>`).join('')}
       </select></label>
 
+    <div class="field"><span>Contexts (every future one)</span>
+      <div class="chiprow" id="rChips" style="margin-top:6px"></div></div>
+
     <div class="card" style="margin:4px 0 6px;padding:14px 18px">
       <div class="meta">Next due</div>
       <div style="font-weight:600;margin-top:2px">
@@ -128,12 +131,42 @@ function aabnGentagelse(r) {
 
   const efter = async (besked) => { luk(); await genindlaes(); if (besked) toast(besked); };
 
+  /* Kontekster paa skabelonen. Samme chip-moenster som detaljeruden: klik pa
+     en chip fjerner den, plus-chippen tilfoejer. Serveren kunne modtage dem
+     hele tiden - de manglede bare en vej ind. */
+  const valgte = r.contexts.slice();
+  const tegnKontekster = () => {
+    const kendte = state.contexts.filter((c) => valgte.includes(c.id));
+    host.querySelector('#rChips').innerHTML = `
+      ${kendte.map((c) => `<button class="chip" data-fjern="${esc(c.id)}" title="Remove">#${esc(c.name)}</button>`).join('')}
+      <button class="chip flat" id="rAddCtx">${kendte.length ? '+' : '# context'}</button>`;
+    host.querySelectorAll('[data-fjern]').forEach((el) => el.addEventListener('click', () => {
+      const i = valgte.indexOf(el.dataset.fjern);
+      if (i >= 0) valgte.splice(i, 1);
+      tegnKontekster();
+    }));
+    host.querySelector('#rAddCtx').addEventListener('click', () => {
+      const rest = state.contexts.filter((c) => !valgte.includes(c.id));
+      if (!rest.length) { toast('No more contexts — type #name when you capture'); return; }
+      const sel = document.createElement('select');
+      sel.className = 'chipedit';
+      sel.innerHTML = `<option value="">— add a context —</option>${rest.map((c) =>
+        `<option value="${esc(c.id)}">#${esc(c.name)}</option>`).join('')}`;
+      host.querySelector('#rAddCtx').replaceWith(sel);
+      sel.focus();
+      sel.addEventListener('change', () => { if (sel.value) valgte.push(sel.value); tegnKontekster(); });
+      sel.addEventListener('blur', () => setTimeout(tegnKontekster, 120));
+    });
+  };
+  tegnKontekster();
+
   host.querySelector('#rSave').addEventListener('click', async () => {
     try {
       await api('POST', `/api/v1/recurrences/${r.id}`, {
         title: host.querySelector('#rTitle').value,
         rule_text: host.querySelector('#rRule').value,
         project_id: host.querySelector('#rProject').value || null,
+        contexts: valgte,
       });
       await efter('Saved — applies to every future one');
     } catch (ex) { toast(ex.message); }

@@ -554,8 +554,30 @@
     return ud;
   }
 
+  /**
+   * Fjerner PRAECIS én markoer med en kendt vaerdi fra en tekst.
+   *
+   * Bruges naar en titel, der ALLEREDE findes, redigeres: dér ma kun det,
+   * der faktisk kunne tolkes, forsvinde. tolkFangst spiser fx `!vigtigt` og
+   * noejes med en advarsel - fint i paletten, hvor chippen ses med det samme,
+   * men tavst datatab i en titel, man retter.
+   *
+   * @param {string} tegn  Ét eller flere markoer-tegn, fx '#' eller '@/'.
+   */
+  function fjernMarkoer(tekst, tegn, vaerdi) {
+    if (!tekst || !vaerdi) return tekst;
+    const undslip = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Vaerdier med mellemrum staar i anfoerselstegn: /"Sommerhus i Rørvig".
+    const v = `(?:"${undslip(vaerdi)}"|${undslip(vaerdi)})`;
+    // Samme regel som i tolkFangst: en markoer skal have linjestart eller et
+    // mellemrum foran sig, ellers er andreas@omlidt.dk et projekt.
+    const re = new RegExp(`(^|\\s)[${undslip(tegn)}]${v}(?=\\s|$)`, 'i');
+    return tekst.replace(re, '$1').replace(/\s{2,}/g, ' ').trim();
+  }
+
   return {
     tolkFangst,
+    fjernMarkoer,
     tolkDato,
     tolkGentagelse,
     naesteForekomst,

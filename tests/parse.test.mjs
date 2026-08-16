@@ -300,3 +300,27 @@ test('@ og / betyder præcis det samme', () => {
   assert.equal(a.title, b.title);
   assert.deepEqual(a.contexts, b.contexts);
 });
+
+/* ------------------------------------ fjernMarkoer (redigering af en titel) */
+
+test('fjernMarkoer tager kun DEN markør, den bliver bedt om', () => {
+  assert.equal(P.fjernMarkoer('Hej med dig /doda', '@/', 'doda'), 'Hej med dig');
+  assert.equal(P.fjernMarkoer('Hej med dig @doda', '@/', 'doda'), 'Hej med dig');
+  assert.equal(P.fjernMarkoer('Ring til lægen #telefon', '#', 'telefon'), 'Ring til lægen');
+  assert.equal(P.fjernMarkoer('mal skuret /"Sommerhus i Rørvig"', '@/', 'Sommerhus i Rørvig'), 'mal skuret');
+  // Markøren midt i teksten, ikke kun i enden.
+  assert.equal(P.fjernMarkoer('køb #ude maling til skuret', '#', 'ude'), 'køb maling til skuret');
+});
+
+test('fjernMarkoer rører ALDRIG noget uden mellemrum foran — samme regel som fangst', () => {
+  // Det her er hele grunden til at den findes: i en titel man REDIGERER,
+  // må intet forsvinde, som brugeren ikke har bedt om.
+  assert.equal(P.fjernMarkoer('Send til andreas@omlidt.dk', '@/', 'omlidt.dk'), 'Send til andreas@omlidt.dk');
+  assert.equal(P.fjernMarkoer('Husk C#-kurset', '#', '-kurset'), 'Husk C#-kurset');
+  assert.equal(P.fjernMarkoer('Læs https://dr.dk/nyheder', '@/', 'nyheder'), 'Læs https://dr.dk/nyheder');
+  // En værdi, der slet ikke står der, ændrer ingenting.
+  assert.equal(P.fjernMarkoer('Ring til lægen', '#', 'telefon'), 'Ring til lægen');
+  // Regex-tegn i navnet må ikke kunne bryde ud.
+  assert.equal(P.fjernMarkoer('noget #a.b(c)', '#', 'a.b(c)'), 'noget');
+  assert.equal(P.fjernMarkoer('noget #ab', '#', 'a.b'), 'noget #ab');
+});

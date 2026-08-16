@@ -240,3 +240,21 @@ test('sletning svarer 200 — ikke 404 på noget, der lige BLEV slettet', async 
   assert.equal(igen.status, 404);
   assert.equal((await igen.json()).error, 'not_found');
 });
+
+test('kontekster på en gentagelse følger med til hver ny forekomst', async () => {
+  // Serveren kunne modtage skabelonens kontekster hele tiden, men sendte dem
+  // aldrig UD igen - saa ruden kunne hverken vise eller rette dem.
+  const k = await J('/api/v1/contexts', { name: 'vaerksted' });
+  const r = await J('/api/v1/capture', { text: 'smør kæden !every 2 days', createNew: true });
+  const id = r.recurrence.id;
+
+  const opdateret = await J(`/api/v1/recurrences/${id}`, { contexts: [k.context.id] });
+  assert.deepEqual(opdateret.recurrence.contexts, [k.context.id],
+    'kontekster skal komme retur, ellers kan UI\'et ikke vise dem');
+
+  // Luk den aabne forekomst og se, at den NAESTE arver konteksten.
+  await J(`/api/v1/items/${r.item.id}/complete`, {});
+  const naeste = (await J('/api/v1/items?status=next')).items.find((x) => x.recurrence_id === id);
+  assert.ok(naeste, 'der skal komme en ny forekomst');
+  assert.deepEqual(naeste.contexts.map((c) => c.name), ['vaerksted']);
+});
