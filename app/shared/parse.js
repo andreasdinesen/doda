@@ -191,7 +191,247 @@
   // F1 genkender kun at der ER tale om en gentagelse, sa chippen kan sige det
   // aerligt. Selve grammatikken og motoren bygges i F4.
   function erGentagelse(frase) {
-    return /^(every|hvert?)\s*!?\s*\S/i.test(String(frase || '').trim());
+    const t = String(frase || '').trim();
+    return /^(every|hvert?)\s*!?\s*\S/i.test(t) || BARE_FORMER.test(t);
+  }
+
+  /**
+   * Tolker en gentagelsesfrase til en regel.
+   *
+   * Syntaksen er Todoists (Andreas' valg): et `!` lige efter "every"/"hver"
+   * betyder **fra fuldfoerelse** - naeste forekomst opstar foerst, nar den
+   * forrige er markeret udfoert. Uden `!` er det en **fast plan**, der
+   * forfalder pa sin dato, uanset om den forrige blev lavet.
+   *
+   * @returns regel-objekt eller null
+   */
+  // "last workday of the month" er en gentagelse i sig selv - den giver ingen
+  // mening som engangsdato, og Todoist tillader den uden "every". Formerne
+  // star ÉT sted, sa erGentagelse() og tolkGentagelse() ikke kan komme i utakt.
+  const BARE_FORMER = /^(last|first|sidste|første|foerste)\s+(day|dag|workday|weekday|hverdag)\s+(of the|i)\s+(month|måneden|maaneden)$/i;
+
+  function tolkGentagelse(frase, nu) {
+    const raa = String(frase || '').trim();
+    const m = raa.match(/^(every|hvert?)\s*(!?)\s*(.*)$/i);
+    // Uden "every" accepteres kun de bare former - ellers ville "monday"
+    // blive laest som en ugentlig gentagelse i stedet for en dato.
+    if (!m && !BARE_FORMER.test(raa)) return null;
+
+    const base = nu ? new Date(nu) : new Date();
+    const iDag = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+    const mode = m && m[2] === '!' ? 'completion' : 'schedule';
+
+    const k = findKlokkeslaet(m ? m[3] : raa);
+    const tid = k.tid;
+    let t = k.rest.toLowerCase().trim().replace(/\s+/g, ' ');
+    if (!t) return null;
+
+    const regel = {
+      mode, freq: null, interval: 1, weekdays: null, monthday: null,
+      month: null, day: null, time: tid, text: raa, anchor: fmtDato(iDag),
+    };
+
+    // "other"/"anden" = hver anden. Ordenstal skrives ogsaa som "2." og "2nd".
+    t = t.replace(/^(other|anden|andet)\s+/, '2 ');
+
+    // "15th of the month" SKAL afgoeres foer intervallet trakkes ud - ellers
+    // laeses tallet som "hver 15." noget, og dag-i-maaneden forsvinder.
+    const dagIMaaned = t.match(/^(?:the\s+|den\s+)?(\d{1,2})[.]?(?:st|nd|rd|th)?\s+(?:of the month|i måneden|i maaneden)$/);
+    if (dagIMaaned) {
+      const dag = parseInt(dagIMaaned[1], 10);
+      if (dag < 1 || dag > 31) return null;
+      return Object.assign(regel, { freq: 'month', monthday: dag });
+    }
+
+    const antal = t.match(/^(\d+)[.]?(?:st|nd|rd|th)?\s+(.*)$/);
+    if (antal) { regel.interval = Math.min(Math.max(parseInt(antal[1], 10), 1), 999); t = antal[2]; }
+
+    // Maanedens sidste/foerste (hver)dag - staar uden "every" i praksis,
+    // men vi tillader begge dele.
+    if (/^(last|sidste) (workday|weekday|hverdag) (of the |i )?(month|måneden|maaneden)$/.test(t)) {
+      return Object.assign(regel, { freq: 'month', monthday: 'lastworkday' });
+    }
+    if (/^(first|første|foerste) (workday|weekday|hverdag) (of the |i )?(month|måneden|maaneden)$/.test(t)) {
+      return Object.assign(regel, { freq: 'month', monthday: 'firstworkday' });
+    }
+    if (/^(last|sidste) (day|dag) (of the |i )?(month|måneden|maaneden)$/.test(t)) {
+      return Object.assign(regel, { freq: 'month', monthday: 'last' });
+    }
+
+    // Ugedagsliste: "monday", "mon, thu", "mandag og torsdag"
+    const stykker = t.split(/\s*(?:,|\band\b|\bog\b)\s*/).filter(Boolean);
+    if (stykker.length && stykker.every((s) => UGEDAGE[s])) {
+      const dage = [...new Set(stykker.map((s) => UGEDAGE[s]))].sort((a, b) => a - b);
+      return Object.assign(regel, { freq: 'week', weekdays: dage });
+    }
+    if (/^(weekday|workday|hverdag)e?r?$/.test(t)) {
+      return Object.assign(regel, { freq: 'week', weekdays: [1, 2, 3, 4, 5] });
+    }
+    if (/^(weekend|weekenden)$/.test(t)) {
+      return Object.assign(regel, { freq: 'week', weekdays: [6, 7] });
+    }
+
+    // "month on the 3rd", "måned den 3.", "3rd of the month", "den 3. i måneden"
+    let md = t.match(/^(?:month|måned|maaned)s?\s*(?:on the|den|d\.)\s*(\d{1,2})[.]?(?:st|nd|rd|th)?$/);
+    if (!md) md = t.match(/^(?:the\s+|den\s+)?(\d{1,2})[.]?(?:st|nd|rd|th)?\s+(?:of the month|i måneden|i maaneden)$/);
+    if (md) {
+      const dag = parseInt(md[1], 10);
+      if (dag < 1 || dag > 31) return null;
+      return Object.assign(regel, { freq: 'month', monthday: dag });
+    }
+
+    // "year on 24/12", "år 24/12", "year on december 24"
+    const aarlig = t.match(/^(?:year|år|aar)s?\s*(?:on|den|d\.)?\s*(.+)$/);
+    if (aarlig) {
+      // Foerst rent dag/maaned. tolkDato ville afvise "29/2" i et ikke-skudaar,
+      // men for en AARLIG regel er aarstallet uden betydning.
+      const dm = aarlig[1].trim().match(/^(\d{1,2})[/.](\d{1,2})$/);
+      if (dm) {
+        const dd = parseInt(dm[1], 10);
+        const mm = parseInt(dm[2], 10);
+        if (dd < 1 || dd > 31 || mm < 1 || mm > 12) return null;
+        return Object.assign(regel, { freq: 'year', month: mm, day: dd });
+      }
+      const d = tolkDato(aarlig[1], iDag);
+      if (!d) return null;
+      const [, m2, d2] = d.dato.split('-').map(Number);
+      return Object.assign(regel, { freq: 'year', month: m2, day: d2 });
+    }
+
+    if (/^(day|days|dag|dage)$/.test(t)) return Object.assign(regel, { freq: 'day' });
+    if (/^(week|weeks|uge|uger)$/.test(t)) {
+      // "hver 2. uge" uden ugedag: samme ugedag som i dag.
+      return Object.assign(regel, { freq: 'week', weekdays: [isoUgedag(iDag)] });
+    }
+    if (/^(month|months|måned|måneder|maaned|maaneder)$/.test(t)) {
+      return Object.assign(regel, { freq: 'month', monthday: iDag.getDate() });
+    }
+    if (/^(year|years|år|aar)$/.test(t)) {
+      return Object.assign(regel, { freq: 'year', month: iDag.getMonth() + 1, day: iDag.getDate() });
+    }
+
+    return null;
+  }
+
+  /* ---------------------------------------------------------- motoren */
+
+  function sidsteHverdag(aar, maaned0) {
+    const d = new Date(aar, maaned0 + 1, 0);
+    while (isoUgedag(d) > 5) d.setDate(d.getDate() - 1);
+    return d;
+  }
+
+  function foersteHverdag(aar, maaned0) {
+    const d = new Date(aar, maaned0, 1);
+    while (isoUgedag(d) > 5) d.setDate(d.getDate() + 1);
+    return d;
+  }
+
+  /** Mandagen i den uge, datoen ligger i. Bruges som fast maalepunkt. */
+  function ugeStart(d) {
+    return plusDage(d, -(isoUgedag(d) - 1));
+  }
+
+  /**
+   * Naeste forekomst STRENGT efter `fra`.
+   *
+   * Al regning sker pa (ar, maned, dag) i lokal tid - aldrig pa
+   * millisekunder. Det er dét, der gor, at "hver mandag kl. 8" ikke driver
+   * en time hen over sommertidsskiftet (handover §5.6).
+   */
+  function naesteForekomst(regel, fra) {
+    if (!regel || !regel.freq) return null;
+    const [fy, fm, fd] = String(fra).split('-').map(Number);
+    const efter = new Date(fy, fm - 1, fd);
+    const interval = Math.max(regel.interval || 1, 1);
+
+    if (regel.freq === 'day') return fmtDato(plusDage(efter, interval));
+
+    if (regel.freq === 'week') {
+      const dage = (regel.weekdays && regel.weekdays.length) ? regel.weekdays : [isoUgedag(efter)];
+      const ankerUge = ugeStart(regel.anchor
+        ? new Date(...regel.anchor.split('-').map((n, i) => (i === 1 ? Number(n) - 1 : Number(n))))
+        : efter);
+      // Gennemloeb dag for dag. Loftet er interval uger + 7 dage, sa selv
+      // "hver 52. uge" finder sit svar uden at kunne loebe loebsk.
+      for (let i = 1; i <= interval * 7 + 7; i++) {
+        const k = plusDage(efter, i);
+        if (!dage.includes(isoUgedag(k))) continue;
+        const uger = Math.round((ugeStart(k) - ankerUge) / (7 * 86400000));
+        if (((uger % interval) + interval) % interval === 0) return fmtDato(k);
+      }
+      return null;
+    }
+
+    if (regel.freq === 'month') {
+      // Start i INDEVAERENDE maaned: "hver maaned den 20." set fra den 13.
+      // forfalder den 20. i denne maaned, ikke foerst i den naeste.
+      for (let i = 0; i <= interval * 2 + 24; i++) {
+        const p = new Date(efter.getFullYear(), efter.getMonth() + i, 1);
+        // Kun hver interval'te maaned taeller.
+        const maanederFra = (p.getFullYear() - efter.getFullYear()) * 12 + (p.getMonth() - efter.getMonth());
+        if (maanederFra % interval !== 0) continue;
+        let k;
+        if (regel.monthday === 'last') k = new Date(p.getFullYear(), p.getMonth() + 1, 0);
+        else if (regel.monthday === 'lastworkday') k = sidsteHverdag(p.getFullYear(), p.getMonth());
+        else if (regel.monthday === 'firstworkday') k = foersteHverdag(p.getFullYear(), p.getMonth());
+        else {
+          const sidste = new Date(p.getFullYear(), p.getMonth() + 1, 0).getDate();
+          // Den 31. i en maaned med 30 dage klemmes ned til den sidste -
+          // aldrig ud i den naeste maaned.
+          k = new Date(p.getFullYear(), p.getMonth(), Math.min(regel.monthday || 1, sidste));
+        }
+        if (k > efter) return fmtDato(k);
+      }
+      return null;
+    }
+
+    if (regel.freq === 'year') {
+      for (let i = 0; i <= interval + 1; i++) {
+        const aar = efter.getFullYear() + i;
+        if ((aar - efter.getFullYear()) % interval !== 0) continue;
+        const sidste = new Date(aar, regel.month, 0).getDate();
+        const k = new Date(aar, regel.month - 1, Math.min(regel.day, sidste));
+        if (k > efter) return fmtDato(k);
+      }
+      return null;
+    }
+    return null;
+  }
+
+  /** 1st, 2nd, 3rd, 4th … 11th-13th er undtagelserne. Interfacet er engelsk. */
+  function ordenstal(n) {
+    const r10 = n % 10;
+    const r100 = n % 100;
+    if (r10 === 1 && r100 !== 11) return `${n}st`;
+    if (r10 === 2 && r100 !== 12) return `${n}nd`;
+    if (r10 === 3 && r100 !== 13) return `${n}rd`;
+    return `${n}th`;
+  }
+
+  /** Menneskelig beskrivelse af en regel - den, brugeren ser i chippen. */
+  function beskrivGentagelse(regel) {
+    if (!regel || !regel.freq) return '';
+    const NAVNE = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const n = regel.interval > 1 ? `every ${regel.interval} ` : 'every ';
+    let s;
+    if (regel.freq === 'day') s = `${n}${regel.interval > 1 ? 'days' : 'day'}`;
+    else if (regel.freq === 'week') {
+      const d = (regel.weekdays || []).map((x) => NAVNE[x]);
+      const alle = (regel.weekdays || []).join(',');
+      if (alle === '1,2,3,4,5') s = 'every weekday';
+      else if (alle === '6,7') s = 'every weekend';
+      else s = `${n}${regel.interval > 1 ? 'weeks on ' : ''}${d.join(' and ')}`;
+    } else if (regel.freq === 'month') {
+      if (regel.monthday === 'last') s = `${n}${regel.interval > 1 ? 'months, ' : ''}last day of the month`;
+      else if (regel.monthday === 'lastworkday') s = `${n}${regel.interval > 1 ? 'months, ' : ''}last workday of the month`;
+      else if (regel.monthday === 'firstworkday') s = `${n}${regel.interval > 1 ? 'months, ' : ''}first workday of the month`;
+      else s = `${n}${regel.interval > 1 ? 'months ' : 'month '}on the ${ordenstal(regel.monthday)}`;
+    } else {
+      s = `${n}${regel.interval > 1 ? 'years ' : 'year '}on ${regel.day}/${regel.month}`;
+    }
+    if (regel.time) s += ` at ${regel.time}`;
+    return s + (regel.mode === 'completion' ? ' · from completion' : ' · fixed schedule');
   }
 
   /* ------------------------------------------------------------ fangst */
@@ -310,6 +550,9 @@
   return {
     tolkFangst,
     tolkDato,
+    tolkGentagelse,
+    naesteForekomst,
+    beskrivGentagelse,
     erGentagelse,
     fmtDato,
     isoUgedag,

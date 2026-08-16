@@ -448,6 +448,36 @@ a:hover { text-decoration-thickness: 2px; }
   border-left: 2px solid var(--border);
 }
 
+/* -------------------------------------------------------- gentagelser */
+
+.repeat-row { align-items: flex-start; }
+
+.rep-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  margin-top: 1px;
+}
+
+/* De to tilstande skal kunne kendes fra hinanden pa afstand: fyldt = fast
+   plan, aaben ring = fra fuldfoerelse (den der aldrig hober sig op). */
+.rep-icon.schedule { background: var(--accent-soft); color: var(--accent-text); }
+.rep-icon.completion { border: 1.5px dashed var(--border); color: var(--muted); }
+
+.skipcount {
+  flex: none;
+  align-self: center;
+  padding: 3px 10px;
+  border-radius: var(--pill);
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
 /* ---------------------------------------------------------- modal */
 
 .modal {

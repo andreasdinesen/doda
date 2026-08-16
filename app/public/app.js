@@ -192,7 +192,247 @@
   // F1 genkender kun at der ER tale om en gentagelse, sa chippen kan sige det
   // aerligt. Selve grammatikken og motoren bygges i F4.
   function erGentagelse(frase) {
-    return /^(every|hvert?)\s*!?\s*\S/i.test(String(frase || '').trim());
+    const t = String(frase || '').trim();
+    return /^(every|hvert?)\s*!?\s*\S/i.test(t) || BARE_FORMER.test(t);
+  }
+
+  /**
+   * Tolker en gentagelsesfrase til en regel.
+   *
+   * Syntaksen er Todoists (Andreas' valg): et `!` lige efter "every"/"hver"
+   * betyder **fra fuldfoerelse** - naeste forekomst opstar foerst, nar den
+   * forrige er markeret udfoert. Uden `!` er det en **fast plan**, der
+   * forfalder pa sin dato, uanset om den forrige blev lavet.
+   *
+   * @returns regel-objekt eller null
+   */
+  // "last workday of the month" er en gentagelse i sig selv - den giver ingen
+  // mening som engangsdato, og Todoist tillader den uden "every". Formerne
+  // star ÉT sted, sa erGentagelse() og tolkGentagelse() ikke kan komme i utakt.
+  const BARE_FORMER = /^(last|first|sidste|første|foerste)\s+(day|dag|workday|weekday|hverdag)\s+(of the|i)\s+(month|måneden|maaneden)$/i;
+
+  function tolkGentagelse(frase, nu) {
+    const raa = String(frase || '').trim();
+    const m = raa.match(/^(every|hvert?)\s*(!?)\s*(.*)$/i);
+    // Uden "every" accepteres kun de bare former - ellers ville "monday"
+    // blive laest som en ugentlig gentagelse i stedet for en dato.
+    if (!m && !BARE_FORMER.test(raa)) return null;
+
+    const base = nu ? new Date(nu) : new Date();
+    const iDag = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+    const mode = m && m[2] === '!' ? 'completion' : 'schedule';
+
+    const k = findKlokkeslaet(m ? m[3] : raa);
+    const tid = k.tid;
+    let t = k.rest.toLowerCase().trim().replace(/\s+/g, ' ');
+    if (!t) return null;
+
+    const regel = {
+      mode, freq: null, interval: 1, weekdays: null, monthday: null,
+      month: null, day: null, time: tid, text: raa, anchor: fmtDato(iDag),
+    };
+
+    // "other"/"anden" = hver anden. Ordenstal skrives ogsaa som "2." og "2nd".
+    t = t.replace(/^(other|anden|andet)\s+/, '2 ');
+
+    // "15th of the month" SKAL afgoeres foer intervallet trakkes ud - ellers
+    // laeses tallet som "hver 15." noget, og dag-i-maaneden forsvinder.
+    const dagIMaaned = t.match(/^(?:the\s+|den\s+)?(\d{1,2})[.]?(?:st|nd|rd|th)?\s+(?:of the month|i måneden|i maaneden)$/);
+    if (dagIMaaned) {
+      const dag = parseInt(dagIMaaned[1], 10);
+      if (dag < 1 || dag > 31) return null;
+      return Object.assign(regel, { freq: 'month', monthday: dag });
+    }
+
+    const antal = t.match(/^(\d+)[.]?(?:st|nd|rd|th)?\s+(.*)$/);
+    if (antal) { regel.interval = Math.min(Math.max(parseInt(antal[1], 10), 1), 999); t = antal[2]; }
+
+    // Maanedens sidste/foerste (hver)dag - staar uden "every" i praksis,
+    // men vi tillader begge dele.
+    if (/^(last|sidste) (workday|weekday|hverdag) (of the |i )?(month|måneden|maaneden)$/.test(t)) {
+      return Object.assign(regel, { freq: 'month', monthday: 'lastworkday' });
+    }
+    if (/^(first|første|foerste) (workday|weekday|hverdag) (of the |i )?(month|måneden|maaneden)$/.test(t)) {
+      return Object.assign(regel, { freq: 'month', monthday: 'firstworkday' });
+    }
+    if (/^(last|sidste) (day|dag) (of the |i )?(month|måneden|maaneden)$/.test(t)) {
+      return Object.assign(regel, { freq: 'month', monthday: 'last' });
+    }
+
+    // Ugedagsliste: "monday", "mon, thu", "mandag og torsdag"
+    const stykker = t.split(/\s*(?:,|\band\b|\bog\b)\s*/).filter(Boolean);
+    if (stykker.length && stykker.every((s) => UGEDAGE[s])) {
+      const dage = [...new Set(stykker.map((s) => UGEDAGE[s]))].sort((a, b) => a - b);
+      return Object.assign(regel, { freq: 'week', weekdays: dage });
+    }
+    if (/^(weekday|workday|hverdag)e?r?$/.test(t)) {
+      return Object.assign(regel, { freq: 'week', weekdays: [1, 2, 3, 4, 5] });
+    }
+    if (/^(weekend|weekenden)$/.test(t)) {
+      return Object.assign(regel, { freq: 'week', weekdays: [6, 7] });
+    }
+
+    // "month on the 3rd", "måned den 3.", "3rd of the month", "den 3. i måneden"
+    let md = t.match(/^(?:month|måned|maaned)s?\s*(?:on the|den|d\.)\s*(\d{1,2})[.]?(?:st|nd|rd|th)?$/);
+    if (!md) md = t.match(/^(?:the\s+|den\s+)?(\d{1,2})[.]?(?:st|nd|rd|th)?\s+(?:of the month|i måneden|i maaneden)$/);
+    if (md) {
+      const dag = parseInt(md[1], 10);
+      if (dag < 1 || dag > 31) return null;
+      return Object.assign(regel, { freq: 'month', monthday: dag });
+    }
+
+    // "year on 24/12", "år 24/12", "year on december 24"
+    const aarlig = t.match(/^(?:year|år|aar)s?\s*(?:on|den|d\.)?\s*(.+)$/);
+    if (aarlig) {
+      // Foerst rent dag/maaned. tolkDato ville afvise "29/2" i et ikke-skudaar,
+      // men for en AARLIG regel er aarstallet uden betydning.
+      const dm = aarlig[1].trim().match(/^(\d{1,2})[/.](\d{1,2})$/);
+      if (dm) {
+        const dd = parseInt(dm[1], 10);
+        const mm = parseInt(dm[2], 10);
+        if (dd < 1 || dd > 31 || mm < 1 || mm > 12) return null;
+        return Object.assign(regel, { freq: 'year', month: mm, day: dd });
+      }
+      const d = tolkDato(aarlig[1], iDag);
+      if (!d) return null;
+      const [, m2, d2] = d.dato.split('-').map(Number);
+      return Object.assign(regel, { freq: 'year', month: m2, day: d2 });
+    }
+
+    if (/^(day|days|dag|dage)$/.test(t)) return Object.assign(regel, { freq: 'day' });
+    if (/^(week|weeks|uge|uger)$/.test(t)) {
+      // "hver 2. uge" uden ugedag: samme ugedag som i dag.
+      return Object.assign(regel, { freq: 'week', weekdays: [isoUgedag(iDag)] });
+    }
+    if (/^(month|months|måned|måneder|maaned|maaneder)$/.test(t)) {
+      return Object.assign(regel, { freq: 'month', monthday: iDag.getDate() });
+    }
+    if (/^(year|years|år|aar)$/.test(t)) {
+      return Object.assign(regel, { freq: 'year', month: iDag.getMonth() + 1, day: iDag.getDate() });
+    }
+
+    return null;
+  }
+
+  /* ---------------------------------------------------------- motoren */
+
+  function sidsteHverdag(aar, maaned0) {
+    const d = new Date(aar, maaned0 + 1, 0);
+    while (isoUgedag(d) > 5) d.setDate(d.getDate() - 1);
+    return d;
+  }
+
+  function foersteHverdag(aar, maaned0) {
+    const d = new Date(aar, maaned0, 1);
+    while (isoUgedag(d) > 5) d.setDate(d.getDate() + 1);
+    return d;
+  }
+
+  /** Mandagen i den uge, datoen ligger i. Bruges som fast maalepunkt. */
+  function ugeStart(d) {
+    return plusDage(d, -(isoUgedag(d) - 1));
+  }
+
+  /**
+   * Naeste forekomst STRENGT efter `fra`.
+   *
+   * Al regning sker pa (ar, maned, dag) i lokal tid - aldrig pa
+   * millisekunder. Det er dét, der gor, at "hver mandag kl. 8" ikke driver
+   * en time hen over sommertidsskiftet (handover §5.6).
+   */
+  function naesteForekomst(regel, fra) {
+    if (!regel || !regel.freq) return null;
+    const [fy, fm, fd] = String(fra).split('-').map(Number);
+    const efter = new Date(fy, fm - 1, fd);
+    const interval = Math.max(regel.interval || 1, 1);
+
+    if (regel.freq === 'day') return fmtDato(plusDage(efter, interval));
+
+    if (regel.freq === 'week') {
+      const dage = (regel.weekdays && regel.weekdays.length) ? regel.weekdays : [isoUgedag(efter)];
+      const ankerUge = ugeStart(regel.anchor
+        ? new Date(...regel.anchor.split('-').map((n, i) => (i === 1 ? Number(n) - 1 : Number(n))))
+        : efter);
+      // Gennemloeb dag for dag. Loftet er interval uger + 7 dage, sa selv
+      // "hver 52. uge" finder sit svar uden at kunne loebe loebsk.
+      for (let i = 1; i <= interval * 7 + 7; i++) {
+        const k = plusDage(efter, i);
+        if (!dage.includes(isoUgedag(k))) continue;
+        const uger = Math.round((ugeStart(k) - ankerUge) / (7 * 86400000));
+        if (((uger % interval) + interval) % interval === 0) return fmtDato(k);
+      }
+      return null;
+    }
+
+    if (regel.freq === 'month') {
+      // Start i INDEVAERENDE maaned: "hver maaned den 20." set fra den 13.
+      // forfalder den 20. i denne maaned, ikke foerst i den naeste.
+      for (let i = 0; i <= interval * 2 + 24; i++) {
+        const p = new Date(efter.getFullYear(), efter.getMonth() + i, 1);
+        // Kun hver interval'te maaned taeller.
+        const maanederFra = (p.getFullYear() - efter.getFullYear()) * 12 + (p.getMonth() - efter.getMonth());
+        if (maanederFra % interval !== 0) continue;
+        let k;
+        if (regel.monthday === 'last') k = new Date(p.getFullYear(), p.getMonth() + 1, 0);
+        else if (regel.monthday === 'lastworkday') k = sidsteHverdag(p.getFullYear(), p.getMonth());
+        else if (regel.monthday === 'firstworkday') k = foersteHverdag(p.getFullYear(), p.getMonth());
+        else {
+          const sidste = new Date(p.getFullYear(), p.getMonth() + 1, 0).getDate();
+          // Den 31. i en maaned med 30 dage klemmes ned til den sidste -
+          // aldrig ud i den naeste maaned.
+          k = new Date(p.getFullYear(), p.getMonth(), Math.min(regel.monthday || 1, sidste));
+        }
+        if (k > efter) return fmtDato(k);
+      }
+      return null;
+    }
+
+    if (regel.freq === 'year') {
+      for (let i = 0; i <= interval + 1; i++) {
+        const aar = efter.getFullYear() + i;
+        if ((aar - efter.getFullYear()) % interval !== 0) continue;
+        const sidste = new Date(aar, regel.month, 0).getDate();
+        const k = new Date(aar, regel.month - 1, Math.min(regel.day, sidste));
+        if (k > efter) return fmtDato(k);
+      }
+      return null;
+    }
+    return null;
+  }
+
+  /** 1st, 2nd, 3rd, 4th … 11th-13th er undtagelserne. Interfacet er engelsk. */
+  function ordenstal(n) {
+    const r10 = n % 10;
+    const r100 = n % 100;
+    if (r10 === 1 && r100 !== 11) return `${n}st`;
+    if (r10 === 2 && r100 !== 12) return `${n}nd`;
+    if (r10 === 3 && r100 !== 13) return `${n}rd`;
+    return `${n}th`;
+  }
+
+  /** Menneskelig beskrivelse af en regel - den, brugeren ser i chippen. */
+  function beskrivGentagelse(regel) {
+    if (!regel || !regel.freq) return '';
+    const NAVNE = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const n = regel.interval > 1 ? `every ${regel.interval} ` : 'every ';
+    let s;
+    if (regel.freq === 'day') s = `${n}${regel.interval > 1 ? 'days' : 'day'}`;
+    else if (regel.freq === 'week') {
+      const d = (regel.weekdays || []).map((x) => NAVNE[x]);
+      const alle = (regel.weekdays || []).join(',');
+      if (alle === '1,2,3,4,5') s = 'every weekday';
+      else if (alle === '6,7') s = 'every weekend';
+      else s = `${n}${regel.interval > 1 ? 'weeks on ' : ''}${d.join(' and ')}`;
+    } else if (regel.freq === 'month') {
+      if (regel.monthday === 'last') s = `${n}${regel.interval > 1 ? 'months, ' : ''}last day of the month`;
+      else if (regel.monthday === 'lastworkday') s = `${n}${regel.interval > 1 ? 'months, ' : ''}last workday of the month`;
+      else if (regel.monthday === 'firstworkday') s = `${n}${regel.interval > 1 ? 'months, ' : ''}first workday of the month`;
+      else s = `${n}${regel.interval > 1 ? 'months ' : 'month '}on the ${ordenstal(regel.monthday)}`;
+    } else {
+      s = `${n}${regel.interval > 1 ? 'years ' : 'year '}on ${regel.day}/${regel.month}`;
+    }
+    if (regel.time) s += ` at ${regel.time}`;
+    return s + (regel.mode === 'completion' ? ' · from completion' : ' · fixed schedule');
   }
 
   /* ------------------------------------------------------------ fangst */
@@ -311,6 +551,9 @@
   return {
     tolkFangst,
     tolkDato,
+    tolkGentagelse,
+    naesteForekomst,
+    beskrivGentagelse,
     erGentagelse,
     fmtDato,
     isoUgedag,
@@ -480,7 +723,7 @@ const VIEWS = [
   { id: 'inbox', label: 'Inbox', icon: 'inbox', group: 1, tael: 'inbox' },
   { id: 'waiting', label: 'Waiting For', icon: 'waiting', group: 2, fase: 'F7' },
   { id: 'someday', label: 'Someday', icon: 'someday', group: 2, fase: 'F7' },
-  { id: 'repeat', label: 'Repeating', icon: 'repeat', group: 2, fase: 'F4' },
+  { id: 'repeat', label: 'Repeating', icon: 'repeat', group: 2 },
   { id: 'projects', label: 'Projects', icon: 'projects', group: 3 },
   { id: 'contexts', label: 'Contexts', icon: 'contexts', group: 3 },
   { id: 'log', label: 'Logbook', icon: 'log', group: 4, fase: 'F7' },
@@ -737,9 +980,14 @@ function tegnChips() {
   if (t.defer) chips.push([`hidden until ${visDato(t.defer)}`, 'neutral']);
   if (t.note) chips.push(['+ description', 'neutral']);
 
-  // Gentagelsen skal staa skrevet ud - det er den, der gor forskellen mellem
-  // "fast plan" og "fra fuldfoerelse" synlig for brugeren (DESIGN.md §3).
-  if (t.recurrenceText) chips.push([`↻ ${t.recurrenceText} — repeating lands in F4`, 'neutral']);
+  // Gentagelsen skal staa SKREVET UD. Forskellen mellem "fast plan" og "fra
+  // fuldfoerelse" er ét udrabstegn i teksten - chippen er det eneste sted,
+  // valget bliver tydeligt for brugeren (DESIGN.md §3, handover §5.6).
+  if (t.recurrenceText) {
+    const g = (typeof dodaParse !== 'undefined') ? dodaParse.tolkGentagelse(t.recurrenceText) : null;
+    chips.push(g ? [`↻ ${dodaParse.beskrivGentagelse(g)}`, 'accent']
+      : [`↻ didn't understand "${t.recurrenceText}"`, 'neutral']);
+  }
 
   for (const w of t.warnings) {
     if (w !== 'gentagelse') chips.push([w.replace('forstod ikke datoen', "didn't understand the date"), 'neutral']);
@@ -990,6 +1238,7 @@ async function tegnSide() {
 
   if (view.id === 'settings') { host.innerHTML = sideSettings(); bindSettings(); return; }
   if (view.id === 'contexts') { host.innerHTML = sideContexts(); bindContexts(); return; }
+  if (view.id === 'repeat') { await sideRepeat(); return; }
   if (view.id === 'projects') {
     if (state.openProject) { await sideProjekt(state.openProject); return; }
     host.innerHTML = await sideProjects();
@@ -1295,8 +1544,17 @@ function aabnElement(it) {
   host.querySelector('#edCancel').addEventListener('click', luk);
 
   host.querySelector('#edSave').addEventListener('click', async () => {
+    // Hoerer elementet til en gentagelse, skal brugeren tage stilling:
+    // gaelder aendringen kun denne gang, eller alle fremtidige? (handover §5.6)
+    let tilSerien = false;
+    if (it.recurrence_id) {
+      const svar = await spoergOmSerie(it.title);
+      if (svar === null) return;          // lukket uden at vaelge
+      tilSerien = svar;
+    }
     try {
       await api('POST', `/api/v1/items/${it.id}`, {
+        applyToSeries: tilSerien,
         title: host.querySelector('#edTitle').value,
         note: noteEl.value,
         status: host.querySelector('#edStatus').value,
@@ -1961,5 +2219,194 @@ function bindContexts() {
       await genindlaes();
       toast('Context deleted — the tasks were kept');
     });
+  });
+}
+
+/* ---- p5_repeat.js ---- */
+'use strict';
+/* doda - skaermen "Repeating".
+   Det er HER man opdager, at en vane ikke virker: naeste forfald ved siden af
+   antallet af gange, den er sprunget over (handover §5.6). */
+
+async function sideRepeat() {
+  const host = document.getElementById('pageHost');
+  let d;
+  try { d = await api('GET', '/api/v1/recurrences'); }
+  catch (ex) {
+    host.innerHTML = `<section class="page"><div class="empty"><p>${esc(ex.message)}</p></div></section>`;
+    return;
+  }
+
+  const aktive = d.recurrences.filter((r) => !r.paused);
+  const pauserede = d.recurrences.filter((r) => r.paused);
+
+  if (!d.recurrences.length) {
+    host.innerHTML = `<section class="page">
+      ${repeatHead()}
+      <div class="empty">${icon('calm', 34)}
+        <p class="empty-title">Nothing repeats yet</p>
+        <p>Add <code>!every monday</code> when you capture — or
+        <code>!every! 3 days</code> to count from the day you finish.</p></div>
+    </section>`;
+    return;
+  }
+
+  host.innerHTML = `<section class="page">
+    ${repeatHead()}
+    ${aktive.length ? `<div class="list">${aktive.map(gentagelsesRaekke).join('')}</div>` : ''}
+    ${pauserede.length ? `
+      <h2 class="group meta">Paused <span class="group-count">${pauserede.length}</span></h2>
+      <div class="list dim">${pauserede.map(gentagelsesRaekke).join('')}</div>` : ''}
+  </section>`;
+  bindRepeat(d.recurrences);
+}
+
+function repeatHead() {
+  return `<div class="page-head">
+    <h1>Repeating</h1>
+    <p class="lead">${esc(BESKRIVELSER.repeat)}</p>
+    <div class="card" style="margin-top:18px;padding:14px 18px">
+      <table class="syntax">
+        <tr><td><code>!every monday</code></td><td><strong>Fixed schedule</strong> — comes
+          around on its date, whether or not you did the last one</td></tr>
+        <tr><td><code>!every! monday</code></td><td><strong>From completion</strong> — the next
+          one only appears once you finish this one. Can never pile up.</td></tr>
+      </table>
+    </div></div>`;
+}
+
+function gentagelsesRaekke(r) {
+  const forfald = [];
+  forfald.push(r.paused ? 'paused' : `next ${visDato(r.next_due)}`);
+  if (r.next_time) forfald.push(r.next_time);
+  const projekt = r.project_id ? (state.projects.find((p) => p.id === r.project_id) || {}).name : null;
+  if (projekt) forfald.push(esc(projekt));
+
+  return `<div class="item-row repeat-row" data-rec="${esc(r.id)}" tabindex="0">
+    <span class="rep-icon ${r.mode === 'completion' ? 'completion' : 'schedule'}">${icon('repeat', 16)}</span>
+    <div class="item-main">
+      <div class="item-title">${esc(r.title)}</div>
+      <div class="item-meta meta">${esc(r.description)}</div>
+      <div class="item-meta meta">${forfald.join(' · ')}</div>
+    </div>
+    ${r.skips ? `<span class="skipcount" title="Times this has been skipped">${r.skips} skipped</span>` : ''}
+  </div>`;
+}
+
+function bindRepeat(alle) {
+  document.querySelectorAll('.repeat-row').forEach((el) => {
+    el.addEventListener('click', () => {
+      const r = alle.find((x) => x.id === el.dataset.rec);
+      if (r) aabnGentagelse(r);
+    });
+    el.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      const r = alle.find((x) => x.id === el.dataset.rec);
+      if (r) aabnGentagelse(r);
+    });
+  });
+}
+
+/* -------------------------------------------------------- detaljerude */
+
+function aabnGentagelse(r) {
+  const host = document.createElement('div');
+  host.className = 'modal';
+  host.innerHTML = `
+  <div class="modal-card" role="dialog" aria-modal="true">
+    <h2>${esc(r.title)}</h2>
+    <p class="lead" style="margin:6px 0 18px">${esc(r.description)}</p>
+
+    <label class="field"><span>Title (applies to every future one)</span>
+      <input class="input" id="rTitle" value="${esc(r.title)}"></label>
+
+    <label class="field"><span>Repeat rule</span>
+      <input class="input" id="rRule" value="${esc(r.rule.text)}"
+        placeholder="every monday · every! 3 days · last workday of the month"></label>
+
+    <label class="field"><span>Project</span>
+      <select class="input" id="rProject"><option value="">— none —</option>
+        ${state.projects.map((p) => `<option value="${esc(p.id)}"${p.id === r.project_id ? ' selected' : ''}>${esc(p.name)}</option>`).join('')}
+      </select></label>
+
+    <div class="card" style="margin:4px 0 6px;padding:14px 18px">
+      <div class="meta">Next due</div>
+      <div style="font-weight:600;margin-top:2px">
+        ${r.paused ? 'Paused' : esc(visDato(r.next_due)) + (r.next_time ? ` at ${esc(r.next_time)}` : '')}</div>
+      ${r.skips ? `<div class="meta" style="margin-top:8px">Skipped ${r.skips} time${r.skips === 1 ? '' : 's'}${r.skips > 2 ? ' — is this one actually working for you?' : ''}</div>` : ''}
+      ${r.last_completed_at ? `<div class="meta" style="margin-top:4px">Last done ${esc(visTid(r.last_completed_at))}</div>` : ''}
+    </div>
+
+    <div class="modal-foot" style="flex-wrap:wrap">
+      <button class="btn ghost" id="rDelete">Stop repeating</button>
+      <button class="btn ghost" id="rSkip"${r.paused ? ' disabled' : ''}>Skip this one</button>
+      <button class="btn ghost" id="rPause">${r.paused ? 'Resume' : 'Pause'}</button>
+      <span style="flex:1"></span>
+      <button class="btn" id="rCancel">Cancel</button>
+      <button class="btn primary" id="rSave">Save</button>
+    </div>
+  </div>`;
+  document.body.appendChild(host);
+  const luk = () => host.remove();
+  host.addEventListener('click', (e) => { if (e.target === host) luk(); });
+  host.querySelector('#rCancel').addEventListener('click', luk);
+
+  const efter = async (besked) => { luk(); await genindlaes(); if (besked) toast(besked); };
+
+  host.querySelector('#rSave').addEventListener('click', async () => {
+    try {
+      await api('POST', `/api/v1/recurrences/${r.id}`, {
+        title: host.querySelector('#rTitle').value,
+        rule_text: host.querySelector('#rRule').value,
+        project_id: host.querySelector('#rProject').value || null,
+      });
+      await efter('Saved — applies to every future one');
+    } catch (ex) { toast(ex.message); }
+  });
+
+  host.querySelector('#rSkip').addEventListener('click', async () => {
+    await api('POST', `/api/v1/recurrences/${r.id}/skip`, {});
+    await efter('Skipped — it is noted for your weekly review');
+  });
+
+  host.querySelector('#rPause').addEventListener('click', async () => {
+    await api('POST', `/api/v1/recurrences/${r.id}`, { paused: !r.paused });
+    await efter(r.paused ? 'Resumed' : 'Paused — the rule is kept');
+  });
+
+  host.querySelector('#rDelete').addEventListener('click', async () => {
+    await api('DELETE', `/api/v1/recurrences/${r.id}`, {});
+    await efter('Stopped repeating — the open one is now a normal task');
+  });
+
+  host.querySelector('#rTitle').focus();
+}
+
+/* ------------------------------------------- denne gang vs. alle fremtidige */
+
+/**
+ * Spoerger, om en aendring gaelder denne ene forekomst eller hele serien.
+ * Bruges naar en opgave, der hoerer til en gentagelse, redigeres.
+ */
+function spoergOmSerie(titel) {
+  return new Promise((resolve) => {
+    const host = document.createElement('div');
+    host.className = 'modal';
+    host.innerHTML = `
+    <div class="modal-card" role="dialog" aria-modal="true" style="max-width:440px">
+      <h2>This one, or all future ones?</h2>
+      <p class="lead" style="margin:6px 0 20px">“${esc(titel)}” repeats.
+      Should the change stick to every future one, or only to this occurrence?</p>
+      <div class="modal-foot">
+        <span style="flex:1"></span>
+        <button class="btn" id="sOne">Only this one</button>
+        <button class="btn primary" id="sAll">All future ones</button>
+      </div>
+    </div>`;
+    document.body.appendChild(host);
+    const svar = (v) => { host.remove(); resolve(v); };
+    host.querySelector('#sOne').addEventListener('click', () => svar(false));
+    host.querySelector('#sAll').addEventListener('click', () => svar(true));
+    host.addEventListener('click', (e) => { if (e.target === host) svar(null); });
   });
 }

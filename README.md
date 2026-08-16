@@ -35,6 +35,40 @@ Mens du skriver, viser små chips under feltet, hvordan teksten er blevet forst�
 
 Links i både titel og beskrivelse bliver klikbare — også `[tekst](url)`.
 
+### Gentagende opgaver
+
+Syntaksen er Todoists. Et `!` lige efter `every` er hele forskellen:
+
+| Skriv | Betyder |
+|---|---|
+| `!every monday` | **Fast plan** — forfalder hver mandag, uanset om du lavede den forrige |
+| `!every! monday` | **Fra fuldførelse** — næste opstår først, når du har markeret denne udført |
+
+Flere former: `!every 3 days` · `!every! 2 weeks` · `!every mon, thu` ·
+`!every weekday at 16` · `!every month on the 3rd` · `!last workday of the month` ·
+`!every year on 24/12`. Danske ord virker også: `!hver mandag`, `!hver! 3. dag`.
+
+Chippen under fangstfeltet skriver altid tilstanden ud (»every 3 days · from
+completion«), så valget aldrig er skjult i et udråbstegn.
+
+**Tre regler, appen aldrig bryder:**
+
+1. Der ligger **aldrig mere end én åben forekomst**. Der kommer ikke tolv kopier
+   af den samme opgave.
+2. En forekomst er **usynlig, indtil den er aktuel**. »Støvsug hver søndag« står
+   ikke i din liste mandag til lørdag.
+3. En »fra fuldførelse«-opgave **kan ikke hobe sig op**. Den venter på dig, og
+   springer aldrig frem af sig selv.
+
+Bliver en fast plan overskredet, rulles den frem — og hvert oversprunget gang
+**tælles**. Ikke som en fejl, men som information: skærmen *Repeating* viser
+næste forfald ved siden af antal spring, og det er dér, du opdager, at en vane
+ikke virker.
+
+Gentagelser kan sættes på **pause** (reglen bevares) og **springes over** enkeltvis.
+Ændrer du titel eller projekt på en forekomst, spørger appen, om det gælder kun
+denne gang eller alle fremtidige.
+
 ### Projekter, områder og noter
 
 Et **projekt** er alt, der kræver mere end ét skridt. Skriv `@Navn` når du fanger,

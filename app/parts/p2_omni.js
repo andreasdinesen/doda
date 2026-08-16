@@ -50,9 +50,14 @@ function tegnChips() {
   if (t.defer) chips.push([`hidden until ${visDato(t.defer)}`, 'neutral']);
   if (t.note) chips.push(['+ description', 'neutral']);
 
-  // Gentagelsen skal staa skrevet ud - det er den, der gor forskellen mellem
-  // "fast plan" og "fra fuldfoerelse" synlig for brugeren (DESIGN.md §3).
-  if (t.recurrenceText) chips.push([`↻ ${t.recurrenceText} — repeating lands in F4`, 'neutral']);
+  // Gentagelsen skal staa SKREVET UD. Forskellen mellem "fast plan" og "fra
+  // fuldfoerelse" er ét udrabstegn i teksten - chippen er det eneste sted,
+  // valget bliver tydeligt for brugeren (DESIGN.md §3, handover §5.6).
+  if (t.recurrenceText) {
+    const g = (typeof dodaParse !== 'undefined') ? dodaParse.tolkGentagelse(t.recurrenceText) : null;
+    chips.push(g ? [`↻ ${dodaParse.beskrivGentagelse(g)}`, 'accent']
+      : [`↻ didn't understand "${t.recurrenceText}"`, 'neutral']);
+  }
 
   for (const w of t.warnings) {
     if (w !== 'gentagelse') chips.push([w.replace('forstod ikke datoen', "didn't understand the date"), 'neutral']);

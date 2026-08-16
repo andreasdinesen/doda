@@ -155,6 +155,30 @@ const MIGRATIONS = [
     // uden at vaekke opgaver, der blev droppet enkeltvis (DESIGN.md §6).
     d.exec("ALTER TABLE items ADD COLUMN dropped_with_project INTEGER NOT NULL DEFAULT 0");
   },
+
+  function m5(d) {
+    d.exec(`
+      CREATE TABLE recurrences (
+        id         TEXT PRIMARY KEY,
+        rule       TEXT NOT NULL,          -- JSON fra parse.tolkGentagelse
+        mode       TEXT NOT NULL,          -- schedule | completion
+        template   TEXT NOT NULL,          -- JSON: titel, note, projekt, kontekster
+        next_due   TEXT NOT NULL,          -- YYYY-MM-DD, lokal dato
+        next_time  TEXT,
+        paused     INTEGER NOT NULL DEFAULT 0,
+        skips      INTEGER NOT NULL DEFAULT 0,
+        last_completed_at INTEGER,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        deleted    INTEGER NOT NULL DEFAULT 0
+      );
+      -- rulFrem() koeres ved hvert state-opslag; indekset gor det til et
+      -- punktopslag i stedet for en scanning.
+      CREATE INDEX recurrences_forfald ON recurrences(next_due)
+        WHERE deleted = 0 AND paused = 0;
+      CREATE INDEX items_gentagelse ON items(recurrence_id) WHERE recurrence_id IS NOT NULL;
+    `);
+  },
 ];
 
 // Statusser. Raekkefoelgen er ogsaa den, lister sorteres efter.
@@ -756,13 +780,18 @@ function opretItem(felter, kontekstIder) {
   const id = newId();
   const t = now();
   const f = Object.assign({ kind: 'task', status: 'inbox', title: '', note: '' }, felter);
+  // seq er et LOEBENUMMER pr. projekt, ikke et tidsstempel. Samme faelde som
+  // kontekster og projekter: now() her goer manuel sortering umulig.
+  const seq = f.project_id
+    ? naesteSeq('items', 'WHERE project_id = ?', [f.project_id])
+    : naesteSeq('items', 'WHERE project_id IS NULL');
   db.prepare(`
     INSERT INTO items (id, kind, status, title, note, project_id, due_date, due_time,
                        defer_date, waiting_for, seq, created_at, updated_at)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .run(id, f.kind, f.status, f.title, f.note, f.project_id || null,
       f.due_date || null, f.due_time || null, f.defer_date || null,
-      f.waiting_for || '', t, t, t);
+      f.waiting_for || '', seq, t, t);
   if (kontekstIder && kontekstIder.length) saetKontekster(id, kontekstIder);
   return hentItem(id);
 }
@@ -779,6 +808,149 @@ function opdaterItem(id, felter) {
   arg.push(now());
   db.prepare(`UPDATE items SET ${saet.join(', ')} WHERE id = ?`).run(...arg, id);
   return hentItem(id);
+}
+
+/* --------------------------------------------------------- gentagelser */
+
+/*
+ * Reglerne, hele motoren hviler pa (handover §5.6):
+ *
+ *  1. Der er ALDRIG mere end én aaben forekomst ad gangen. Naeste opstar
+ *     foerst, nar den nuvaerende er lukket (udfoert eller sprunget over).
+ *  2. En forekomst er USYNLIG, indtil den er aktuel. Det klares med
+ *     defer_date = due_date - sa filtrerer den eksisterende naeste-liste den
+ *     selv fra. Ingen saerregel noget sted.
+ *  3. "Fra fuldfoerelse" regner fra den dag, jeg blev faerdig.
+ *     "Fast plan" regner fra forekomstens egen forfaldsdato, og en overskredet
+ *     forekomst rulles frem og TAELLES som oversprunget - det er den
+ *     information, den ugentlige gennemgang lever af.
+ */
+
+function hentGentagelse(id) {
+  const r = db.prepare('SELECT * FROM recurrences WHERE id = ? AND deleted = 0').get(id);
+  if (!r) return null;
+  r.rule = JSON.parse(r.rule);
+  r.template = JSON.parse(r.template);
+  return r;
+}
+
+function aabenForekomst(recurrenceId) {
+  return db.prepare(`
+    SELECT ${ITEM_FELTER} FROM items i
+     WHERE i.recurrence_id = ? AND i.deleted = 0
+       AND i.status NOT IN ('done','dropped') LIMIT 1`).get(recurrenceId);
+}
+
+function opretForekomst(r) {
+  if (aabenForekomst(r.id)) return null;
+  const t = r.template;
+  const item = opretItem({
+    kind: 'task',
+    status: 'next',
+    title: t.title || '',
+    note: t.note || '',
+    project_id: t.project_id || null,
+    due_date: r.next_due,
+    due_time: r.next_time,
+    // Usynlig indtil sin dato - regel 2.
+    defer_date: r.next_due,
+  }, t.contexts || []);
+  db.prepare('UPDATE items SET recurrence_id = ? WHERE id = ?').run(r.id, item.id);
+  return hentItem(item.id);
+}
+
+function opretGentagelse(regel, skabelon) {
+  const id = newId();
+  const t = now();
+  // Foerste forekomst: naeste traef FRA OG MED i dag. naesteForekomst giver
+  // strengt fremtidige datoer, sa der maales fra i gaar - sa rammer en
+  // ugedags- eller maanedsregel ogsaa i dag, hvis det passer.
+  //
+  // "hver N. dag" er en undtagelse: den skal starte I DAG. Ellers forfalder
+  // "vand planterne hver 3. dag" om to dage, hvilket ingen forventer.
+  const foerste = regel.freq === 'day'
+    ? iDag()
+    : parse.naesteForekomst(regel, parse.fmtDato(parse.plusDage(new Date(), -1)));
+  if (!foerste) return null;
+  db.prepare(`
+    INSERT INTO recurrences (id, rule, mode, template, next_due, next_time, created_at, updated_at)
+    VALUES (?,?,?,?,?,?,?,?)`)
+    .run(id, JSON.stringify(regel), regel.mode, JSON.stringify(skabelon), foerste, regel.time || null, t, t);
+  const r = hentGentagelse(id);
+  opretForekomst(r);
+  return r;
+}
+
+/** Lukker en forekomst og aabner den naeste. */
+function rykGentagelse(r, fraDato, taelSomSprunget) {
+  const naeste = parse.naesteForekomst(r.rule, fraDato);
+  if (!naeste) return null;
+  db.prepare(`
+    UPDATE recurrences SET next_due = ?, skips = skips + ?, last_completed_at = ?, updated_at = ?
+     WHERE id = ?`).run(naeste, taelSomSprunget ? 1 : 0, taelSomSprunget ? r.last_completed_at : now(), now(), r.id);
+  const opdateret = hentGentagelse(r.id);
+  // Sat pa pause: reglen bevares, men der laves ingen ny forekomst.
+  if (opdateret.paused) return null;
+  return opretForekomst(opdateret);
+}
+
+/**
+ * Ruller overskredne FASTE planer frem. En forekomst, der aldrig blev lavet,
+ * forsvinder ikke i det stille - hvert spring taelles.
+ */
+function rulFrem() {
+  const idag = iDag();
+  const raekker = db.prepare(`
+    SELECT id FROM recurrences
+     WHERE deleted = 0 AND paused = 0 AND mode = 'schedule' AND next_due < ?`).all(idag);
+  for (const { id } of raekker) {
+    const r = hentGentagelse(id);
+    if (!r) continue;
+    let d = r.next_due;
+    let spring = 0;
+    // Loft pa 500 - en regel med et vanvittigt interval ma ikke kunne
+    // laase serveren i en uendelig loekke.
+    while (d < idag && spring < 500) {
+      const n = parse.naesteForekomst(r.rule, d);
+      if (!n || n === d) break;
+      d = n;
+      spring++;
+    }
+    if (!spring) continue;
+    db.prepare('UPDATE recurrences SET next_due = ?, skips = skips + ?, updated_at = ? WHERE id = ?')
+      .run(d, spring, now(), id);
+    const aaben = aabenForekomst(id);
+    if (aaben) {
+      db.prepare('UPDATE items SET due_date = ?, defer_date = ?, skipped = skipped + ?, updated_at = ? WHERE id = ?')
+        .run(d, d, spring, now(), aaben.id);
+    } else {
+      opretForekomst(hentGentagelse(id));
+    }
+  }
+}
+
+function hentGentagelser() {
+  rulFrem();
+  return db.prepare('SELECT * FROM recurrences WHERE deleted = 0 ORDER BY next_due').all().map((r) => {
+    const regel = JSON.parse(r.rule);
+    const skabelon = JSON.parse(r.template);
+    const aaben = aabenForekomst(r.id);
+    return {
+      id: r.id,
+      title: skabelon.title,
+      description: parse.beskrivGentagelse(regel),
+      mode: r.mode,
+      rule: regel,
+      next_due: r.next_due,
+      next_time: r.next_time,
+      paused: !!r.paused,
+      skips: r.skips,
+      last_completed_at: r.last_completed_at,
+      project_id: skabelon.project_id || null,
+      open_item_id: aaben ? aaben.id : null,
+      due_today: !!aaben && aaben.due_date <= iDag(),
+    };
+  });
 }
 
 /**
@@ -800,6 +972,23 @@ function fangst(tekst, opretNye) {
   const kontekstIder = tolket.contexts.map((n) => (findKontekst(n) || opretKontekst(n)).id);
   let projektId = null;
   if (tolket.project) projektId = (findProjekt(tolket.project) || opretProjekt(tolket.project)).id;
+
+  // Er der en gentagelsesregel, oprettes en GENTAGELSE - ikke en loes opgave.
+  // Dens foerste forekomst laves med det samme, sa der altid er praecis én.
+  if (tolket.recurrenceText) {
+    const regel = parse.tolkGentagelse(tolket.recurrenceText);
+    if (!regel) {
+      return { fejl: `Could not understand the repeat rule "${tolket.recurrenceText}".` };
+    }
+    const r = opretGentagelse(regel, {
+      title: tolket.title.slice(0, GRAENSER.title),
+      note: tolket.note.slice(0, GRAENSER.note),
+      project_id: projektId,
+      contexts: kontekstIder,
+    });
+    if (!r) return { fejl: 'That repeat rule never comes around.' };
+    return { item: aabenForekomst(r.id), recurrence: r, tolket };
+  }
 
   const item = opretItem({
     kind: tolket.kind,
@@ -914,6 +1103,9 @@ const ROUTES = {
   'GET /api/v1/state': (req, res) => {
     const user = godkend(req, res, 'read');
     if (!user) return;
+    // Overskredne faste planer rulles frem, foer der taelles - ellers viser
+    // taellerne noget, der ikke passer med listerne.
+    rulFrem();
     const tal = db.prepare(`
       SELECT status, COUNT(*) AS n FROM items
        WHERE deleted = 0 AND (defer_date IS NULL OR defer_date <= ?)
@@ -976,9 +1168,12 @@ const ROUTES = {
     if (auth.viaToken) audit('fangst-via-api', auth.token.name, svar.item.title.slice(0, 80));
     sendJson(res, 200, {
       item: svar.item,
+      recurrence: svar.recurrence || null,
       parsed: svar.tolket,
       // Genveje viser gerne et svar. Giv dem én faerdig linje.
-      message: `Added: ${svar.item.title}`,
+      message: svar.recurrence
+        ? `Added: ${svar.item.title} — ${parse.beskrivGentagelse(svar.recurrence.rule)}`
+        : `Added: ${svar.item.title}`,
     });
   },
 
@@ -1089,6 +1284,12 @@ const ROUTES = {
     const auth = godkend(req, res, 'read');
     if (!auth) return;
     sendJson(res, 200, { projects: hentProjekter() });
+  },
+
+  'GET /api/v1/recurrences': (req, res) => {
+    const auth = godkend(req, res, 'read');
+    if (!auth) return;
+    sendJson(res, 200, { recurrences: hentGentagelser() });
   },
 
   'GET /api/v1/areas': (req, res) => {
@@ -1237,6 +1438,93 @@ function projektMedIndhold(id) {
 
 /* Ruter med sti-parametre. Rakkefolgen er den, de proves i. */
 const MOENSTRE = [
+  {
+    // Spring denne gang over. Det registreres - ikke som en fejl, men som
+    // information til den ugentlige gennemgang (handover §5.6).
+    metode: 'POST', re: /^\/api\/v1\/recurrences\/([\w-]{1,64})\/skip$/,
+    async kald(req, res, ctx) {
+      const auth = godkend(req, res, 'write');
+      if (!auth) return;
+      await readJsonBody(req, auth.viaToken);
+      const r = hentGentagelse(ctx.params[0]);
+      if (!r) { apiFejl(res, 404, 'not_found', 'No such repeating task.'); return; }
+      const aaben = aabenForekomst(r.id);
+      if (aaben) opdaterItem(aaben.id, { status: 'dropped', completed_at: now(), skipped: 1 });
+      rykGentagelse(r, aaben ? (aaben.due_date || r.next_due) : r.next_due, true);
+      sendJson(res, 200, { recurrence: hentGentagelser().find((x) => x.id === r.id) });
+    },
+  },
+  {
+    metode: 'POST', re: /^\/api\/v1\/recurrences\/([\w-]{1,64})$/,
+    async kald(req, res, ctx) {
+      const auth = godkend(req, res, 'write');
+      if (!auth) return;
+      const body = await readJsonBody(req, auth.viaToken);
+      const r = hentGentagelse(ctx.params[0]);
+      if (!r) { apiFejl(res, 404, 'not_found', 'No such repeating task.'); return; }
+
+      if (typeof body.paused === 'boolean') {
+        // Pause bevarer reglen. Den aabne forekomst ryddes af vejen, sa den
+        // ikke ligger og lyser i naeste-listen, mens gentagelsen er sat i bero.
+        db.prepare('UPDATE recurrences SET paused = ?, updated_at = ? WHERE id = ?')
+          .run(body.paused ? 1 : 0, now(), r.id);
+        const aaben = aabenForekomst(r.id);
+        if (body.paused && aaben) opdaterItem(aaben.id, { status: 'someday' });
+        if (!body.paused) {
+          const opdateret = hentGentagelse(r.id);
+          // Den parkerede forekomst er stadig "aaben" (someday er ikke en
+          // afslutning), sa den skal VAEKKES - ikke suppleres med en ny.
+          // Ellers ville genoptag lave en dublet, og brugerens rettelser i
+          // den parkerede ville gaa tabt.
+          if (aaben) {
+            opdaterItem(aaben.id, {
+              status: 'next',
+              due_date: opdateret.next_due,
+              defer_date: opdateret.next_due,
+            });
+          } else opretForekomst(opdateret);
+        }
+      }
+
+      if (typeof body.rule_text === 'string' && body.rule_text.trim()) {
+        const regel = parse.tolkGentagelse(body.rule_text);
+        if (!regel) {
+          apiFejl(res, 400, 'bad_rule', `Could not understand "${body.rule_text}".`);
+          return;
+        }
+        const naeste = parse.naesteForekomst(regel, parse.fmtDato(parse.plusDage(new Date(), -1)));
+        db.prepare('UPDATE recurrences SET rule = ?, mode = ?, next_due = ?, next_time = ?, updated_at = ? WHERE id = ?')
+          .run(JSON.stringify(regel), regel.mode, naeste, regel.time || null, now(), r.id);
+        const aaben = aabenForekomst(r.id);
+        if (aaben) opdaterItem(aaben.id, { due_date: naeste, defer_date: naeste, due_time: regel.time || null });
+      }
+
+      // Skabelonen: gaelder ALLE fremtidige forekomster.
+      const t = Object.assign({}, r.template);
+      if (typeof body.title === 'string' && body.title.trim()) t.title = str(body.title, GRAENSER.title);
+      if (typeof body.note === 'string') t.note = str(body.note, GRAENSER.note);
+      if (body.project_id === null || typeof body.project_id === 'string') t.project_id = body.project_id || null;
+      if (Array.isArray(body.contexts)) t.contexts = body.contexts.filter((x) => typeof x === 'string');
+      db.prepare('UPDATE recurrences SET template = ?, updated_at = ? WHERE id = ?')
+        .run(JSON.stringify(t), now(), r.id);
+
+      sendJson(res, 200, { recurrence: hentGentagelser().find((x) => x.id === r.id) });
+    },
+  },
+  {
+    metode: 'DELETE', re: /^\/api\/v1\/recurrences\/([\w-]{1,64})$/,
+    async kald(req, res, ctx) {
+      const auth = godkend(req, res, 'write');
+      if (!auth) return;
+      await readJsonBody(req, auth.viaToken);
+      db.prepare('UPDATE recurrences SET deleted = 1, updated_at = ? WHERE id = ?').run(now(), ctx.params[0]);
+      const aaben = aabenForekomst(ctx.params[0]);
+      // Den aabne forekomst bliver staaende som en almindelig opgave - man
+      // stopper en vane, man sletter ikke det, der ligger og venter.
+      if (aaben) db.prepare('UPDATE items SET recurrence_id = NULL, defer_date = NULL WHERE id = ?').run(aaben.id);
+      sendJson(res, 200, { ok: true });
+    },
+  },
   {
     metode: 'GET', re: /^\/api\/v1\/projects\/([\w-]{1,64})$/,
     kald(req, res, ctx) {
@@ -1389,7 +1677,23 @@ const MOENSTRE = [
         saetKontekster(ctx.params[0], gyldige);
       }
       const item = opdaterItem(ctx.params[0], felter);
-      if (!item) { sendJson(res, 404, { error: 'not found' }); return; }
+      if (!item) { apiFejl(res, 404, 'not_found', 'No such item.'); return; }
+
+      // "Kun denne gang" er standard: aendringen rammer forekomsten alene.
+      // Med applyToSeries opdateres skabelonen, sa den gaelder alle FREMTIDIGE
+      // forekomster ogsaa (handover §5.6).
+      if (item.recurrence_id && body.applyToSeries === true) {
+        const r = hentGentagelse(item.recurrence_id);
+        if (r) {
+          const t = Object.assign({}, r.template);
+          if (felter.title !== undefined) t.title = felter.title;
+          if (felter.note !== undefined) t.note = felter.note;
+          if (felter.project_id !== undefined) t.project_id = felter.project_id;
+          if (Array.isArray(body.contexts)) t.contexts = item.contexts.map((c) => c.id);
+          db.prepare('UPDATE recurrences SET template = ?, updated_at = ? WHERE id = ?')
+            .run(JSON.stringify(t), now(), r.id);
+        }
+      }
       sendJson(res, 200, { item });
     },
   },
@@ -1403,7 +1707,20 @@ const MOENSTRE = [
       // Én fuldfoerelse pr. element. Er den allerede udfoert, er svaret det
       // samme - sa en genafsendt genvej ikke laver ravage (DESIGN.md §6).
       if (item.status === 'done') { sendJson(res, 200, { item }); return; }
-      sendJson(res, 200, { item: opdaterItem(item.id, { status: 'done', completed_at: now() }) });
+      const faerdig = opdaterItem(item.id, { status: 'done', completed_at: now() });
+
+      if (item.recurrence_id) {
+        const r = hentGentagelse(item.recurrence_id);
+        if (r) {
+          // "Fra fuldfoerelse" regner fra i dag; "fast plan" fra forekomstens
+          // egen dato. Det er hele forskellen mellem de to tilstande.
+          const fra = r.mode === 'completion' ? iDag() : (item.due_date || iDag());
+          const naeste = rykGentagelse(r, fra, false);
+          sendJson(res, 200, { item: faerdig, next: naeste, recurrence: hentGentagelse(r.id) });
+          return;
+        }
+      }
+      sendJson(res, 200, { item: faerdig });
     },
   },
   {

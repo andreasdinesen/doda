@@ -13,9 +13,9 @@
 
 | | |
 |---|---|
-| **Fase** | F3 · Projekter, områder, kontekster, noter — **færdig og testet lokalt** |
-| **Næste** | F4 · Gentagelser (den vigtigste tilføjelse ift. tingdo) |
-| **Tilstand** | F0–F2 pushet. F3 ikke committet — venter på Andreas' ja. |
+| **Fase** | F4 · Gentagelser — **færdig og testet lokalt** |
+| **Næste** | F5 · MCP-server |
+| **Tilstand** | F0–F3 pushet. F4 ikke committet — venter på Andreas' ja. |
 | **Udgivet version** | — (`APP_VERSION = 1` er stadig ubrugt; bumpes først ved reel udgivelse) |
 | **Sidst opdateret** | 2026-08-16 |
 
@@ -53,6 +53,19 @@ kun sine **åbne** opgaver med — den udførte beholder sin status, så logboge
 sand — og genåbning vækker præcis dem igen · dubletnavn på kontekst afvist (409) ·
 slettet kontekst/område beholder opgaverne · seks sider målt på 375 px uden overløb.
 
+**Verificeret i F4:** 63 tests grønne, heraf 11 **integrationstests mod en rigtig
+server** (`tests/engine.test.mjs` starter serveren mod en midlertidig database og
+flytter uret direkte i SQLite — nogle ting kan ikke provokeres gennem API'et alene).
+Bevist: kun **én åben forekomst** gennem fem fuldførelser i træk · forekomsten er
+usynlig indtil sin dato (`defer_date = due_date`) · »fra fuldførelse« regner fra i dag,
+også når forekomsten er 30 dage forsinket · »fast plan« regner fra forfaldsdatoen ·
+28 dages forsømmelse rulles frem og tælles som præcis 4 spring · **en »fra
+fuldførelse«-regel ruller ALDRIG frem** og kan derfor aldrig hobe sig op · pause
+bevarer reglen, rydder listen og samler ikke spring op · »kun denne gang« rører ikke
+skabelonen, »alle fremtidige« gør · stop bevarer den åbne som en almindelig opgave ·
+sommertid: ugentlige og daglige gentagelser driver ikke hen over hverken efterårs-
+eller forårsskiftet.
+
 ### Faseoversigt
 
 | # | Fase | Leverance | Status |
@@ -61,7 +74,7 @@ slettet kontekst/område beholder opgaverne · seks sider målt på 375 px uden 
 | **F1** | Fangst + Inbox + Næste | **Appen kan bruges dagligt.** Datamodel, parser, kommandobar, afklaring | ✅ Færdig |
 | **F2** | API + adgangsnøgler + Shortcuts | iPhone/Siri kan fange og læse. Handover: *prioritér højt* | ✅ Færdig |
 | **F3** | Projekter, områder, kontekster, noter | Fuld GTD-struktur, markdown-noter | ✅ Færdig |
-| **F4** | Gentagelser | Todoist-syntaks med `!`, to tilstande, gentagelses-skærm | ⬜ |
+| **F4** | Gentagelser | Todoist-syntaks med `!`, to tilstande, gentagelses-skærm | ✅ Færdig |
 | **F5** | MCP-server | Claude kan forbinde til appen | ⬜ |
 | **F6** | PWA + offline | Hjemmeskærm, offline-læsning, fangst-kø | ⬜ |
 | **F7** | Gennemgang, logbog, ventelister, fokus | Ugentlig gennemgang, Venter på, Engang måske, timer | ⬜ |
@@ -120,12 +133,12 @@ det færdige tingdo-design. Ingen opgavefunktioner endnu.
 
 **Mål:** Handover §5.6 — den vigtigste tilføjelse ift. tingdo.
 
-- [ ] Todoist-parser: `!hver dag`, `!hver mandag,torsdag`, `!hver 2. uge`, `!hver måned den 3.`, `!sidste hverdag i måneden`, `!hvert år 24/12`
-- [ ] `!hver!` = fra fuldførelse · `!hver` = fast plan (se DESIGN.md)
-- [ ] Motor: **kun én åben forekomst**, usynlig indtil aktuel, pause/genoptag, spring over registreres
-- [ ] »Kun denne gang« vs. »alle fremtidige« ved ændring
-- [ ] Gentagelses-skærm: næste forfald + antal oversprungne
-- [ ] DST-test: »hver mandag kl. 8« må ikke drive hen over sommertidsskift
+- [x] Todoist-parser: `!hver dag`, `!hver mandag,torsdag`, `!hver 2. uge`, `!hver måned den 3.`, `!sidste hverdag i måneden`, `!hvert år 24/12`
+- [x] `!hver!` = fra fuldførelse · `!hver` = fast plan (se DESIGN.md)
+- [x] Motor: **kun én åben forekomst**, usynlig indtil aktuel, pause/genoptag, spring over registreres
+- [x] »Kun denne gang« vs. »alle fremtidige« ved ændring
+- [x] Gentagelses-skærm: næste forfald + antal oversprungne
+- [x] DST-test: »hver mandag kl. 8« må ikke drive hen over sommertidsskift
 
 ## F5 · MCP-server
 

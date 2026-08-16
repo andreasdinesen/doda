@@ -12,6 +12,7 @@ async function tegnSide() {
 
   if (view.id === 'settings') { host.innerHTML = sideSettings(); bindSettings(); return; }
   if (view.id === 'contexts') { host.innerHTML = sideContexts(); bindContexts(); return; }
+  if (view.id === 'repeat') { await sideRepeat(); return; }
   if (view.id === 'projects') {
     if (state.openProject) { await sideProjekt(state.openProject); return; }
     host.innerHTML = await sideProjects();
@@ -317,8 +318,17 @@ function aabnElement(it) {
   host.querySelector('#edCancel').addEventListener('click', luk);
 
   host.querySelector('#edSave').addEventListener('click', async () => {
+    // Hoerer elementet til en gentagelse, skal brugeren tage stilling:
+    // gaelder aendringen kun denne gang, eller alle fremtidige? (handover §5.6)
+    let tilSerien = false;
+    if (it.recurrence_id) {
+      const svar = await spoergOmSerie(it.title);
+      if (svar === null) return;          // lukket uden at vaelge
+      tilSerien = svar;
+    }
     try {
       await api('POST', `/api/v1/items/${it.id}`, {
+        applyToSeries: tilSerien,
         title: host.querySelector('#edTitle').value,
         note: noteEl.value,
         status: host.querySelector('#edStatus').value,
