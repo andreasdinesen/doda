@@ -378,4 +378,5 @@ Se `PLAN.md` for faseoversigt og status, `DESIGN.md` for de trufne beslutninger 
 
 | Version | Ændringer |
 |---|---|
+| 2 | Genvejsoversigt med `?`, `c`/`p` til kontekst og projekt fra en liste, og bundnavigation på mobil — de tre punkter fra beskrivelsen, der manglede i v1. |
 | 1 | Første udgave. Fangst med genvejssyntaks, inbox med tastaturafklaring, næste handlinger efter kontekst, projekter og områder, markdown-noter, gentagelser med Todoist-syntaks, vedhæftninger, ugentlig gennemgang, logbog, fokustimer, kalenderfeed, eksport/import, Todoist-import, API til iOS Shortcuts, MCP-server til Claude, passkeys, PWA med offline-fangst. |
