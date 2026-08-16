@@ -11,6 +11,18 @@ async function tegnSide() {
   const view = viewById(state.view);
 
   if (view.id === 'settings') { host.innerHTML = sideSettings(); bindSettings(); return; }
+  if (view.id === 'contexts') { host.innerHTML = sideContexts(); bindContexts(); return; }
+  if (view.id === 'projects') {
+    if (state.openProject) { await sideProjekt(state.openProject); return; }
+    host.innerHTML = await sideProjects();
+    document.getElementById('newProject').addEventListener('click', () => redigerProjekt(null));
+    document.getElementById('manageAreas').addEventListener('click', administrerOmraader);
+    document.querySelectorAll('.item-row[data-project]').forEach((el) => {
+      el.addEventListener('click', () => gaaTilProjekt(el.dataset.project));
+      el.addEventListener('keydown', (e) => { if (e.key === 'Enter') gaaTilProjekt(el.dataset.project); });
+    });
+    return;
+  }
   if (view.fase) { host.innerHTML = sidePlaceholder(view); return; }
 
   host.innerHTML = `<section class="page"><div class="page-head">
@@ -279,6 +291,7 @@ function aabnElement(it) {
 
     <div class="modal-foot">
       <button class="btn ghost" id="edDelete">Delete</button>
+      <button class="btn ghost" id="edConvert">${it.kind === 'note' ? 'Make it a task' : 'Make it a note'}</button>
       <span style="flex:1"></span>
       <button class="btn" id="edCancel">Cancel</button>
       <button class="btn primary" id="edSave">Save</button>
@@ -296,7 +309,7 @@ function aabnElement(it) {
   const tegnPreview = () => {
     const v = noteEl.value.trim();
     preview.hidden = !v;
-    preview.innerHTML = v ? linkify(v).replace(/\n/g, '<br>') : '';
+    preview.innerHTML = v ? markdown(v) : '';
   };
   noteEl.addEventListener('input', tegnPreview);
   tegnPreview();
@@ -323,6 +336,24 @@ function aabnElement(it) {
   host.querySelector('#edDelete').addEventListener('click', async () => {
     luk();
     await slet(it.id);
+  });
+
+  // Konvertering ma ALDRIG miste indhold: bade titel og beskrivelse foelger
+  // med begge veje (handover §5.5). En note er reference og skal derfor ud af
+  // handlingslisterne - den far status "queued", ikke "inbox".
+  host.querySelector('#edConvert').addEventListener('click', async () => {
+    const tilNote = it.kind !== 'note';
+    try {
+      await api('POST', `/api/v1/items/${it.id}`, {
+        title: host.querySelector('#edTitle').value,
+        note: noteEl.value,
+        kind: tilNote ? 'note' : 'task',
+        status: tilNote ? 'queued' : (it.status === 'queued' ? 'inbox' : it.status),
+      });
+      luk();
+      await genindlaes();
+      toast(tilNote ? 'Converted to a note' : 'Converted to a task');
+    } catch (ex) { toast(ex.message); }
   });
 
   host.querySelector('#edTitle').focus();

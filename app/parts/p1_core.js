@@ -19,6 +19,8 @@ const state = {
   view: 'next',
   contexts: [],
   projects: [],
+  areas: [],
+  openProject: null,
   counts: {},
   today: '',
   filterContext: null,
@@ -154,8 +156,8 @@ const VIEWS = [
   { id: 'waiting', label: 'Waiting For', icon: 'waiting', group: 2, fase: 'F7' },
   { id: 'someday', label: 'Someday', icon: 'someday', group: 2, fase: 'F7' },
   { id: 'repeat', label: 'Repeating', icon: 'repeat', group: 2, fase: 'F4' },
-  { id: 'projects', label: 'Projects', icon: 'projects', group: 3, fase: 'F3' },
-  { id: 'contexts', label: 'Contexts', icon: 'contexts', group: 3, fase: 'F3' },
+  { id: 'projects', label: 'Projects', icon: 'projects', group: 3 },
+  { id: 'contexts', label: 'Contexts', icon: 'contexts', group: 3 },
   { id: 'log', label: 'Logbook', icon: 'log', group: 4, fase: 'F7' },
   { id: 'review', label: 'Review', icon: 'review', group: 4, fase: 'F7' },
   { id: 'settings', label: 'Settings', icon: 'settings', group: 5 },
@@ -308,7 +310,7 @@ function bindShell() {
 function gaaTil(view, opt) {
   const skifter = state.view !== view;
   state.view = view;
-  if (skifter) state.filterContext = null;
+  if (skifter) { state.filterContext = null; state.openProject = null; }
   if (opt && opt.context !== undefined) state.filterContext = opt.context;
   document.body.classList.remove('navopen');
   opdaterNav();
@@ -330,6 +332,7 @@ async function hentState() {
     const d = await api('GET', '/api/v1/state');
     state.contexts = d.contexts;
     state.projects = d.projects;
+    state.areas = d.areas || [];
     state.counts = d.counts;
     state.today = d.today;
   } catch (ex) {

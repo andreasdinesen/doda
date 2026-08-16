@@ -339,6 +339,115 @@ h2.group {
 a { color: var(--accent-text); text-decoration: underline; text-underline-offset: 2px; }
 a:hover { text-decoration-thickness: 2px; }
 
+/* --------------------------------------------------------- projekter */
+
+.proj-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: .55;
+}
+
+.list.dim { opacity: .55; }
+
+/* Synligt, men roligt. Ingen roed, intet udrabstegn - GTD-fejlen skal
+   kunne ses uden at skaelde ud (handover princip 1). */
+.flag-nonext {
+  flex: none;
+  align-self: center;
+  padding: 3px 10px;
+  border: 1px dashed var(--border);
+  border-radius: var(--pill);
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.nudge {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 14px 18px;
+  margin-bottom: 8px;
+  border-radius: var(--r);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: 14px;
+}
+
+.nudge svg { flex: none; margin-top: 1px; }
+
+.outcome { margin-top: 12px; color: var(--muted); }
+.outcome p { margin: 0 0 8px; }
+
+.movers { flex: none; display: flex; gap: 2px; opacity: 0; align-self: center; }
+.item-row:hover .movers,
+.item-row:focus-within .movers { opacity: 1; }
+
+.mover {
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--muted);
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+}
+
+.mover:hover:not(:disabled) { color: var(--text); border-color: var(--accent); }
+.mover:disabled { opacity: .3; cursor: default; }
+
+/* Pa touch findes hover ikke, sa knapperne skal altid staa fremme.
+   HTML5 drag & drop virker ikke pa touch, sa det her ER vejen. */
+@media (hover: none) {
+  .movers { opacity: 1; }
+}
+
+.notes { display: flex; flex-direction: column; gap: 10px; }
+
+.notecard {
+  padding: 16px 18px;
+  border: 1px solid var(--border-soft);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r);
+  background: var(--card);
+  cursor: pointer;
+}
+
+.notecard:hover { background: var(--card-hover); }
+.notecard-title { font-weight: 650; margin-bottom: 6px; }
+.notecard-body { color: var(--muted); font-size: 14px; }
+.notecard-body p:first-child { margin-top: 0; }
+.notecard-body p:last-child { margin-bottom: 0; }
+
+/* ------------------------------------------------------ markdown-udtryk */
+
+.note-preview p, .notecard-body p, .outcome p { margin: 0 0 8px; }
+.note-preview h3, .notecard-body h3, .outcome h3 { font-size: 16px; margin: 12px 0 6px; }
+.note-preview h4, .notecard-body h4, .outcome h4 { font-size: 14.5px; margin: 10px 0 5px; }
+.note-preview h5, .notecard-body h5, .outcome h5 { font-size: 13.5px; margin: 10px 0 5px; }
+.note-preview ul, .note-preview ol,
+.notecard-body ul, .notecard-body ol,
+.outcome ul, .outcome ol { margin: 0 0 8px; padding-left: 22px; }
+.note-preview li, .notecard-body li, .outcome li { margin-bottom: 2px; }
+.note-preview code, .notecard-body code, .outcome code {
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--bg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: .88em;
+}
+.note-preview blockquote, .notecard-body blockquote, .outcome blockquote {
+  margin: 0 0 8px;
+  padding-left: 12px;
+  border-left: 2px solid var(--border);
+}
+
 /* ---------------------------------------------------------- modal */
 
 .modal {

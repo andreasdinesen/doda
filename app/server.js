@@ -148,6 +148,13 @@ const MIGRATIONS = [
       CREATE INDEX tokens_hash ON tokens(hash) WHERE revoked_at IS NULL;
     `);
   },
+
+  function m4(d) {
+    // Droppes et projekt, droppes dets aabne opgaver med. Flaget goer det
+    // muligt at rulle praecis dem tilbage, hvis projektet genaabnes -
+    // uden at vaekke opgaver, der blev droppet enkeltvis (DESIGN.md §6).
+    d.exec("ALTER TABLE items ADD COLUMN dropped_with_project INTEGER NOT NULL DEFAULT 0");
+  },
 ];
 
 // Statusser. Raekkefoelgen er ogsaa den, lister sorteres efter.
@@ -596,9 +603,34 @@ function hentKontekster() {
 }
 
 function hentProjekter() {
+  // next_count regnes med: et projekt UDEN naeste handling er den klassiske
+  // GTD-fejl og skal vaere synlig (handover §5.4). Underforespoergslen bruger
+  // items_projekt- og items_status-indekserne.
   return db.prepare(`
-    SELECT id, name, outcome, area_id, parent_id, status, seq, reviewed_at
-      FROM projects WHERE deleted = 0 ORDER BY seq, lower(name)`).all();
+    SELECT p.id, p.name, p.outcome, p.area_id, p.parent_id, p.status, p.seq, p.reviewed_at,
+           (SELECT COUNT(*) FROM items i
+             WHERE i.project_id = p.id AND i.deleted = 0 AND i.kind = 'task'
+               AND i.status = 'next'
+               AND (i.defer_date IS NULL OR i.defer_date <= ?)) AS next_count,
+           -- Kun OPGAVER taeller som aabent arbejde. En note er reference:
+           -- et projekt med tre noter og nul opgaver mangler ikke en naeste
+           -- handling, det er bare ikke gaaet i gang.
+           (SELECT COUNT(*) FROM items i
+             WHERE i.project_id = p.id AND i.deleted = 0 AND i.kind = 'task'
+               AND i.status NOT IN ('done','dropped')) AS open_count
+      FROM projects p WHERE p.deleted = 0 ORDER BY p.seq, lower(p.name)`).all(iDag());
+}
+
+function hentOmraader() {
+  return db.prepare('SELECT id, name, seq FROM areas ORDER BY seq, lower(name)').all();
+}
+
+const PROJEKT_STATUSSER = ['active', 'someday', 'done', 'dropped'];
+
+/** Naeste ledige plads i en sorteret liste, sa nye ting laegger sig bagest. */
+function naesteSeq(tabel, hvor, arg) {
+  const r = db.prepare(`SELECT COALESCE(MAX(seq), -1) + 1 AS n FROM ${tabel} ${hvor}`).get(...(arg || []));
+  return r.n;
 }
 
 function findKontekst(navn) {
@@ -612,16 +644,18 @@ function findProjekt(navn) {
 function opretKontekst(navn) {
   const id = newId();
   const t = now();
+  // seq er et LOEBENUMMER, ikke et tidsstempel. Skrives now() her, bliver
+  // manuel sortering umulig, fordi alle numre ligger i milliardklassen.
   db.prepare('INSERT INTO contexts (id, name, seq, created_at, updated_at) VALUES (?,?,?,?,?)')
-    .run(id, navn, t, t, t);
+    .run(id, navn, naesteSeq('contexts', ''), t, t);
   return { id, name: navn };
 }
 
 function opretProjekt(navn) {
   const id = newId();
   const t = now();
-  db.prepare('INSERT INTO projects (id, name, created_at, updated_at) VALUES (?,?,?,?)')
-    .run(id, navn, t, t);
+  db.prepare('INSERT INTO projects (id, name, seq, created_at, updated_at) VALUES (?,?,?,?,?)')
+    .run(id, navn, naesteSeq('projects', ''), t, t);
   return { id, name: navn };
 }
 
@@ -889,6 +923,7 @@ const ROUTES = {
     sendJson(res, 200, {
       contexts: hentKontekster(),
       projects: hentProjekter(),
+      areas: hentOmraader(),
       counts: antal,
       today: iDag(),
     });
@@ -1056,6 +1091,45 @@ const ROUTES = {
     sendJson(res, 200, { projects: hentProjekter() });
   },
 
+  'GET /api/v1/areas': (req, res) => {
+    const auth = godkend(req, res, 'read');
+    if (!auth) return;
+    sendJson(res, 200, { areas: hentOmraader() });
+  },
+
+  'POST /api/v1/areas': async (req, res) => {
+    const auth = godkend(req, res, 'write');
+    if (!auth) return;
+    const body = await readJsonBody(req, auth.viaToken);
+    const navn = str(body.name, 80);
+    if (!navn) { apiFejl(res, 400, 'no_name', 'An area needs a name.'); return; }
+    const fandtes = db.prepare('SELECT id, name, seq FROM areas WHERE lower(name) = lower(?)').get(navn);
+    if (fandtes) { sendJson(res, 200, { area: fandtes }); return; }
+    const id = newId();
+    const t = now();
+    db.prepare('INSERT INTO areas (id, name, seq, created_at, updated_at) VALUES (?,?,?,?,?)')
+      .run(id, navn, naesteSeq('areas', ''), t, t);
+    sendJson(res, 200, { area: { id, name: navn } });
+  },
+
+  'POST /api/v1/reorder': async (req, res) => {
+    const auth = godkend(req, res, 'write');
+    if (!auth) return;
+    const body = await readJsonBody(req, auth.viaToken);
+    const tabel = { items: 'items', projects: 'projects', contexts: 'contexts', areas: 'areas' }[body.kind];
+    if (!tabel || !Array.isArray(body.ids)) {
+      apiFejl(res, 400, 'bad_request', 'Send {kind: "items"|"projects"|"contexts"|"areas", ids: [...]}.');
+      return;
+    }
+    const saet = db.prepare(`UPDATE ${tabel} SET seq = ? WHERE id = ?`);
+    db.exec('BEGIN');
+    try {
+      body.ids.slice(0, 2000).forEach((id, i) => { if (typeof id === 'string') saet.run(i, id); });
+      db.exec('COMMIT');
+    } catch (err) { db.exec('ROLLBACK'); throw err; }
+    sendJson(res, 200, { ok: true });
+  },
+
   'GET /api/v1/notes': (req, res, ctx) => {
     const auth = godkend(req, res, 'read');
     if (!auth) return;
@@ -1144,8 +1218,147 @@ const ROUTES = {
   },
 };
 
+/** Et projekt med alt, hvad der hoerer til det. Opgaver OG noter (handover §5.4). */
+function projektMedIndhold(id) {
+  const p = hentProjekter().find((x) => x.id === id);
+  if (!p) return null;
+  const raekker = db.prepare(`
+    SELECT ${ITEM_FELTER} FROM items i
+     WHERE i.project_id = ? AND i.deleted = 0
+     ORDER BY i.seq, i.created_at`).all(id);
+  medKontekster(raekker);
+  return {
+    project: p,
+    tasks: raekker.filter((r) => r.kind === 'task'),
+    notes: raekker.filter((r) => r.kind === 'note'),
+    children: hentProjekter().filter((x) => x.parent_id === id),
+  };
+}
+
 /* Ruter med sti-parametre. Rakkefolgen er den, de proves i. */
 const MOENSTRE = [
+  {
+    metode: 'GET', re: /^\/api\/v1\/projects\/([\w-]{1,64})$/,
+    kald(req, res, ctx) {
+      const auth = godkend(req, res, 'read');
+      if (!auth) return;
+      const d = projektMedIndhold(ctx.params[0]);
+      if (!d) { apiFejl(res, 404, 'not_found', 'No such project.'); return; }
+      sendJson(res, 200, d);
+    },
+  },
+  {
+    metode: 'POST', re: /^\/api\/v1\/projects\/([\w-]{1,64})$/,
+    async kald(req, res, ctx) {
+      const auth = godkend(req, res, 'write');
+      if (!auth) return;
+      const body = await readJsonBody(req, auth.viaToken);
+      const id = ctx.params[0];
+      const nu = db.prepare('SELECT id, status FROM projects WHERE id = ? AND deleted = 0').get(id);
+      if (!nu) { apiFejl(res, 404, 'not_found', 'No such project.'); return; }
+
+      const saet = [];
+      const arg = [];
+      if (typeof body.name === 'string' && body.name.trim()) { saet.push('name = ?'); arg.push(str(body.name, 120)); }
+      if (typeof body.outcome === 'string') { saet.push('outcome = ?'); arg.push(str(body.outcome, 2000)); }
+      if (body.area_id === null || typeof body.area_id === 'string') {
+        const gyldig = body.area_id === null || db.prepare('SELECT 1 FROM areas WHERE id = ?').get(body.area_id);
+        if (gyldig) { saet.push('area_id = ?'); arg.push(body.area_id || null); }
+      }
+      if (body.parent_id === null || (typeof body.parent_id === 'string' && body.parent_id !== id
+          && db.prepare('SELECT 1 FROM projects WHERE id = ? AND deleted = 0').get(body.parent_id))) {
+        saet.push('parent_id = ?');
+        arg.push(body.parent_id || null);
+      }
+      if (PROJEKT_STATUSSER.includes(body.status)) { saet.push('status = ?'); arg.push(body.status); }
+      if (body.reviewed === true) { saet.push('reviewed_at = ?'); arg.push(now()); }
+      if (saet.length) {
+        saet.push('updated_at = ?');
+        arg.push(now());
+        db.prepare(`UPDATE projects SET ${saet.join(', ')} WHERE id = ?`).run(...arg, id);
+      }
+
+      // Droppes projektet, droppes dets AABNE opgaver med - og markeres, sa de
+      // kan vaekkes igen samlet. Udfoerte opgaver roeres aldrig: logbogen skal
+      // blive ved med at vaere sand (DESIGN.md §6).
+      if (body.status === 'dropped' && nu.status !== 'dropped') {
+        db.prepare(`
+          UPDATE items SET status = 'dropped', completed_at = ?, dropped_with_project = 1, updated_at = ?
+           WHERE project_id = ? AND deleted = 0 AND status NOT IN ('done','dropped')`)
+          .run(now(), now(), id);
+      }
+      if (nu.status === 'dropped' && body.status && body.status !== 'dropped') {
+        db.prepare(`
+          UPDATE items SET status = 'queued', completed_at = NULL, dropped_with_project = 0, updated_at = ?
+           WHERE project_id = ? AND dropped_with_project = 1`).run(now(), id);
+      }
+      sendJson(res, 200, projektMedIndhold(id));
+    },
+  },
+  {
+    metode: 'DELETE', re: /^\/api\/v1\/projects\/([\w-]{1,64})$/,
+    async kald(req, res, ctx) {
+      const auth = godkend(req, res, 'write');
+      if (!auth) return;
+      await readJsonBody(req, auth.viaToken);
+      // Projektet slettes bloedt; opgaverne loesrives i stedet for at
+      // forsvinde med det. Ingenting ma gaa tabt, fordi en mappe forsvandt.
+      db.prepare('UPDATE projects SET deleted = 1, updated_at = ? WHERE id = ?').run(now(), ctx.params[0]);
+      db.prepare('UPDATE items SET project_id = NULL, updated_at = ? WHERE project_id = ?')
+        .run(now(), ctx.params[0]);
+      db.prepare('UPDATE projects SET parent_id = NULL WHERE parent_id = ?').run(ctx.params[0]);
+      sendJson(res, 200, { ok: true });
+    },
+  },
+  {
+    metode: 'POST', re: /^\/api\/v1\/contexts\/([\w-]{1,64})$/,
+    async kald(req, res, ctx) {
+      const auth = godkend(req, res, 'write');
+      if (!auth) return;
+      const body = await readJsonBody(req, auth.viaToken);
+      const navn = str(body.name, 60);
+      if (!navn) { apiFejl(res, 400, 'no_name', 'A context needs a name.'); return; }
+      const optaget = db.prepare('SELECT id FROM contexts WHERE lower(name) = lower(?) AND id != ?')
+        .get(navn, ctx.params[0]);
+      if (optaget) { apiFejl(res, 409, 'name_taken', `There is already a context called "${navn}".`); return; }
+      db.prepare('UPDATE contexts SET name = ?, updated_at = ? WHERE id = ?').run(navn, now(), ctx.params[0]);
+      sendJson(res, 200, { contexts: hentKontekster() });
+    },
+  },
+  {
+    metode: 'DELETE', re: /^\/api\/v1\/contexts\/([\w-]{1,64})$/,
+    async kald(req, res, ctx) {
+      const auth = godkend(req, res, 'write');
+      if (!auth) return;
+      await readJsonBody(req, auth.viaToken);
+      // ON DELETE CASCADE rydder item_contexts. Opgaverne overlever - de
+      // star bare uden kontekst bagefter.
+      db.prepare('DELETE FROM contexts WHERE id = ?').run(ctx.params[0]);
+      sendJson(res, 200, { contexts: hentKontekster() });
+    },
+  },
+  {
+    metode: 'POST', re: /^\/api\/v1\/areas\/([\w-]{1,64})$/,
+    async kald(req, res, ctx) {
+      const auth = godkend(req, res, 'write');
+      if (!auth) return;
+      const body = await readJsonBody(req, auth.viaToken);
+      const navn = str(body.name, 80);
+      if (!navn) { apiFejl(res, 400, 'no_name', 'An area needs a name.'); return; }
+      db.prepare('UPDATE areas SET name = ?, updated_at = ? WHERE id = ?').run(navn, now(), ctx.params[0]);
+      sendJson(res, 200, { areas: hentOmraader() });
+    },
+  },
+  {
+    metode: 'DELETE', re: /^\/api\/v1\/areas\/([\w-]{1,64})$/,
+    async kald(req, res, ctx) {
+      const auth = godkend(req, res, 'write');
+      if (!auth) return;
+      await readJsonBody(req, auth.viaToken);
+      db.prepare('DELETE FROM areas WHERE id = ?').run(ctx.params[0]);
+      sendJson(res, 200, { areas: hentOmraader() });
+    },
+  },
   {
     // Tilbagekaldelse skal virke OEJEBLIKKELIGT: der er ingen cache af
     // noegler, sa naeste kald slar op i databasen og finder ingenting.

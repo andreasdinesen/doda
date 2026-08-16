@@ -13,9 +13,9 @@
 
 | | |
 |---|---|
-| **Fase** | F2 · API + adgangsnøgler + Shortcuts — **færdig og testet lokalt** |
-| **Næste** | F3 · Projekter, områder, kontekster, noter |
-| **Tilstand** | F0 og F1 pushet. F2 ikke committet — venter på Andreas' ja. |
+| **Fase** | F3 · Projekter, områder, kontekster, noter — **færdig og testet lokalt** |
+| **Næste** | F4 · Gentagelser (den vigtigste tilføjelse ift. tingdo) |
+| **Tilstand** | F0–F2 pushet. F3 ikke committet — venter på Andreas' ja. |
 | **Udgivet version** | — (`APP_VERSION = 1` er stadig ubrugt; bumpes først ved reel udgivelse) |
 | **Sidst opdateret** | 2026-08-16 |
 
@@ -45,6 +45,14 @@ uden Content-Type, med formulardata og med `?text=` · CSRF-barrieren holder sta
 cookie-adgang (415) · `?format=text` og kontekst ved navn · `changes?since=` inkl.
 slettede id'er.
 
+**Verificeret i F3:** projekter grupperet efter område · »no next action« vises kun ved
+reelt åbent arbejde (noter tæller ikke med) · manuel sortering med knapper overlever
+genindlæsning og er synlig på touch · **5 XSS-angreb mod markdown-rendereren afvist** ·
+note ⇄ opgave begge veje uden at miste titel eller beskrivelse · droppet projekt tager
+kun sine **åbne** opgaver med — den udførte beholder sin status, så logbogen forbliver
+sand — og genåbning vækker præcis dem igen · dubletnavn på kontekst afvist (409) ·
+slettet kontekst/område beholder opgaverne · seks sider målt på 375 px uden overløb.
+
 ### Faseoversigt
 
 | # | Fase | Leverance | Status |
@@ -52,7 +60,7 @@ slettede id'er.
 | **F0** | Fundament | Rune installerer, login virker, tom app-skal med tingdo-design | ✅ Færdig |
 | **F1** | Fangst + Inbox + Næste | **Appen kan bruges dagligt.** Datamodel, parser, kommandobar, afklaring | ✅ Færdig |
 | **F2** | API + adgangsnøgler + Shortcuts | iPhone/Siri kan fange og læse. Handover: *prioritér højt* | ✅ Færdig |
-| **F3** | Projekter, områder, kontekster, noter | Fuld GTD-struktur, markdown-noter | ⬜ |
+| **F3** | Projekter, områder, kontekster, noter | Fuld GTD-struktur, markdown-noter | ✅ Færdig |
 | **F4** | Gentagelser | Todoist-syntaks med `!`, to tilstande, gentagelses-skærm | ⬜ |
 | **F5** | MCP-server | Claude kan forbinde til appen | ⬜ |
 | **F6** | PWA + offline | Hjemmeskærm, offline-læsning, fangst-kø | ⬜ |
@@ -102,11 +110,11 @@ det færdige tingdo-design. Ingen opgavefunktioner endnu.
 
 ## F3 · Projekter, områder, kontekster, noter
 
-- [ ] Projekter m. underprojekter, områder, »færdigt ser sådan ud«-felt
-- [ ] Projektvisning: opgaver + noter sammen, visuelt adskilt
-- [ ] Markering af projekt **uden næste handling** (synlig, uden skældud)
-- [ ] Manuel rækkefølge i projekt
-- [ ] Noter i markdown, fuldtekstsøgbare, konvertering note ⇄ opgave uden tab
+- [x] Projekter m. underprojekter, områder, »færdigt ser sådan ud«-felt
+- [x] Projektvisning: opgaver + noter sammen, visuelt adskilt
+- [x] Markering af projekt **uden næste handling** (synlig, uden skældud)
+- [x] Manuel rækkefølge i projekt
+- [x] Noter i markdown, fuldtekstsøgbare, konvertering note ⇄ opgave uden tab
 
 ## F4 · Gentagelser
 

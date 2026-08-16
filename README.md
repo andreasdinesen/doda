@@ -35,6 +35,26 @@ Mens du skriver, viser små chips under feltet, hvordan teksten er blevet forst�
 
 Links i både titel og beskrivelse bliver klikbare — også `[tekst](url)`.
 
+### Projekter, områder og noter
+
+Et **projekt** er alt, der kræver mere end ét skridt. Skriv `@Navn` når du fanger,
+så oprettes det. Projekter kan have underprojekter og hører til et **område** —
+en løbende ansvarlighed uden slutpunkt: Arbejde, Hjem, Økonomi.
+
+Projektvisningen har et felt til **»hvad ser færdigt ud«** i markdown, og viser
+opgaver og noter sammen, men visuelt adskilt. Har et projekt åbent arbejde uden
+en næste handling, står det diskret — det er den klassiske GTD-fejl, og den skal
+kunne ses uden at skælde ud. Rækkefølgen af opgaver kan ændres med ↑↓, som også
+virker på telefon.
+
+**Noter** er ren reference og dukker aldrig op i handlingslister. De skrives i
+markdown (overskrifter, lister, **fed**, `kode`, citater, links) og kan
+konverteres til en opgave og tilbage igen uden at miste noget.
+
+Droppes et projekt, droppes dets **åbne** opgaver med — men allerede udførte
+opgaver røres ikke, så logbogen bliver ved med at være sand. Genåbner du
+projektet, vækkes præcis de opgaver, der fulgte med.
+
 ### Tastatur
 
 I Inbox og Næste handlinger kan alt klares uden mus:
