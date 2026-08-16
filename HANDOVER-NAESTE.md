@@ -1,7 +1,7 @@
 # Handover — hvad der mangler i doda
 
 **Til:** Claude Code i en ny session
-**Skrevet:** 2026-08-16, efter v4 blev pushet og connectoren blev bygget færdig.
+**Skrevet:** 2026-08-17, efter v7 blev pushet.
 
 > **Start med at læse, i denne rækkefølge:**
 > 1. `~/ClaudeMacBook/RUNE-ERFARINGER.md` — fælles lærepenge for alle runer.
@@ -14,53 +14,47 @@
 
 ## Tilstand lige nu
 
-**v4 er udgivet** (`/projekt` inline + `icon.svg`). Den kører hos Andreas, når
-han har kørt *Reload* og *Update/Reinstall* i panelet.
+**v8 er udgivet.** Alt fra 16.–17. august er ude: connectoren til claude.ai
+(v5 + v6-rettelsen), skallen (v7) og slette-rettelsen (v8). Arbejdsmappen er ren.
 
-**Connectoren til claude.ai er bygget, testet og UCOMMITTET.** Arbejdsmappen
-indeholder hele F12 — se `PLAN.md` og `docs/OAUTH.md`:
+`node --test tests/*.mjs` → **139 grønne**. `python3 build_rune.py` → 94 % af loftet.
 
-| Ændring | Status |
-|---|---|
-| `app/oauth.js` + migration `m8` + syv ruter | færdig |
-| `/mcp` svarer 401 med `resource_metadata` | færdig |
-| Samtykkeside uden JavaScript | færdig, verificeret i browseren i lys og mørk |
-| Settings → **Connected apps** | færdig |
-| `tests/oauth.test.mjs` | 18 tests |
-| `docs/OAUTH.md`, README, DESIGN, PLAN | opdateret |
+### To ting fra v8, der er værd at kende
 
-`node --test tests/*.mjs` → **135 grønne**. `python3 build_rune.py` → 93 % af loftet.
+**Slette-fejlen var usynlig, indtil genvejen blev brugbar.** `opdaterItem()`
+slutter med at læse rækken frisk gennem `hentItem()`, som filtrerer
+`deleted = 0` fra. Efter en sletning returnerede den derfor **altid** `null`, og
+DELETE-ruten svarede 404 »not found« på en sletning, der lykkedes. Frontenden
+viste fejlen og sprang `genindlaes()` over, så rækken blev stående, selvom den
+var væk i databasen. Fejlen havde ligget der hele tiden — `x` kunne bare ikke
+nås uden at åbne opgaven først, før v7 gjorde tastaturet brugbart.
+**Generelt: en funktion, der returnerer rækken frisk efter en opdatering, kan
+ikke rapportere en række, den lige har gjort usynlig.**
 
----
-
-## Det eneste, der mangler
-
-**Udgivelsen.** `APP_VERSION` står stadig på 4, som reglen siger. Når Andreas
-siger ja:
-
-1. `APP_VERSION = 5` i `app/parts/p1_core.js`
-2. README-versionshistorik: én linje for v5
-3. `python3 build_rune.py` → `node --test tests/*.mjs`
-4. commit → push → (Andreas:) Reload + Update/Reinstall
-
----
+**Sideoversigten i højre side folder først ud efter et klik — det er ikke doda.**
+Den eneste regel, der folder den ud, er `.toc:hover`; der findes ingen
+klik-handler. Når et klik får den til at virke, er det hover, der endelig når
+frem: macOS sender ikke `mousemove` til et browservindue, der ikke er aktivt.
+Andreas skulle prøve at klikke ét sted i vinduet og derefter kun bevæge musen.
+Melder han, at det stadig ikke virker, er næste skridt en klik-låst tilstand
+(`.toc.aaben`) — den har han sagt nej til indtil videre.
 
 ## Pladsen i runen — vær opmærksom
 
-Install-scriptet må højst fylde **120.000 tegn**. Efter OAuth fylder det
-**112.196 (93 %)**. Der er altså kun ~8 K tilbage, og build'et **fejler højt**,
-hvis loftet overskrides — det er en assert, ikke en advarsel.
+Install-scriptet må højst fylde **126.000 tegn** (hævet fra 120.000 i v7 efter
+aftale). Det fylder nu **119.575 (94 %)**, og build'et **fejler højt** ved
+loftet — det er en assert, ikke en advarsel.
 
-Næste større funktion kræver, at der ryddes plads. Mulighederne, dyreste først:
+Den rigtige grænse er Linux' `MAX_ARG_STRLEN` på 131.072 b; margenen skal kun
+dække panelets `{{VARIABEL}}`-udskiftninger, som er få og korte. **Hævningen er
+en udsættelse, ikke en løsning** — der er plads til en funktion eller to.
+`PLAN.md` har de målte muligheder, når den fejler igen. Kort:
 
-- `app/public/icon-192.png` (2,2 KB binært ≈ 2,8 K tegn) er det sidste binære i
-  payloaden. **PNG komprimeres ikke af brotli**, så den koster fuld pris. Den er
-  der kun, fordi iOS' `apple-touch-icon` ikke tager SVG — fjern den ikke, uden at
-  Andreas har accepteret at PWA-ikonet på iPhone bliver et fallback.
-- CSS'en (33 KB) er det største enkeltstående tekstaktiv.
-- Serveren kan tegne ikonet ved opstart i stedet for at bære det i payloaden.
-
----
+- `app/public/icon-192.png` frigør **2.815 tegn**, men er iOS'
+  `apple-touch-icon` — fjern den ikke, uden at Andreas har accepteret, at
+  hjemmeskærms-ikonet på iPhone bliver et fallback.
+- Serveren kan tegne ikonet ved opstart (~1.900 netto, ~40 linjers PNG-encoder).
+- CSS'en (39 KB) er det største enkeltstående tekstaktiv.
 
 ## Faste regler, der IKKE må brydes
 

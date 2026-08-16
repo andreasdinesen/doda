@@ -2968,9 +2968,18 @@ const MOENSTRE = [
       const auth = godkend(req, res, 'write');
       if (!auth) return;
       await readJsonBody(req, auth.viaToken); // haandhaever JSON-headeren ogsaa pa DELETE
+
+      // Findes den? Det skal afgoeres FOER sletningen.
+      //
+      // opdaterItem() slutter med at laese raekken frisk gennem hentItem(),
+      // som filtrerer deleted = 0 fra. Sletter man, returnerer den derfor
+      // ALTID null - og ruten svarede 404 "not found" paa en sletning, der
+      // lykkedes. Frontenden viste fejlen og sprang genindlaesningen over,
+      // saa raekken blev staaende, selv om den var vaek i databasen.
+      const item = hentItem(ctx.params[0]);
+      if (!item) { apiFejl(res, 404, 'not_found', 'No such item.'); return; }
       // Bloed sletning: intet forsvinder for altid, og logbogen bliver sand.
-      const item = opdaterItem(ctx.params[0], { deleted: 1 });
-      if (!item) { sendJson(res, 404, { error: 'not found' }); return; }
+      opdaterItem(ctx.params[0], { deleted: 1 });
       sendJson(res, 200, { ok: true });
     },
   },

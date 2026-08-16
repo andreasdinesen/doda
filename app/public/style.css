@@ -928,7 +928,14 @@ textarea.input { resize: vertical; min-height: 90px; font-family: inherit; }
   transition: max-width .18s, opacity .14s;
 }
 
-.toc:hover .toc-tekst { max-width: 190px; opacity: 1; }
+/* :focus-within ved siden af :hover, sa oversigten ogsaa kan naas med
+   tabulator - og sa den ikke afhaenger af, at browservinduet er aktivt.
+   macOS sender ikke mouse-move til et vindue, der ikke har fokus: derfor
+   "virker hover foerst efter et klik", og klikket er i virkeligheden bare
+   det, der aktiverer vinduet. */
+.toc:focus-within { background: var(--card); border-color: var(--border); box-shadow: var(--shadow-lift); }
+.toc:hover .toc-tekst,
+.toc:focus-within .toc-tekst { max-width: 190px; opacity: 1; }
 
 /* Klik i oversigten ruller afsnittet op i toppen - uden luft ville
    overskriften klistre til kanten. */

@@ -13,11 +13,11 @@
 
 | | |
 |---|---|
-| **Fase** | **v6 udgivet** (connector + *Allow*-rettelsen). v7 er skallen. |
-| **Næste** | Udgivelse af v7 — og **pladsen i runen skal løses** (99 % af loftet) |
-| **Tilstand** | 138 tests grønne, install-script **118.974 / 120.000 (99 %)** |
-| **Udgivet version** | **6** — v7 bygget og klar |
-| **Sidst opdateret** | 2026-08-16 |
+| **Fase** | **v8 udgivet.** Connector (v5–v6), skallen (v7), slette-rettelsen (v8). |
+| **Næste** | Andreas bruger den — og **pladsen i runen** skal løses inden næste større funktion |
+| **Tilstand** | 139 tests grønne, install-script **119.575 / 126.000 (94 %)** |
+| **Udgivet version** | **8** |
+| **Sidst opdateret** | 2026-08-17 |
 
 **Sprog:** interfacet er **engelsk** (Andreas' valg — æøå er besværligt at taste).
 Parseren er tosproget: engelsk primært, dansk virker fortsat. Kode, kommentarer og
@@ -429,8 +429,12 @@ Andreas' ønsker efter at have brugt v6. Beslutningerne står i `DESIGN.md §2`.
 - [x] Paletten kan **oprette** i `/`, `#` og `:`, ikke kun søge
 - [x] **Sidebaren kan foldes væk** til en hamburger, som i tingdo
 - [x] `tests/version.test.mjs`: de fem steder, versionen står, skal stemme
-- [ ] **Pladsen i runen** — 99 % af loftet. Se nedenfor
-- [ ] `APP_VERSION = 7` → build → **vent på Andreas' ja** → push
+- [x] **Pladsen i runen** — loftet hævet til 126.000. Se nedenfor: det er en udsættelse
+- [x] `APP_VERSION = 7` → build → push
+- [x] **v8:** sletning svarede 404 på noget, der lykkedes — `opdaterItem()`
+      læser rækken frisk gennem `hentItem()`, som filtrerer `deleted = 0` fra.
+      Fejlen havde ligget der hele tiden; den blev først synlig, da `x` kunne
+      nås. Testen er bevist at kunne fejle på den gamle kode
 
 ### Pladsen i runen — skal løses inden næste funktion
 

@@ -211,3 +211,32 @@ test('vrøvl som regel afvises med en læsbar besked', async () => {
   assert.ok(r.error || r.message, 'skal svare noget');
   if (r.error) assert.match(r.message, /repeat rule/i);
 });
+
+/* ------------------------------------------------------------ sletning */
+
+test('sletning svarer 200 — ikke 404 på noget, der lige BLEV slettet', async () => {
+  // opdaterItem() laeser raekken frisk gennem hentItem(), som filtrerer
+  // deleted = 0 fra. Ruten returnerede derfor altid null og svarede 404
+  // "not found" paa en sletning, der lykkedes - hvorefter frontenden viste
+  // fejlen og sprang genindlaesningen over, saa raekken blev staaende.
+  // Fejlen var usynlig, indtil x-genvejen blev mulig at naa (v7).
+  const r = await J('/api/v1/capture', { text: 'noget der skal slettes', createNew: true });
+  const id = r.item.id;
+
+  const svar = await fetch(`${BASE}/api/v1/items/${id}`, {
+    method: 'DELETE', headers: { 'Content-Type': 'application/json', cookie },
+  });
+  assert.equal(svar.status, 200, 'en sletning der lykkes skal svare 200');
+  assert.deepEqual(await svar.json(), { ok: true });
+
+  // ... og den skal vaere vaek af listen bagefter.
+  const inbox = await J('/api/v1/items?status=inbox');
+  assert.ok(!inbox.items.some((x) => x.id === id), 'den slettede maa ikke staa i listen');
+
+  // Anden gang ER den ikke fundet - og saa er 404 det rigtige svar.
+  const igen = await fetch(`${BASE}/api/v1/items/${id}`, {
+    method: 'DELETE', headers: { 'Content-Type': 'application/json', cookie },
+  });
+  assert.equal(igen.status, 404);
+  assert.equal((await igen.json()).error, 'not_found');
+});
