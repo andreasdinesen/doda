@@ -1,0 +1,403 @@
+'use strict';
+/* doda - listerne: Next Actions, Inbox, elementraekken og detaljeruden. */
+
+const sideState = { fokusId: null };
+
+/* --------------------------------------------------------- optegning */
+
+async function tegnSide() {
+  const host = document.getElementById('pageHost');
+  if (!host) return;
+  const view = viewById(state.view);
+
+  if (view.id === 'settings') { host.innerHTML = sideSettings(); bindSettings(); return; }
+  if (view.fase) { host.innerHTML = sidePlaceholder(view); return; }
+
+  host.innerHTML = `<section class="page"><div class="page-head">
+      <h1>${esc(view.label)}</h1><p class="lead">${esc(BESKRIVELSER[view.id])}</p>
+    </div><div class="skeleton">Loading…</div></section>`;
+
+  try {
+    if (view.id === 'inbox') {
+      const d = await api('GET', '/api/items?status=inbox');
+      state.items = d.items;
+      host.innerHTML = sideInbox();
+    } else {
+      const q = state.filterContext ? `&context=${encodeURIComponent(state.filterContext)}` : '';
+      const d = await api('GET', `/api/items?status=next&hideDeferred=1${q}`);
+      state.items = d.items;
+      host.innerHTML = sideNext();
+    }
+    bindListe();
+  } catch (ex) {
+    if (ex.status === 401) { state.user = null; render(); return; }
+    host.innerHTML = `<section class="page"><div class="empty"><p>${esc(ex.message)}</p></div></section>`;
+  }
+}
+
+function sidePlaceholder(view) {
+  return `<section class="page">
+    <div class="page-head"><h1>${esc(view.label)}</h1>
+      <p class="lead">${esc(BESKRIVELSER[view.id] || '')}</p></div>
+    <div class="empty">${icon('calm', 34)}
+      <p class="empty-title">Coming in ${esc(view.fase)}</p>
+      <p>The shell is ready. This screen gets built in that phase.</p></div>
+  </section>`;
+}
+
+/* ------------------------------------------------------------ Inbox */
+
+function sideInbox() {
+  const items = state.items;
+  return `<section class="page">
+    <div class="page-head"><h1>Inbox</h1><p class="lead">${esc(BESKRIVELSER.inbox)}</p></div>
+    ${items.length ? `
+      <p class="meta" style="margin-bottom:12px">${items.length} item${items.length === 1 ? '' : 's'} · oldest first</p>
+      <div class="list" data-keynav>${items.map((it, i) => elementRaekke(it, i)).join('')}</div>
+      <p class="hintline meta">↑↓ move · enter open · space done · n next · w waiting · s someday · x delete</p>
+    ` : tomInbox()}
+  </section>`;
+}
+
+/* Tom inbox skal foeles som en beloenning, ikke som en tom kasse
+   (handover §5.2). Ingen tal, ingen farve, ingen opfordring. */
+function tomInbox() {
+  return `<div class="empty">${icon('calm', 34)}
+    <p class="empty-title">Inbox is empty</p>
+    <p>Nothing is waiting on you. Type anywhere to capture the next thing.</p></div>`;
+}
+
+/* ----------------------------------------------------- Next Actions */
+
+function sideNext() {
+  const items = state.items;
+  const filtre = state.contexts.map((c) => `
+    <button class="pill${state.filterContext === c.id ? ' on' : ''}" data-ctx="${esc(c.id)}">#${esc(c.name)}</button>`).join('');
+
+  if (!items.length) {
+    return `<section class="page">
+      <div class="page-head"><h1>Next Actions</h1><p class="lead">${esc(BESKRIVELSER.next)}</p></div>
+      ${state.contexts.length ? `<div class="pills">
+        <button class="pill${state.filterContext ? '' : ' on'}" data-ctx="">All</button>${filtre}</div>` : ''}
+      <div class="empty">${icon('calm', 34)}
+        <p class="empty-title">${state.filterContext ? 'Nothing here right now' : 'Nothing to do right now'}</p>
+        <p>${state.filterContext ? 'No next actions in this context.' : 'Clarify something from your inbox, or capture something new.'}</p></div>
+    </section>`;
+  }
+
+  // Grupperet efter kontekst. Et element uden kontekst horer under "No context"
+  // - det skal ikke forsvinde, bare fordi det mangler et felt.
+  const grupper = new Map();
+  for (const it of items) {
+    const noegler = it.contexts.length ? it.contexts.map((c) => c.name) : ['No context'];
+    for (const n of noegler) {
+      if (!grupper.has(n)) grupper.set(n, []);
+      grupper.get(n).push(it);
+    }
+  }
+  const sorteret = [...grupper.entries()].sort((a, b) => {
+    if (a[0] === 'No context') return 1;
+    if (b[0] === 'No context') return -1;
+    return a[0].localeCompare(b[0]);
+  });
+
+  let n = 0;
+  return `<section class="page">
+    <div class="page-head"><h1>Next Actions</h1><p class="lead">${esc(BESKRIVELSER.next)}</p></div>
+    ${state.contexts.length ? `<div class="pills">
+      <button class="pill${state.filterContext ? '' : ' on'}" data-ctx="">All</button>${filtre}</div>` : ''}
+    <div data-keynav>
+      ${sorteret.map(([navn, liste]) => `
+        <h2 class="group meta">${esc(navn)} <span class="group-count">${liste.length}</span></h2>
+        <div class="list">${liste.map((it) => elementRaekke(it, n++)).join('')}</div>`).join('')}
+    </div>
+    <p class="hintline meta">↑↓ move · enter open · space done</p>
+  </section>`;
+}
+
+/* -------------------------------------------------------- elementet */
+
+function elementRaekke(it, i) {
+  const projekt = it.project_id ? state.projects.find((p) => p.id === it.project_id) : null;
+  const meta = [];
+  if (projekt) meta.push(esc(projekt.name));
+  if (it.due_date) meta.push(`${visDato(it.due_date)}${it.due_time ? ` ${it.due_time}` : ''}`);
+  if (it.contexts.length) meta.push(it.contexts.map((c) => `#${esc(c.name)}`).join(' '));
+
+  return `<div class="item-row" tabindex="0" data-id="${esc(it.id)}" data-i="${i}">
+    <button class="tick${it.status === 'done' ? ' on' : ''}" data-done="${esc(it.id)}"
+      aria-label="Mark done" title="Mark done"></button>
+    <div class="item-main">
+      <div class="item-title">${linkify(it.title)}</div>
+      ${meta.length ? `<div class="item-meta meta">${meta.join(' · ')}</div>` : ''}
+    </div>
+    ${it.note ? `<span class="item-flag" title="Has a description">${icon('note', 15)}</span>` : ''}
+  </div>`;
+}
+
+/* ------------------------------------------------------- haendelser */
+
+function bindListe() {
+  document.querySelectorAll('.pill[data-ctx]').forEach((el) => {
+    el.addEventListener('click', () => gaaTil('next', { context: el.dataset.ctx || null }));
+  });
+
+  document.querySelectorAll('.tick[data-done]').forEach((el) => {
+    el.addEventListener('click', (e) => { e.stopPropagation(); fuldfoer(el.dataset.done); });
+  });
+
+  document.querySelectorAll('.item-row').forEach((el) => {
+    el.addEventListener('click', () => {
+      const it = state.items.find((x) => x.id === el.dataset.id);
+      if (it) aabnElement(it);
+    });
+    el.addEventListener('keydown', raekkeTaster);
+  });
+
+  // Behold fokus efter en gentegning, sa tastaturafklaringen ikke starter
+  // forfra ved hvert element.
+  if (sideState.fokusId) {
+    const el = document.querySelector(`.item-row[data-id="${CSS.escape(sideState.fokusId)}"]`);
+    if (el) el.focus();
+    else {
+      const foerste = document.querySelector('.item-row');
+      if (foerste) foerste.focus();
+    }
+    sideState.fokusId = null;
+  }
+}
+
+function naboRaekke(el, retning) {
+  const alle = [...document.querySelectorAll('.item-row')];
+  const i = alle.indexOf(el);
+  return alle[i + retning] || alle[retning > 0 ? 0 : alle.length - 1];
+}
+
+async function raekkeTaster(e) {
+  const el = e.currentTarget;
+  const id = el.dataset.id;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+  if (e.key === 'ArrowDown' || e.key === 'j') { e.preventDefault(); naboRaekke(el, 1).focus(); return; }
+  if (e.key === 'ArrowUp' || e.key === 'k') { e.preventDefault(); naboRaekke(el, -1).focus(); return; }
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const it = state.items.find((x) => x.id === id);
+    if (it) aabnElement(it);
+    return;
+  }
+
+  // Naeste element far fokus, FOER raekken forsvinder ud af listen.
+  const naeste = naboRaekke(el, 1);
+  const husk = () => { sideState.fokusId = naeste && naeste.dataset.id !== id ? naeste.dataset.id : null; };
+
+  if (e.key === ' ') { e.preventDefault(); husk(); await fuldfoer(id); return; }
+  const statusTaster = { n: 'next', w: 'waiting', s: 'someday', q: 'queued' };
+  if (statusTaster[e.key]) {
+    e.preventDefault();
+    husk();
+    await saetStatus(id, statusTaster[e.key]);
+    return;
+  }
+  if (e.key === 'x') {
+    e.preventDefault();
+    husk();
+    await slet(id);
+  }
+}
+
+async function fuldfoer(id) {
+  const it = state.items.find((x) => x.id === id);
+  try {
+    await api('POST', `/api/items/${id}/complete`, {});
+    await genindlaes();
+    toast(`Done: ${it ? it.title : 'item'}`, {
+      label: 'Undo',
+      run: async () => { await api('POST', `/api/items/${id}/uncomplete`, {}); await genindlaes(); },
+    });
+  } catch (ex) { toast(ex.message); }
+}
+
+async function saetStatus(id, status) {
+  try {
+    await api('POST', `/api/items/${id}`, { status });
+    await genindlaes();
+    toast(`Moved to ${statusNavn(status)}`);
+  } catch (ex) { toast(ex.message); }
+}
+
+async function slet(id) {
+  try {
+    await api('DELETE', `/api/items/${id}`, {});
+    await genindlaes();
+    toast('Deleted');
+  } catch (ex) { toast(ex.message); }
+}
+
+/* ------------------------------------------------------ detaljeruden */
+
+function aabnElement(it) {
+  const host = document.createElement('div');
+  host.className = 'modal';
+  host.innerHTML = `
+  <div class="modal-card" role="dialog" aria-modal="true" aria-label="Edit item">
+    <label class="field"><span>Title</span>
+      <input class="input" id="edTitle" value="${esc(it.title)}"></label>
+
+    <label class="field"><span>Description</span>
+      <textarea class="input" id="edNote" rows="5"
+        placeholder="Notes, links, anything. Markdown links work: [text](https://…)">${esc(it.note)}</textarea></label>
+    <div id="edPreview" class="note-preview"${it.note ? '' : ' hidden'}></div>
+
+    <div class="row2">
+      <label class="field"><span>Status</span>
+        <select class="input" id="edStatus">
+          ${['inbox', 'next', 'queued', 'waiting', 'someday', 'done', 'dropped'].map((s) =>
+    `<option value="${s}"${s === it.status ? ' selected' : ''}>${esc(statusNavn(s))}</option>`).join('')}
+        </select></label>
+      <label class="field"><span>Project</span>
+        <select class="input" id="edProject">
+          <option value="">— none —</option>
+          ${state.projects.map((p) =>
+    `<option value="${esc(p.id)}"${p.id === it.project_id ? ' selected' : ''}>${esc(p.name)}</option>`).join('')}
+        </select></label>
+    </div>
+
+    <div class="row2">
+      <label class="field"><span>Due date</span>
+        <input class="input" id="edDue" type="date" value="${esc(it.due_date || '')}"></label>
+      <label class="field"><span>Hidden until</span>
+        <input class="input" id="edDefer" type="date" value="${esc(it.defer_date || '')}"></label>
+    </div>
+
+    <div class="field"><span>Contexts</span>
+      <div class="ctxpick">${state.contexts.length ? state.contexts.map((c) => `
+        <label class="ctxopt"><input type="checkbox" value="${esc(c.id)}"
+          ${it.contexts.some((x) => x.id === c.id) ? 'checked' : ''}>#${esc(c.name)}</label>`).join('')
+    : '<span class="lead">No contexts yet — add one by typing #name when you capture.</span>'}</div>
+    </div>
+
+    <div class="modal-foot">
+      <button class="btn ghost" id="edDelete">Delete</button>
+      <span style="flex:1"></span>
+      <button class="btn" id="edCancel">Cancel</button>
+      <button class="btn primary" id="edSave">Save</button>
+    </div>
+  </div>`;
+
+  document.body.appendChild(host);
+  const luk = () => { host.remove(); document.removeEventListener('keydown', esctast); };
+  const esctast = (e) => { if (e.key === 'Escape') { e.preventDefault(); luk(); } };
+  document.addEventListener('keydown', esctast);
+  host.addEventListener('click', (e) => { if (e.target === host) luk(); });
+
+  const noteEl = host.querySelector('#edNote');
+  const preview = host.querySelector('#edPreview');
+  const tegnPreview = () => {
+    const v = noteEl.value.trim();
+    preview.hidden = !v;
+    preview.innerHTML = v ? linkify(v).replace(/\n/g, '<br>') : '';
+  };
+  noteEl.addEventListener('input', tegnPreview);
+  tegnPreview();
+
+  host.querySelector('#edCancel').addEventListener('click', luk);
+
+  host.querySelector('#edSave').addEventListener('click', async () => {
+    try {
+      await api('POST', `/api/items/${it.id}`, {
+        title: host.querySelector('#edTitle').value,
+        note: noteEl.value,
+        status: host.querySelector('#edStatus').value,
+        project_id: host.querySelector('#edProject').value || null,
+        due_date: host.querySelector('#edDue').value || null,
+        defer_date: host.querySelector('#edDefer').value || null,
+        contexts: [...host.querySelectorAll('.ctxpick input:checked')].map((x) => x.value),
+      });
+      luk();
+      await genindlaes();
+      toast('Saved');
+    } catch (ex) { toast(ex.message); }
+  });
+
+  host.querySelector('#edDelete').addEventListener('click', async () => {
+    luk();
+    await slet(it.id);
+  });
+
+  host.querySelector('#edTitle').focus();
+}
+
+/* ------------------------------------------------------ indstillinger */
+
+function sideSettings() {
+  const tema = nuvaerendeTema();
+  const valg = [['auto', 'Follow system'], ['light', 'Light'], ['dark', 'Dark']];
+  return `<section class="page">
+    <div class="page-head"><h1>Settings</h1><p class="lead">${esc(BESKRIVELSER.settings)}</p></div>
+
+    <div class="card"><h2>Theme</h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+        ${valg.map(([v, l]) => `<button class="btn ${tema === v ? 'primary' : ''}" data-tema="${v}">${l}</button>`).join('')}
+      </div></div>
+
+    <div class="card"><h2>Capture syntax</h2>
+      <table class="syntax">
+        <tr><td><code>+ text</code></td><td>task (also the default)</td></tr>
+        <tr><td><code>* text</code></td><td>note</td></tr>
+        <tr><td><code>#context</code></td><td>add a context</td></tr>
+        <tr><td><code>@project</code></td><td>file under a project — <code>@"two words"</code></td></tr>
+        <tr><td><code>!date</code></td><td><code>!tomorrow</code>, <code>!friday</code>, <code>!3/9</code>, <code>!in 2 weeks</code></td></tr>
+        <tr><td><code>~date</code></td><td>hide until that date</td></tr>
+        <tr><td><code>text // more</code></td><td>everything after <code>//</code> becomes the description</td></tr>
+      </table>
+      <p class="gate-note" style="text-align:left">Danish words work too: <code>!i morgen</code>, <code>!om 2 uger</code>.</p>
+    </div>
+
+    <div class="card"><h2>Change password</h2>
+      <p class="gate-error" id="pwMsg" hidden></p>
+      <form id="pwForm" style="margin-top:12px">
+        <label class="field"><span>Current password</span>
+          <input class="input" id="pwCur" type="password" autocomplete="current-password" required></label>
+        <label class="field"><span>New password (at least 8 characters)</span>
+          <input class="input" id="pwNew" type="password" autocomplete="new-password" required></label>
+        <button class="btn primary" type="submit">Change password</button>
+      </form>
+      <p class="gate-note" style="text-align:left">Every other session is signed out when the password changes.</p>
+    </div>
+
+    <div class="card"><h2>Account</h2>
+      <p class="lead" style="margin:6px 0 14px">Signed in as <strong>${esc(state.user.username)}</strong>.</p>
+      <button class="btn" id="logoutBtn">Sign out</button></div>
+
+    <div class="card"><h2>About</h2>
+      <p class="lead" style="margin-top:6px">doda version ${APP_VERSION}.
+      ${state.config.secureContext ? 'Secure connection (https).' : 'Plain http — passkeys and notifications are unavailable here.'}</p></div>
+  </section>`;
+}
+
+function bindSettings() {
+  document.querySelectorAll('[data-tema]').forEach((el) => {
+    el.addEventListener('click', () => { anvendTema(el.dataset.tema); tegnSide(); });
+  });
+
+  document.getElementById('logoutBtn').addEventListener('click', async () => {
+    await api('POST', '/api/logout', {});
+    state.user = null;
+    render();
+  });
+
+  document.getElementById('pwForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const msg = document.getElementById('pwMsg');
+    msg.hidden = true;
+    try {
+      await api('POST', '/api/password', {
+        current: document.getElementById('pwCur').value,
+        next: document.getElementById('pwNew').value,
+      });
+      toast('Password changed');
+      document.getElementById('pwForm').reset();
+    } catch (ex) { msg.textContent = ex.message; msg.hidden = false; }
+  });
+}

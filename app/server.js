@@ -7,15 +7,28 @@
  * findes der ingen transitiv forsyningskaede at holde patchet. Se DESIGN.md §5.
  */
 
+// Tidszonen SKAL sattes foer den foerste Date bruges - ellers regner
+// containeren i UTC, og "i dag" bliver forkert nogle timer i doegnet.
+// Node laeser process.env.TZ ved foerste brug af Date.
+process.env.TZ = process.env.TZ || 'Europe/Copenhagen';
+
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { DatabaseSync } = require('node:sqlite');
 
+// Samme parser som frontenden bruger. Fangst fra webappen, fra en iOS-genvej
+// og fra MCP skal tolke praecis den samme tekst (handover §5.10).
+const parse = require('./shared/parse.js');
+
 const DATA_DIR = process.env.DATA_DIR || process.cwd();
 const BIND_PORT = Number(process.env.BIND_PORT || process.env.PORT_web || 3000);
 const APP_NAME = process.env.APP_NAME || 'doda';
+// Under udvikling star APP_VERSION stille (det bumpes foerst ved udgivelse),
+// men de statiske filer serveres "immutable" - sa browseren koerer glad den
+// gamle app.js videre. DODA_DEV=1 slar cachen fra.
+const DEV = process.env.DODA_DEV === '1';
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const SESSION_COOKIE = 'doda_session';
 const SESSION_DAYS = 90;
@@ -64,7 +77,64 @@ const MIGRATIONS = [
       CREATE INDEX audit_at ON audit(at DESC);
     `);
   },
+
+  function m2(d) {
+    // Alt der forespoerges eller filtreres far en RIGTIG kolonne med indeks.
+    // Kun bloedt indhold (beskrivelsen) ligger som tekst. Grunden er
+    // RUNE-ERFARINGER §4: lister og endepunkter uden login ma aldrig scanne
+    // hele datasaettet.
+    d.exec(`
+      CREATE TABLE areas (
+        id TEXT PRIMARY KEY, name TEXT NOT NULL, seq INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+      );
+      CREATE TABLE projects (
+        id TEXT PRIMARY KEY, name TEXT NOT NULL, outcome TEXT NOT NULL DEFAULT '',
+        area_id TEXT REFERENCES areas(id) ON DELETE SET NULL,
+        parent_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+        status TEXT NOT NULL DEFAULT 'active',
+        seq INTEGER NOT NULL DEFAULT 0, reviewed_at INTEGER,
+        created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+        deleted INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX projects_status ON projects(status, deleted);
+      CREATE TABLE contexts (
+        id TEXT PRIMARY KEY, name TEXT NOT NULL, seq INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+      );
+      CREATE UNIQUE INDEX contexts_navn ON contexts(lower(name));
+      CREATE TABLE items (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL DEFAULT 'task',
+        status TEXT NOT NULL DEFAULT 'inbox',
+        title TEXT NOT NULL DEFAULT '',
+        note TEXT NOT NULL DEFAULT '',
+        project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+        area_id TEXT REFERENCES areas(id) ON DELETE SET NULL,
+        due_date TEXT, due_time TEXT, defer_date TEXT,
+        waiting_for TEXT NOT NULL DEFAULT '',
+        seq INTEGER NOT NULL DEFAULT 0,
+        recurrence_id TEXT, skipped INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+        completed_at INTEGER, deleted INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX items_status ON items(status, deleted);
+      CREATE INDEX items_projekt ON items(project_id);
+      CREATE INDEX items_aendret ON items(updated_at);
+      CREATE INDEX items_forfald ON items(due_date) WHERE due_date IS NOT NULL;
+      CREATE TABLE item_contexts (
+        item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+        context_id TEXT NOT NULL REFERENCES contexts(id) ON DELETE CASCADE,
+        PRIMARY KEY (item_id, context_id)
+      );
+      CREATE INDEX item_contexts_kontekst ON item_contexts(context_id);
+    `);
+  },
 ];
+
+// Statusser. Raekkefoelgen er ogsaa den, lister sorteres efter.
+const STATUSSER = ['inbox', 'next', 'queued', 'waiting', 'someday', 'done', 'dropped'];
+const AABNE_STATUSSER = ['inbox', 'next', 'queued', 'waiting', 'someday'];
 
 function migrate() {
   const cur = db.prepare('PRAGMA user_version').get().user_version || 0;
@@ -338,12 +408,28 @@ function serveStatic(req, res, urlPath) {
   const ext = path.extname(full).toLowerCase();
   const isHtml = ext === '.html';
   securityHeaders(res);
+
+  // I DEV stemples ?v= med filernes mtime i stedet for APP_VERSION. Ellers
+  // beholder browseren en "immutable" app.js fra foer og spoerger aldrig
+  // serveren igen - saa ser man sine egne aendringer udeblive.
+  if (isHtml && DEV) {
+    let html = fs.readFileSync(full, 'utf8');
+    html = html.replace(/(style\.css|app\.js)\?v=\d+/g, (_, fil) => {
+      let m = 0;
+      try { m = Math.floor(fs.statSync(path.join(PUBLIC, fil)).mtimeMs); } catch { /* ligegyldigt */ }
+      return `${fil}?v=${m}`;
+    });
+    res.writeHead(200, { 'Content-Type': MIME[ext], 'Cache-Control': 'no-store' });
+    res.end(html);
+    return;
+  }
+
   res.writeHead(200, {
     'Content-Type': MIME[ext] || 'application/octet-stream',
     'Content-Length': stat.size,
     // HTML altid frisk: Cloudflare edge-cacher .js/.css i timevis og ignorerer
     // no-cache, saa versionerede URL'er baerer opdateringen (RUNE-ERFARINGER §5).
-    'Cache-Control': isHtml ? 'no-store' : 'public, max-age=31536000, immutable',
+    'Cache-Control': (isHtml || DEV) ? 'no-store' : 'public, max-age=31536000, immutable',
   });
   fs.createReadStream(full).pipe(res);
 }
@@ -362,6 +448,206 @@ function requireUser(req, res) {
 function userCount() {
   return db.prepare('SELECT COUNT(*) AS n FROM users').get().n;
 }
+
+/* ------------------------------------------------------------ elementer */
+
+function iDag() {
+  return parse.fmtDato(new Date());
+}
+
+function hentKontekster() {
+  return db.prepare('SELECT id, name, seq FROM contexts ORDER BY seq, lower(name)').all();
+}
+
+function hentProjekter() {
+  return db.prepare(`
+    SELECT id, name, outcome, area_id, parent_id, status, seq, reviewed_at
+      FROM projects WHERE deleted = 0 ORDER BY seq, lower(name)`).all();
+}
+
+function findKontekst(navn) {
+  return db.prepare('SELECT id, name FROM contexts WHERE lower(name) = lower(?)').get(navn);
+}
+
+function findProjekt(navn) {
+  return db.prepare('SELECT id, name FROM projects WHERE lower(name) = lower(?) AND deleted = 0').get(navn);
+}
+
+function opretKontekst(navn) {
+  const id = newId();
+  const t = now();
+  db.prepare('INSERT INTO contexts (id, name, seq, created_at, updated_at) VALUES (?,?,?,?,?)')
+    .run(id, navn, t, t, t);
+  return { id, name: navn };
+}
+
+function opretProjekt(navn) {
+  const id = newId();
+  const t = now();
+  db.prepare('INSERT INTO projects (id, name, created_at, updated_at) VALUES (?,?,?,?)')
+    .run(id, navn, t, t);
+  return { id, name: navn };
+}
+
+const ITEM_FELTER = `
+  i.id, i.kind, i.status, i.title, i.note, i.project_id, i.area_id,
+  i.due_date, i.due_time, i.defer_date, i.waiting_for, i.seq,
+  i.recurrence_id, i.skipped, i.created_at, i.updated_at, i.completed_at`;
+
+/** Haenger konteksterne pa en raekke elementer i ÉT opslag, ikke ét pr. element. */
+function medKontekster(raekker) {
+  if (!raekker.length) return raekker;
+  const huller = raekker.map(() => '?').join(',');
+  const par = db.prepare(`
+    SELECT ic.item_id, c.id, c.name
+      FROM item_contexts ic JOIN contexts c ON c.id = ic.context_id
+     WHERE ic.item_id IN (${huller})`).all(...raekker.map((r) => r.id));
+  const kort = new Map();
+  for (const p of par) {
+    if (!kort.has(p.item_id)) kort.set(p.item_id, []);
+    kort.get(p.item_id).push({ id: p.id, name: p.name });
+  }
+  for (const r of raekker) r.contexts = kort.get(r.id) || [];
+  return raekker;
+}
+
+function hentItems(filter) {
+  const hvor = ['i.deleted = 0'];
+  const arg = [];
+
+  if (filter.status) {
+    const liste = String(filter.status).split(',').filter((s) => STATUSSER.includes(s));
+    if (!liste.length) return [];
+    hvor.push(`i.status IN (${liste.map(() => '?').join(',')})`);
+    arg.push(...liste);
+  }
+  if (filter.kind) { hvor.push('i.kind = ?'); arg.push(filter.kind); }
+  if (filter.project) { hvor.push('i.project_id = ?'); arg.push(filter.project); }
+  if (filter.skjulUdskudte) {
+    // "Skjul indtil"-datoer i fremtiden ma ikke sta i handlingslisten
+    // (handover §5.3).
+    hvor.push('(i.defer_date IS NULL OR i.defer_date <= ?)');
+    arg.push(iDag());
+  }
+
+  let join = '';
+  if (filter.context) {
+    join = 'JOIN item_contexts ic ON ic.item_id = i.id';
+    hvor.push('ic.context_id = ?');
+    arg.push(filter.context);
+  }
+
+  const raekker = db.prepare(`
+    SELECT ${ITEM_FELTER} FROM items i ${join}
+     WHERE ${hvor.join(' AND ')}
+     ORDER BY ${filter.nyesteFoerst ? 'i.completed_at DESC, i.created_at DESC' : 'i.seq, i.created_at'}
+     LIMIT ?`).all(...arg, Math.min(Number(filter.limit) || 500, 2000));
+
+  return medKontekster(raekker);
+}
+
+function hentItem(id) {
+  const raekke = db.prepare(`SELECT ${ITEM_FELTER} FROM items i WHERE i.id = ? AND i.deleted = 0`).get(id);
+  return raekke ? medKontekster([raekke])[0] : null;
+}
+
+function saetKontekster(itemId, kontekstIder) {
+  db.prepare('DELETE FROM item_contexts WHERE item_id = ?').run(itemId);
+  const ins = db.prepare('INSERT OR IGNORE INTO item_contexts (item_id, context_id) VALUES (?,?)');
+  for (const cid of kontekstIder.slice(0, 20)) ins.run(itemId, cid);
+}
+
+const GRAENSER = { title: 500, note: 20000, waiting_for: 200 };
+
+/** Whitelister og afkorter alle felter. Klienten bestemmer aldrig formen. */
+function renseItem(raa) {
+  const ud = {};
+  if (typeof raa.kind === 'string') ud.kind = raa.kind === 'note' ? 'note' : 'task';
+  if (typeof raa.status === 'string' && STATUSSER.includes(raa.status)) ud.status = raa.status;
+  if (typeof raa.title === 'string') ud.title = raa.title.trim().slice(0, GRAENSER.title);
+  if (typeof raa.note === 'string') ud.note = raa.note.slice(0, GRAENSER.note);
+  if (typeof raa.waiting_for === 'string') ud.waiting_for = raa.waiting_for.trim().slice(0, GRAENSER.waiting_for);
+  for (const felt of ['due_date', 'defer_date']) {
+    if (raa[felt] === null) ud[felt] = null;
+    else if (typeof raa[felt] === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raa[felt])) ud[felt] = raa[felt];
+  }
+  if (raa.due_time === null) ud.due_time = null;
+  else if (typeof raa.due_time === 'string' && /^\d{2}:\d{2}$/.test(raa.due_time)) ud.due_time = raa.due_time;
+  if (raa.project_id === null) ud.project_id = null;
+  else if (typeof raa.project_id === 'string' && findProjektId(raa.project_id)) ud.project_id = raa.project_id;
+  return ud;
+}
+
+function findProjektId(id) {
+  return db.prepare('SELECT 1 FROM projects WHERE id = ? AND deleted = 0').get(id);
+}
+
+function opretItem(felter, kontekstIder) {
+  const id = newId();
+  const t = now();
+  const f = Object.assign({ kind: 'task', status: 'inbox', title: '', note: '' }, felter);
+  db.prepare(`
+    INSERT INTO items (id, kind, status, title, note, project_id, due_date, due_time,
+                       defer_date, waiting_for, seq, created_at, updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(id, f.kind, f.status, f.title, f.note, f.project_id || null,
+      f.due_date || null, f.due_time || null, f.defer_date || null,
+      f.waiting_for || '', t, t, t);
+  if (kontekstIder && kontekstIder.length) saetKontekster(id, kontekstIder);
+  return hentItem(id);
+}
+
+function opdaterItem(id, felter) {
+  const nuvaerende = hentItem(id);
+  if (!nuvaerende) return null;
+  const saet = [];
+  const arg = [];
+  for (const [n, v] of Object.entries(felter)) { saet.push(`${n} = ?`); arg.push(v); }
+  if (!saet.length) return nuvaerende;
+  // Serveren ejer updated_at - klientens vaerdi bruges kun ved bulk-import.
+  saet.push('updated_at = ?');
+  arg.push(now());
+  db.prepare(`UPDATE items SET ${saet.join(', ')} WHERE id = ?`).run(...arg, id);
+  return hentItem(id);
+}
+
+/**
+ * Omsaetter en fangst-tekst til et element.
+ * Ukendte kontekster og projekter kraever bekraeftelse (handover §5.1),
+ * medmindre kalderen udtrykkeligt beder om at oprette dem.
+ */
+function fangst(tekst, opretNye) {
+  const tolket = parse.tolkFangst(tekst);
+  if (!tolket.title && !tolket.note) return { fejl: 'der er ingen tekst at fange' };
+
+  const manglerKontekster = tolket.contexts.filter((n) => !findKontekst(n));
+  const manglerProjekt = tolket.project && !findProjekt(tolket.project) ? tolket.project : null;
+
+  if (!opretNye && (manglerKontekster.length || manglerProjekt)) {
+    return { skalBekraeftes: { contexts: manglerKontekster, project: manglerProjekt }, tolket };
+  }
+
+  const kontekstIder = tolket.contexts.map((n) => (findKontekst(n) || opretKontekst(n)).id);
+  let projektId = null;
+  if (tolket.project) projektId = (findProjekt(tolket.project) || opretProjekt(tolket.project)).id;
+
+  const item = opretItem({
+    kind: tolket.kind,
+    // En note er reference, ikke en handling - den skal aldrig ligge og vente
+    // pa afklaring i inbox (handover §4).
+    status: tolket.kind === 'note' ? 'queued' : 'inbox',
+    title: tolket.title.slice(0, GRAENSER.title),
+    note: tolket.note.slice(0, GRAENSER.note),
+    project_id: projektId,
+    due_date: tolket.due ? tolket.due.dato : null,
+    due_time: tolket.due ? tolket.due.tid : null,
+    defer_date: tolket.defer,
+  }, kontekstIder);
+
+  return { item, tolket };
+}
+
+/* --------------------------------------------------------------- ruter */
 
 const ROUTES = {
   'GET /api/public-config': (req, res) => {
@@ -452,6 +738,114 @@ const ROUTES = {
     sendJson(res, 200, { ok: true });
   },
 
+  /* --- data ------------------------------------------------------- */
+
+  // Ét kald der giver skallen alt, den skal bruge for at tegne sig.
+  'GET /api/state': (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    const tal = db.prepare(`
+      SELECT status, COUNT(*) AS n FROM items
+       WHERE deleted = 0 AND (defer_date IS NULL OR defer_date <= ?)
+       GROUP BY status`).all(iDag());
+    const antal = {};
+    for (const r of tal) antal[r.status] = r.n;
+    sendJson(res, 200, {
+      contexts: hentKontekster(),
+      projects: hentProjekter(),
+      counts: antal,
+      today: iDag(),
+    });
+  },
+
+  'GET /api/items': (req, res, ctx) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    const q = ctx.query;
+    sendJson(res, 200, {
+      items: hentItems({
+        status: q.get('status'),
+        kind: q.get('kind'),
+        project: q.get('project'),
+        context: q.get('context'),
+        limit: q.get('limit'),
+        skjulUdskudte: q.get('hideDeferred') === '1',
+        nyesteFoerst: q.get('newest') === '1',
+      }),
+    });
+  },
+
+  'POST /api/capture': async (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    const body = await readJsonBody(req);
+    const tekst = typeof body.text === 'string' ? body.text : '';
+    const svar = fangst(tekst, body.createNew === true);
+    if (svar.fejl) { sendJson(res, 400, { error: svar.fejl }); return; }
+    sendJson(res, 200, svar.skalBekraeftes
+      ? { needsConfirm: svar.skalBekraeftes, parsed: svar.tolket }
+      : { item: svar.item, parsed: svar.tolket });
+  },
+
+  // Tolkning uden at gemme - bruges til at vise chips, mens der skrives.
+  'POST /api/parse': async (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    const body = await readJsonBody(req);
+    const tolket = parse.tolkFangst(typeof body.text === 'string' ? body.text : '');
+    sendJson(res, 200, {
+      parsed: tolket,
+      unknownContexts: tolket.contexts.filter((n) => !findKontekst(n)),
+      unknownProject: tolket.project && !findProjekt(tolket.project) ? tolket.project : null,
+    });
+  },
+
+  'POST /api/items': async (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    const body = await readJsonBody(req);
+    const felter = renseItem(body);
+    if (!felter.title && !felter.note) { sendJson(res, 400, { error: 'title is required' }); return; }
+    const kontekstIder = Array.isArray(body.contexts)
+      ? body.contexts.filter((id) => typeof id === 'string' && db.prepare('SELECT 1 FROM contexts WHERE id = ?').get(id))
+      : [];
+    sendJson(res, 200, { item: opretItem(felter, kontekstIder) });
+  },
+
+  'GET /api/search': (req, res, ctx) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    const q = String(ctx.query.get('q') || '').trim().slice(0, 200);
+    if (q.length < 1) { sendJson(res, 200, { items: [] }); return; }
+    // LIKE med escapede jokertegn - ellers kan et % i soegningen hente alt.
+    const moenster = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    const raekker = db.prepare(`
+      SELECT ${ITEM_FELTER} FROM items i
+       WHERE i.deleted = 0 AND (i.title LIKE ? ESCAPE '\\' OR i.note LIKE ? ESCAPE '\\')
+       ORDER BY CASE WHEN i.status IN ('done','dropped') THEN 1 ELSE 0 END,
+                i.updated_at DESC
+       LIMIT 40`).all(moenster, moenster);
+    sendJson(res, 200, { items: medKontekster(raekker) });
+  },
+
+  'POST /api/contexts': async (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    const body = await readJsonBody(req);
+    const navn = str(body.name, 60);
+    if (!navn) { sendJson(res, 400, { error: 'name is required' }); return; }
+    sendJson(res, 200, { context: findKontekst(navn) || opretKontekst(navn) });
+  },
+
+  'POST /api/projects': async (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    const body = await readJsonBody(req);
+    const navn = str(body.name, 120);
+    if (!navn) { sendJson(res, 400, { error: 'name is required' }); return; }
+    sendJson(res, 200, { project: findProjekt(navn) || opretProjekt(navn) });
+  },
+
   'GET /api/settings': (req, res) => {
     const user = requireUser(req, res);
     if (!user) return;
@@ -477,12 +871,93 @@ const ROUTES = {
   },
 };
 
+/* Ruter med sti-parametre. Rakkefolgen er den, de proves i. */
+const MOENSTRE = [
+  {
+    metode: 'POST', re: /^\/api\/items\/([\w-]{1,64})$/,
+    async kald(req, res, ctx) {
+      const user = requireUser(req, res);
+      if (!user) return;
+      const body = await readJsonBody(req);
+      const felter = renseItem(body);
+      if (Array.isArray(body.contexts)) {
+        const gyldige = body.contexts.filter((id) => typeof id === 'string'
+          && db.prepare('SELECT 1 FROM contexts WHERE id = ?').get(id));
+        if (!hentItem(ctx.params[0])) { sendJson(res, 404, { error: 'not found' }); return; }
+        saetKontekster(ctx.params[0], gyldige);
+      }
+      const item = opdaterItem(ctx.params[0], felter);
+      if (!item) { sendJson(res, 404, { error: 'not found' }); return; }
+      sendJson(res, 200, { item });
+    },
+  },
+  {
+    metode: 'POST', re: /^\/api\/items\/([\w-]{1,64})\/complete$/,
+    kald(req, res, ctx) {
+      const user = requireUser(req, res);
+      if (!user) return;
+      const item = hentItem(ctx.params[0]);
+      if (!item) { sendJson(res, 404, { error: 'not found' }); return; }
+      // Én fuldfoerelse pr. element. Er den allerede udfoert, er svaret det
+      // samme - sa en genafsendt genvej ikke laver ravage (DESIGN.md §6).
+      if (item.status === 'done') { sendJson(res, 200, { item }); return; }
+      sendJson(res, 200, { item: opdaterItem(item.id, { status: 'done', completed_at: now() }) });
+    },
+  },
+  {
+    metode: 'POST', re: /^\/api\/items\/([\w-]{1,64})\/uncomplete$/,
+    kald(req, res, ctx) {
+      const user = requireUser(req, res);
+      if (!user) return;
+      const item = hentItem(ctx.params[0]);
+      if (!item) { sendJson(res, 404, { error: 'not found' }); return; }
+      sendJson(res, 200, { item: opdaterItem(item.id, { status: 'next', completed_at: null }) });
+    },
+  },
+  {
+    metode: 'GET', re: /^\/api\/items\/([\w-]{1,64})$/,
+    kald(req, res, ctx) {
+      const user = requireUser(req, res);
+      if (!user) return;
+      const item = hentItem(ctx.params[0]);
+      if (!item) { sendJson(res, 404, { error: 'not found' }); return; }
+      sendJson(res, 200, { item });
+    },
+  },
+  {
+    metode: 'DELETE', re: /^\/api\/items\/([\w-]{1,64})$/,
+    async kald(req, res, ctx) {
+      const user = requireUser(req, res);
+      if (!user) return;
+      await readJsonBody(req); // haandhaever JSON-headeren ogsaa pa DELETE
+      // Bloed sletning: intet forsvinder for altid, og logbogen bliver sand.
+      const item = opdaterItem(ctx.params[0], { deleted: 1 });
+      if (!item) { sendJson(res, 404, { error: 'not found' }); return; }
+      sendJson(res, 200, { ok: true });
+    },
+  },
+];
+
+function findRute(metode, sti) {
+  const direkte = ROUTES[`${metode} ${sti}`];
+  if (direkte) return { kald: direkte, params: [] };
+  for (const m of MOENSTRE) {
+    if (m.metode !== metode) continue;
+    const fund = sti.match(m.re);
+    if (fund) return { kald: m.kald, params: fund.slice(1) };
+  }
+  return null;
+}
+
 /* ------------------------------------------------------------ server */
 
 const server = http.createServer(async (req, res) => {
   let urlPath;
+  let query;
   try {
-    urlPath = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
+    const u = new URL(req.url, 'http://localhost');
+    urlPath = decodeURIComponent(u.pathname);
+    query = u.searchParams;
   } catch {
     sendJson(res, 400, { error: 'ugyldig adresse' });
     return;
@@ -491,9 +966,9 @@ const server = http.createServer(async (req, res) => {
   try {
     if (urlPath.startsWith('/api/')) {
       securityHeaders(res);
-      const handler = ROUTES[`${req.method} ${urlPath}`];
-      if (!handler) { sendJson(res, 404, { error: 'ukendt endepunkt' }); return; }
-      await handler(req, res);
+      const rute = findRute(req.method, urlPath);
+      if (!rute) { sendJson(res, 404, { error: 'unknown endpoint' }); return; }
+      await rute.kald(req, res, { query, params: rute.params });
       return;
     }
     if (req.method !== 'GET' && req.method !== 'HEAD') {

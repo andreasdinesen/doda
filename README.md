@@ -9,6 +9,45 @@ og som åbner, så snart du begynder at skrive. Gentagende opgaver bruger Todois
 
 **Ingen npm-pakker. Ingen CDN. Ingen eksterne tjenester.**
 
+> **Sprog:** appens interface er **engelsk**, fordi æ, ø og å er besværlige at taste i
+> et fangstfelt. Datotolkningen forstår begge sprog — `!tomorrow` og `!i morgen` gør
+> det samme.
+
+---
+
+## Sådan bruges den
+
+**Begynd bare at skrive.** Uanset hvilken skærm du er på, åbner kommandobaren, så
+snart du trykker en tast. Tryk `/` for at åbne den tom. Enter opretter; oprettelse
+står altid øverst, så søgning aldrig kommer i vejen for en fangst.
+
+Mens du skriver, viser små chips under feltet, hvordan teksten er blevet forstået.
+
+| Skriv | Betydning |
+|---|---|
+| `ring til lægen` | opgave i Inbox |
+| `* kontonummer 1234` | note |
+| `#telefon` | kontekst (nye skal bekræftes med et ekstra Enter) |
+| `@Sundhed` · `@"Sommerhus i Rørvig"` | projekt |
+| `!tomorrow` `!friday` `!3/9` `!in 2 weeks` `!sep 3 at 9` | deadline |
+| `~in 2 months` | skjul indtil den dato |
+| `køb dæk // se https://dæk.dk og husk rabatkoden` | alt efter ` // ` bliver beskrivelsen |
+
+Links i både titel og beskrivelse bliver klikbare — også `[tekst](url)`.
+
+### Tastatur
+
+I Inbox og Næste handlinger kan alt klares uden mus:
+
+| Tast | Handling |
+|---|---|
+| `↑` `↓` (eller `k` `j`) | flyt mellem elementer |
+| `Enter` | åbn elementet |
+| `mellemrum` | markér udført |
+| `n` `w` `s` `q` | Next · Waiting for · Someday · Queued |
+| `x` | slet |
+| `/` | tilbage til kommandobaren |
+
 ---
 
 ## Installation
@@ -103,9 +142,20 @@ Ud over panelets backup kan alt eksporteres i et åbent format inde i appen
 ## Udvikling
 
 ```bash
-BIND_PORT=8910 DATA_DIR=/tmp/dodadata node app/server.js
-python3 build_rune.py
+DODA_DEV=1 BIND_PORT=8910 DATA_DIR=/tmp/dodadata node app/server.js
 ```
+
+```bash
+python3 build_rune.py && node --test tests/parse.test.mjs
+```
+
+`DODA_DEV=1` slår asset-cachen fra og stempler `?v=` med filernes mtime. Uden den
+serveres `app.js` som `immutable`, og browseren kører glad den gamle kode videre,
+fordi `APP_VERSION` med vilje står stille mellem udgivelser.
+
+`app/shared/parse.js` køres **både** af serveren og af browseren — det er samme
+parser, der tolker webfangst, iOS-genveje og senere MCP. Rettes den, gælder det
+alle veje ind i appen.
 
 `runes/doda.yaml` og `app/public/app.js` er **genererede artefakter** — redigér dem
 aldrig i hånden. Ret kilderne i `app/` og kør build-scriptet.

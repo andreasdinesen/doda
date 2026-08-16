@@ -13,25 +13,35 @@
 
 | | |
 |---|---|
-| **Fase** | F0 · Fundament — **færdig og testet lokalt** |
-| **Næste** | F1 · Fangst + Inbox + Næste handlinger |
-| **Tilstand** | Ikke committet. Venter på Andreas' ja. |
-| **Udgivet version** | — (intet push endnu; `APP_VERSION = 1` er ubrugt) |
+| **Fase** | F1 · Fangst + Inbox + Næste — **færdig og testet lokalt** |
+| **Næste** | F2 · API + adgangsnøgler + iOS Shortcuts |
+| **Tilstand** | F0 pushet. F1 ikke committet — venter på Andreas' ja. |
+| **Udgivet version** | — (`APP_VERSION = 1` er stadig ubrugt; bumpes først ved reel udgivelse) |
 | **Sidst opdateret** | 2026-08-16 |
 
-**Verificeret i F0:** rune bygger (install-script 14 % af pladsen) · login og
-førstegangsopsætning · registrering lukket efter første bruger (403) · CSRF-barriere
-(415) · rate-limit slår til efter 15 forsøg (429) · sti-traversering afvist ·
-sikkerhedslinjer matcher runens `events:`-regexer · CSP-hash beregnet korrekt, ingen
-konsolfejl · alle tre temavalg målt på en mørk maskine · mobil 375 px uden vandret
-overløb, sidebar som overlay.
+**Sprog:** interfacet er **engelsk** (Andreas' valg — æøå er besværligt at taste).
+Parseren er tosproget: engelsk primært, dansk virker fortsat. Kode, kommentarer og
+disse dokumenter er dansk.
+
+**Verificeret i F0:** rune bygger · login og førstegangsopsætning · registrering lukket
+efter første bruger (403) · CSRF-barriere (415) · rate-limit efter 15 forsøg (429) ·
+sti-traversering afvist · sikkerhedslinjer matcher runens `events:`-regexer · CSP-hash
+korrekt · alle tre temavalg målt på en mørk maskine · mobil 375 px uden vandret overløb.
+
+**Verificeret i F1:** 32 parser-tests grønne på begge sprog · fangst med kontekst,
+projekt, dato, klokkeslæt og beskrivelse i ét felt · bekræftelse af nye navne · `#`/`@`
+rører ikke e-mails og URL'er · **8 XSS-angreb mod linkifiseringen afvist** (ingen
+script-tags, ingen `on*`-attributter, `javascript:`/`data:` forbliver ren tekst) ·
+tastaturafklaring (`n`/`w`/`s`/`x`/mellemrum) uden at fangstfeltet opsnapper tasterne ·
+`~skjul indtil` holder opgaver ude af næste-listen · søgning dækker beskrivelser og
+escaper LIKE-jokertegn · fortryd på både fangst og fuldførelse · mobil uden overløb.
 
 ### Faseoversigt
 
 | # | Fase | Leverance | Status |
 |---|---|---|---|
 | **F0** | Fundament | Rune installerer, login virker, tom app-skal med tingdo-design | ✅ Færdig |
-| **F1** | Fangst + Inbox + Næste | **Appen kan bruges dagligt.** Datamodel, parser, kommandobar, afklaring | ⬜ |
+| **F1** | Fangst + Inbox + Næste | **Appen kan bruges dagligt.** Datamodel, parser, kommandobar, afklaring | ✅ Færdig |
 | **F2** | API + adgangsnøgler + Shortcuts | iPhone/Siri kan fange og læse. Handover: *prioritér højt* | ⬜ |
 | **F3** | Projekter, områder, kontekster, noter | Fuld GTD-struktur, markdown-noter | ⬜ |
 | **F4** | Gentagelser | Todoist-syntaks med `!`, to tilstande, gentagelses-skærm | ⬜ |
@@ -62,14 +72,14 @@ det færdige tingdo-design. Ingen opgavefunktioner endnu.
 
 **Mål:** Den kan bruges. Handover §5.1–5.3.
 
-- [ ] Datamodel: `items` (typede kolonner + JSON-blob), `contexts`, `item_contexts`, `projects`, `areas`
-- [ ] Parser: `+` `*` `#` `@` `!` `~` + dansk dato-NLP (se DESIGN.md for omfang)
-- [ ] Kommandobar: »begynd bare at skrive« åbner den, søg og opret side om side, live-preview-chips
-- [ ] **Beskrivelsesfelt på opgaver** — flerlinjet, markdown, med klikbare links
-- [ ] **Links i selve opgavetitlen** — rå URL'er og `[tekst](url)` bliver klikbare i listerne, uden at titlen fylder. Links åbnes med `rel="noopener noreferrer"`, og kun `http(s):` tillades (aldrig `javascript:`)
-- [ ] Inbox med tastaturafklaring (ét element ad gangen, uden mus)
-- [ ] Næste handlinger grupperet efter kontekst, ét-tast-filter, markér udført fra listen
-- [ ] Tom inbox = roligt, bekræftende — aldrig rød tæller
+- [x] Datamodel: `items` (typede kolonner + JSON-blob), `contexts`, `item_contexts`, `projects`, `areas`
+- [x] Parser: `+` `*` `#` `@` `!` `~` + dansk dato-NLP (se DESIGN.md for omfang)
+- [x] Kommandobar: »begynd bare at skrive« åbner den, søg og opret side om side, live-preview-chips
+- [x] **Beskrivelsesfelt på opgaver** — flerlinjet, markdown, med klikbare links
+- [x] **Links i selve opgavetitlen** — rå URL'er og `[tekst](url)` bliver klikbare i listerne, uden at titlen fylder. Links åbnes med `rel="noopener noreferrer"`, og kun `http(s):` tillades (aldrig `javascript:`)
+- [x] Inbox med tastaturafklaring (ét element ad gangen, uden mus)
+- [x] Næste handlinger grupperet efter kontekst, ét-tast-filter, markér udført fra listen
+- [x] Tom inbox = roligt, bekræftende — aldrig rød tæller
 
 ## F2 · API + adgangsnøgler + iOS Shortcuts
 
@@ -128,7 +138,9 @@ det færdige tingdo-design. Ingen opgavefunktioner endnu.
 ## F8 · Kalenderfeed, eksport/import, backup
 
 - [ ] iCal-feed med **kun reelle deadlines**, hemmelig og tilbagekaldelig adresse, indekseret opslag (aldrig fuld scanning)
-- [ ] Fuld eksport + import i åbent format, rundtur verificeret
+- [ ] Fuld eksport + import i åbent format (JSON), rundtur verificeret: eksportér alt → slet databasen → importér → samme system tilbage
+- [ ] **Eksport og import skal virke begge veje: både fra UI'et og via API'et** — `GET /api/v1/export` (hele datasættet i ét svar) og `POST /api/v1/import`. Så kan en iOS-genvej, et script eller MCP tage en kopi uden at åbne browseren
+- [ ] Import skal være idempotent på id, så samme fil kan køres to gange uden dubletter, og skal kunne køre i portioner (Kokkeris 260 MB-backup blev afvist af serverens egen body-grænse)
 - [ ] Backup/gendan dokumenteret **og testet** — også på en stor database
 - [ ] Valgfri tingdo-import som separat trin
 

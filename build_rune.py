@@ -29,6 +29,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 APP = os.path.join(ROOT, 'app')
 PARTS = os.path.join(APP, 'parts')
 PUBLIC = os.path.join(APP, 'public')
+SHARED = os.path.join(APP, 'shared')
 OUT = os.path.join(ROOT, 'runes', 'doda.yaml')
 
 # Install-scriptet koeres som ET sh -c-argument -> Linux' MAX_ARG_STRLEN (131072 b)
@@ -63,6 +64,13 @@ def saml_frontend():
     if not navne:
         fejl('ingen dele i app/parts/')
     stykker = []
+
+    # De delte moduler foerst. De er UMD-pakkede, sa serveren kan require dem
+    # og browseren far dem pa window - ÉN parser, to koersteder.
+    for navn in sorted(f for f in os.listdir(SHARED) if f.endswith('.js')):
+        with open(os.path.join(SHARED, navn), encoding='utf8') as fh:
+            stykker.append(f'/* ---- shared/{navn} ---- */\n{fh.read()}')
+
     for navn in navne:
         with open(os.path.join(PARTS, navn), encoding='utf8') as fh:
             stykker.append(f'/* ---- {navn} ---- */\n{fh.read()}')
@@ -101,6 +109,9 @@ def stempl_version(version):
 
 def indsaml_filer():
     filer = [('app/server.js', os.path.join(APP, 'server.js'))]
+    for navn in sorted(os.listdir(SHARED)):
+        if navn.endswith('.js'):
+            filer.append((f'app/shared/{navn}', os.path.join(SHARED, navn)))
     for navn in sorted(os.listdir(PUBLIC)):
         sti = os.path.join(PUBLIC, navn)
         if os.path.isfile(sti) and not navn.startswith('.'):

@@ -59,6 +59,19 @@ Bemærk: RUNE-ERFARINGER §4 siger »design efter Yggdrasil Panel« (mørk, køl
   `#hjem` `@Køkken` `⏰ fre 21/8` `↻ hver mandag · fast plan`.
   Det er dem, der gør gentagelsestilstanden »tydelig for brugeren«.
 
+## 2b · Sprog
+
+**Interfacet er engelsk.** Andreas' valg undervejs i F1: æ, ø og å er besværlige at
+taste i et felt, man bruger hundrede gange om dagen.
+
+**Parseren er tosproget.** Engelsk er det primære (`!tomorrow`, `!next friday`,
+`!every monday`), men de danske ord virker uændret (`!i morgen`, `!om 2 uger`,
+`!hver mandag`). Det koster kun ekstra opslag i tabellerne og fjerner risikoen for,
+at en indgroet vane pludselig fejler.
+
+**Kode, kommentarer, README, PLAN og DESIGN er dansk.** Kun det, Andreas ser i appen,
+er engelsk. Datoformatet i UI'et er `en-GB` (24-timers, dag før måned) — ikke `en-US`.
+
 ## 3 · Genvejssyntaks
 
 | Tegn | Betydning | Eksempel |

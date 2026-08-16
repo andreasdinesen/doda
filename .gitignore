@@ -3,4 +3,4 @@ node_modules/
 *.db
 *.db-wal
 *.db-shm
-/tests/
+# tests/ er med i repoet - parser-testene er for vaerdifulde til at ligge lokalt

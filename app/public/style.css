@@ -229,6 +229,181 @@ h2 { font-size: 20px; font-weight: 650; letter-spacing: -.01em; margin: 0 0 8px;
 
 .chip.neutral { background: var(--card); color: var(--muted); border: 1px solid var(--border); }
 
+/* ------------------------------------------------- kommandobar-panel */
+
+.omni-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--card);
+  box-shadow: var(--shadow-lift);
+  max-height: 52vh;
+  overflow-y: auto;
+}
+
+.omni-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.omni-row[aria-selected="true"] { background: var(--accent-soft); color: var(--accent-text); }
+.omni-row svg { flex: none; opacity: .7; }
+.omni-row.dim .omni-row-title { text-decoration: line-through; opacity: .6; }
+.omni-row.confirm svg { color: var(--accent); opacity: 1; }
+.omni-row-main { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.omni-row-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.omni-row-sub { font-size: 12px; color: var(--muted); }
+.omni-row[aria-selected="true"] .omni-row-sub { color: var(--accent-text); opacity: .8; }
+
+/* --------------------------------------------------------- listerne */
+
+.pills { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 20px; }
+
+.pill {
+  padding: 5px 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--pill);
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pill:hover { background: var(--card); color: var(--text); }
+.pill.on { background: var(--accent-soft); border-color: transparent; color: var(--accent-text); }
+
+h2.group {
+  margin: 26px 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.group-count { color: var(--muted); opacity: .65; font-weight: 500; }
+
+.list { display: flex; flex-direction: column; gap: 2px; }
+
+.item-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  padding: 12px 14px;
+  border-radius: var(--r);
+  cursor: pointer;
+  outline: none;
+}
+
+.item-row:hover { background: var(--card); }
+.item-row:focus-visible,
+.item-row:focus { background: var(--card); box-shadow: inset 0 0 0 2px var(--accent); }
+
+.tick {
+  flex: none;
+  width: 19px;
+  height: 19px;
+  margin-top: 2px;
+  border: 1.6px solid var(--border);
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+.tick:hover { border-color: var(--accent); }
+.tick.on { background: var(--accent); border-color: var(--accent); }
+
+.item-main { min-width: 0; flex: 1; }
+.item-title { font-size: 16px; line-height: 1.35; }
+.item-meta { margin-top: 3px; text-transform: none; letter-spacing: 0; font-size: 12.5px; font-weight: 500; }
+.item-flag { flex: none; color: var(--muted); opacity: .6; margin-top: 2px; }
+
+.hintline { margin-top: 24px; text-transform: none; letter-spacing: 0; font-size: 12px; opacity: .7; }
+.skeleton { padding: 40px 0; color: var(--muted); }
+
+a { color: var(--accent-text); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { text-decoration-thickness: 2px; }
+
+/* ---------------------------------------------------------- modal */
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(20, 15, 8, .38);
+  overflow-y: auto;
+}
+
+.modal-card {
+  width: 100%;
+  max-width: 560px;
+  padding: 26px;
+  border-radius: var(--r-lg);
+  background: var(--card);
+  box-shadow: var(--shadow-lift);
+}
+
+.modal-foot { display: flex; align-items: center; gap: 8px; margin-top: 20px; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+textarea.input { resize: vertical; min-height: 90px; font-family: inherit; }
+
+.note-preview {
+  margin: -6px 0 14px;
+  padding: 11px 14px;
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.ctxpick { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.ctxopt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--pill);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* appearance:none i design-systemet fjerner bade fluebenet og select-pilen.
+   Uden denne kan man ikke se, om et flueben er sat (RUNE-ERFARINGER, Tilmeld). */
+.ctxopt input[type="checkbox"] { appearance: auto; -webkit-appearance: checkbox; margin: 0; }
+.ctxopt:has(input:checked) { background: var(--accent-soft); border-color: transparent; color: var(--accent-text); }
+
+.syntax { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
+.syntax td { padding: 6px 0; vertical-align: top; }
+.syntax td:first-child { width: 42%; padding-right: 12px; }
+.syntax code {
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--bg);
+  font-size: 12.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 /* -------------------------------------------------------------- kort */
 
 .card {
@@ -302,6 +477,9 @@ h2 { font-size: 20px; font-weight: 650; letter-spacing: -.01em; margin: 0 0 8px;
 .toasts { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; z-index: 60; }
 
 .toast {
+  display: flex;
+  align-items: center;
+  gap: 14px;
   padding: 11px 18px;
   border-radius: var(--pill);
   background: var(--text);
@@ -309,6 +487,16 @@ h2 { font-size: 20px; font-weight: 650; letter-spacing: -.01em; margin: 0 0 8px;
   font-size: 14px;
   font-weight: 500;
   box-shadow: var(--shadow-lift);
+}
+
+.toast-action {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0;
 }
 
 /* Nederste hoejre hjoerne: "tryk en tast for at fange" (tingdos signatur). */
