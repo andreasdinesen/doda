@@ -69,6 +69,28 @@ Gentagelser kan sættes på **pause** (reglen bevares) og **springes over** enke
 Ændrer du titel eller projekt på en forekomst, spørger appen, om det gælder kun
 denne gang eller alle fremtidige.
 
+### Ugentlig gennemgang
+
+**Review** fører dig gennem seks trin: tøm inbox, gennemgå aktive projekter,
+Venter på, Engang måske, gentagelser der springes over, og ugens logbog.
+
+Du kan stoppe midtvejs — trinnet ligger på serveren, så du kan fortsætte fra
+samme sted senere, også fra en anden enhed. Du kan vælge en ugedag, hvor doda
+minder dig om det. Det er sammen med reelle deadlines det eneste, appen
+nogensinde siger noget om.
+
+**Logbook** viser hvad du har lavet, dag for dag, med filter på projekt. Ingen
+tal, ingen grafer, ingen produktivitetsscore — formålet er tilfredsstillelse og
+overblik, ikke måling.
+
+### Fokus
+
+Åbn en opgave og tryk **Focus**. Alt andet træder i baggrunden, og en timer
+begynder at tælle. Den kører videre, mens du skifter skærm — og overlever, at
+du lukker og genåbner appen, fordi det er starttidspunktet der huskes.
+
+Ingen tidsregistrering, ingen rapport. Timeren er der kun, hvis du vil se den.
+
 ### Billeder og filer
 
 Åbn en opgave eller note og træk filer ind — eller tryk **Add images or files**.

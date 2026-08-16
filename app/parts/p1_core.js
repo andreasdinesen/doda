@@ -21,6 +21,8 @@ const state = {
   projects: [],
   areas: [],
   openProject: null,
+  logProject: null,
+  review: null,
   counts: {},
   today: '',
   filterContext: null,
@@ -153,13 +155,13 @@ function icon(name, size = 18) {
 const VIEWS = [
   { id: 'next', label: 'Next Actions', icon: 'next', group: 1 },
   { id: 'inbox', label: 'Inbox', icon: 'inbox', group: 1, tael: 'inbox' },
-  { id: 'waiting', label: 'Waiting For', icon: 'waiting', group: 2, fase: 'F8' },
-  { id: 'someday', label: 'Someday', icon: 'someday', group: 2, fase: 'F8' },
+  { id: 'waiting', label: 'Waiting For', icon: 'waiting', group: 2 },
+  { id: 'someday', label: 'Someday', icon: 'someday', group: 2 },
   { id: 'repeat', label: 'Recurring', icon: 'repeat', group: 2 },
   { id: 'projects', label: 'Projects', icon: 'projects', group: 3 },
   { id: 'contexts', label: 'Contexts', icon: 'contexts', group: 3 },
-  { id: 'log', label: 'Logbook', icon: 'log', group: 4, fase: 'F8' },
-  { id: 'review', label: 'Review', icon: 'review', group: 4, fase: 'F8' },
+  { id: 'log', label: 'Logbook', icon: 'log', group: 4 },
+  { id: 'review', label: 'Review', icon: 'review', group: 4 },
   { id: 'settings', label: 'Settings', icon: 'settings', group: 5 },
 ];
 
@@ -360,4 +362,5 @@ async function hentState() {
   render();
   registrerSW();
   lytPaaForbindelse();
+  gendanFokus();
 })();

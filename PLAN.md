@@ -13,9 +13,9 @@
 
 | | |
 |---|---|
-| **Fase** | F7 · Vedhæftninger — **færdig og testet lokalt** |
-| **Næste** | F8 · Gennemgang, logbog, ventelister, fokus |
-| **Tilstand** | F0–F6 pushet. F7 ikke committet — venter på Andreas' ja. |
+| **Fase** | F8 · Gennemgang, logbog, ventelister, fokus — **færdig og testet lokalt** |
+| **Næste** | F9 · Kalenderfeed, eksport/import, backup |
+| **Tilstand** | F0–F7 pushet. F8 ikke committet — venter på Andreas' ja. |
 | **Udgivet version** | — (`APP_VERSION = 1` er stadig ubrugt; bumpes først ved reel udgivelse) |
 | **Sidst opdateret** | 2026-08-16 |
 
@@ -102,6 +102,17 @@ for stor fil svarer 413 **før** forbindelsen lukkes · `files/` er med i runens
 ⚠️ Install-scriptet er nu på **78 %**. F8–F10 skal holde øje; ellers flyttes ikonerne
 ud af payloaden og tegnes af serveren ved opstart.
 
+**Verificeret i F8:** alle seks gennemgangstrin viser det rigtige indhold · gennemgangen
+kan afbrydes og **genoptages fra samme trin** (trinnet ligger på serveren, så det virker
+på tværs af enheder) · Venter på viser og gemmer *hvem* · logbogen grupperer pr. dag med
+projektfilter og **uden et eneste tal, en graf eller en score** (handover §10) ·
+fokustimeren overlever både skærmskift og en **fuld sideindlæsning**, fordi det er
+starttidspunktet der gemmes, ikke en tæller · alle **ti** skærme målt på 375 px uden
+vandret overløb.
+
+⚠️ Install-scriptet er nu på **83 %**. F9 er den sidste fase med reel kode; bliver det
+trangt, flyttes ikonerne ud af payloaden.
+
 ### Faseoversigt
 
 | # | Fase | Leverance | Status |
@@ -114,7 +125,7 @@ ud af payloaden og tegnes af serveren ved opstart.
 | **F5** | MCP-server | Claude kan forbinde til appen | ✅ Færdig |
 | **F6** | PWA + offline | Hjemmeskærm, offline-læsning, fangst-kø | ✅ Færdig |
 | **F7** | Vedhæftninger | Billeder og filer på opgaver og noter | ✅ Færdig |
-| **F8** | Gennemgang, logbog, ventelister, fokus | Ugentlig gennemgang, Venter på, Engang måske, timer | ⬜ |
+| **F8** | Gennemgang, logbog, ventelister, fokus | Ugentlig gennemgang, Venter på, Engang måske, timer | ✅ Færdig |
 | **F9** | Kalenderfeed, eksport/import, backup | Data ind og ud, verificeret gendannelse | ⬜ |
 | **F10** | Sikkerhedsgennemgang + udgivelse | Hærdning, README, v1 | ⬜ |
 
@@ -218,11 +229,12 @@ billeder inde i de items, listen henter, gav et login-svar på 247,9 MB.
 
 ## F8 · Gennemgang, logbog, ventelister, fokus
 
-- [ ] Guidet ugentlig gennemgang i 6 trin, kan afbrydes og genoptages
-- [ ] Diskret påmindelse på valgt ugedag
-- [ ] Logbog (kronologisk, filtrerbar, ingen statistik)
-- [ ] Venter på (med hvem) · Engang måske
-- [ ] Fokustilstand med timer, der kører videre på tværs af skærme
+- [x] Guidet ugentlig gennemgang i 6 trin, kan afbrydes og genoptages
+- [x] Diskret påmindelse på valgt ugedag — ugedagen kan vælges og gemmes; **selve
+      afsendelsen bygges i F10**, hvor notifikationsvejen afklares (handover §5.12)
+- [x] Logbog (kronologisk, filtrerbar, ingen statistik)
+- [x] Venter på (med hvem) · Engang måske
+- [x] Fokustilstand med timer, der kører videre på tværs af skærme
 
 ## F9 · Kalenderfeed, eksport/import, backup
 

@@ -1429,6 +1429,78 @@ const ROUTES = {
     sendJson(res, 200, { projects: hentProjekter() });
   },
 
+  /* Logbogen: kronologisk, filtrerbar - og med vilje UDEN statistik.
+     Formalet er tilfredsstillelse og overblik ved den ugentlige gennemgang,
+     ikke en produktivitetsscore (handover §5.8 + §10). */
+  'GET /api/v1/logbook': (req, res, ctx) => {
+    const auth = godkend(req, res, 'read');
+    if (!auth) return;
+    const hvor = ["i.deleted = 0", "i.status IN ('done','dropped')", 'i.completed_at IS NOT NULL'];
+    const arg = [];
+    const siden = Number(ctx.query.get('since'));
+    if (Number.isFinite(siden) && siden > 0) { hvor.push('i.completed_at >= ?'); arg.push(siden); }
+    const projekt = ctx.query.get('project');
+    if (projekt) { hvor.push('i.project_id = ?'); arg.push(projekt); }
+    const raekker = db.prepare(`
+      SELECT ${ITEM_FELTER} FROM items i
+       WHERE ${hvor.join(' AND ')}
+       ORDER BY i.completed_at DESC
+       LIMIT ?`).all(...arg, Math.min(Number(ctx.query.get('limit')) || 200, 1000));
+    sendJson(res, 200, { items: medVedhaeftningsantal(medKontekster(raekker)) });
+  },
+
+  /* Alt den ugentlige gennemgang skal bruge, i ÉT kald. Trinene skal kunne
+     bladres igennem uden at vente pa serveren hver gang. */
+  'GET /api/v1/review': (req, res) => {
+    const auth = godkend(req, res, 'read');
+    if (!auth) return;
+    rulFrem();
+    const uge = now() - 7 * 86400;
+    const projekter = hentProjekter().filter((p) => p.status === 'active');
+    sendJson(res, 200, {
+      step: Number(getSetting('review_step', '0')) || 0,
+      startedAt: Number(getSetting('review_started', '0')) || 0,
+      lastDone: Number(getSetting('review_done', '0')) || 0,
+      weekday: Number(getSetting('review_weekday', '0')) || 0,
+      inbox: hentItems({ status: 'inbox' }),
+      // Netop de projekter, der er den klassiske GTD-fejl.
+      stalled: projekter.filter((p) => !p.next_count && p.open_count > 0),
+      projects: projekter,
+      waiting: hentItems({ status: 'waiting' }),
+      someday: hentItems({ status: 'someday' }),
+      // Gentagelser der springes over gang pa gang - det er her man opdager,
+      // at en vane ikke virker.
+      skipped: hentGentagelser().filter((r) => r.skips > 0).sort((a, b) => b.skips - a.skips),
+      done: hentItems({ status: 'done', nyesteFoerst: true, limit: 200 })
+        .filter((i) => i.completed_at && i.completed_at >= uge),
+    });
+  },
+
+  'POST /api/v1/review': async (req, res) => {
+    const auth = godkend(req, res, 'write');
+    if (!auth) return;
+    const body = await readJsonBody(req, auth.viaToken);
+    if (body.action === 'start') {
+      setSetting('review_step', '1');
+      setSetting('review_started', String(now()));
+    } else if (body.action === 'finish') {
+      setSetting('review_step', '0');
+      setSetting('review_done', String(now()));
+      // Hvert projekt husker, hvornaar det sidst blev gennemgaet (§5.7).
+      db.prepare("UPDATE projects SET reviewed_at = ? WHERE deleted = 0 AND status = 'active'").run(now());
+    } else if (body.action === 'abandon') {
+      setSetting('review_step', '0');
+    } else if (Number.isFinite(Number(body.step))) {
+      // Gennemgangen skal kunne afbrydes og genoptages fra SAMME sted, ogsaa
+      // hvis browseren lukkes - derfor ligger trinnet pa serveren.
+      setSetting('review_step', String(Math.max(0, Math.min(6, Number(body.step)))));
+    }
+    sendJson(res, 200, {
+      step: Number(getSetting('review_step', '0')) || 0,
+      lastDone: Number(getSetting('review_done', '0')) || 0,
+    });
+  },
+
   'GET /api/v1/recurrences': (req, res) => {
     const auth = godkend(req, res, 'read');
     if (!auth) return;
@@ -1551,7 +1623,7 @@ const ROUTES = {
     if (!user) return;
     const body = await readJsonBody(req);
     // Whitelist - aldrig blind gennemskrivning af klientens noegler.
-    const ALLOWED = new Set(['theme', 'review_weekday']);
+    const ALLOWED = new Set(['theme', 'review_weekday', 'focus_item', 'focus_started']);
     const written = {};
     for (const [key, value] of Object.entries(body.settings || {})) {
       if (!ALLOWED.has(key)) continue;

@@ -13,6 +13,10 @@ async function tegnSide() {
   if (view.id === 'settings') { host.innerHTML = sideSettings(); bindSettings(); return; }
   if (view.id === 'contexts') { host.innerHTML = sideContexts(); bindContexts(); return; }
   if (view.id === 'repeat') { await sideRepeat(); return; }
+  if (view.id === 'waiting') { await sideStatusliste('waiting', 'Waiting For'); return; }
+  if (view.id === 'someday') { await sideStatusliste('someday', 'Someday'); return; }
+  if (view.id === 'log') { await sideLog(); return; }
+  if (view.id === 'review') { await sideReview(); return; }
   if (view.id === 'projects') {
     if (state.openProject) { await sideProjekt(state.openProject); return; }
     host.innerHTML = await sideProjects();
@@ -306,6 +310,7 @@ async function aabnElement(listeItem) {
     <div class="modal-foot">
       <button class="btn ghost" id="edDelete">Delete</button>
       <button class="btn ghost" id="edConvert">${it.kind === 'note' ? 'Make it a task' : 'Make it a note'}</button>
+      ${it.kind === 'task' && it.status !== 'done' ? '<button class="btn ghost" id="edFocus">Focus</button>' : ''}
       <span style="flex:1"></span>
       <button class="btn" id="edCancel">Cancel</button>
       <button class="btn primary" id="edSave">Save</button>
@@ -390,6 +395,9 @@ async function aabnElement(listeItem) {
     await genindlaes();
   };
   bindVedhaeftninger(host, it, genhentFiler);
+
+  const fokusKnap = host.querySelector('#edFocus');
+  if (fokusKnap) fokusKnap.addEventListener('click', () => { luk(); startFokus(it); });
 
   host.querySelector('#edTitle').focus();
 }
