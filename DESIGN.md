@@ -59,6 +59,42 @@ Bemærk: RUNE-ERFARINGER §4 siger »design efter Yggdrasil Panel« (mørk, køl
   `#hjem` `@Køkken` `⏰ fre 21/8` `↻ hver mandag · fast plan`.
   Det er dem, der gør gentagelsestilstanden »tydelig for brugeren«.
 
+### Skallen (v7)
+
+- **Sidebaren kan foldes helt væk** til en hamburger, som i tingdo. Skjult
+  ligger den som et **overlay** over indholdet i stedet for at skubbe det —
+  ellers hopper hele siden, hver gang man kigger i menuen. Nålen i sidebarens
+  top slår det til og fra, og valget huskes i `localStorage`.
+- **Sideoversigt i højre side**, Notion-agtig: én streg pr. `h2` på siden, som
+  folder sig ud med teksten på hover og markerer det afsnit, man er i. Den bor
+  i `<body>`, ikke i `#pageHost` — alt derinde skiftes ud ved hver optegning.
+  Vises kun ved to afsnit eller flere, og aldrig under mobilgrænsen.
+  **Gribefladen er større end stregerne**: uden en usynlig venstre-margen er
+  hvert mål kun ~24×10 px, og man skal ramme præcist for at folde ud.
+- **Versionsnummeret står altid nederst i sidebaren.** Serveren melder sit eget
+  tal i `/api/public-config`; er de forskellige, kører browseren en gammel
+  `app.js` fra cachen, og linjen bliver til en »reload«-knap, der rydder
+  service workerens cache først.
+- **Tema skiftes med ét klik** ved siden af versionen. Knappen viser det tema,
+  man skifter *til*. Alle tre valg (inkl. »Follow system«) bliver i Settings.
+- **Log ud hører hjemme i en menu på brugerknappen**, ikke kun i Settings.
+
+### Tastaturet ind i listerne
+
+`↑`/`↓` går **ind** i listen uden at åbne noget. Før kunne fokus kun komme fra
+et klik, og et klik åbner opgaven — så genvejstasterne (`n`, `w`, `s`, `x`) var
+i praksis uopnåelige. `Esc` slipper listen igen, så bogstaverne går tilbage til
+»begynd bare at skrive«. **Kun piletaster** må fange listen: gjorde `j`/`k` det
+også, kunne man ikke længere fange en opgave, der begynder med dem.
+
+### Paletten opretter også i `/`, `#` og `:`
+
+De tre navigations-tilstande kunne kun søge. Nu står »NEW …« **nederst** i
+listen — modsat fangst-tilstanden, hvor oprettelse står øverst. Grunden er, at
+det normale her er at springe hen til noget, man har: med oprettelsen øverst
+ville Enter lave en dublet, hver gang man skrev de første bogstaver af et navn,
+der allerede findes. Er navnet en nøjagtig træffer, tilbydes oprettelse ikke.
+
 ## 2b · Sprog
 
 **Interfacet er engelsk.** Andreas' valg undervejs i F1: æ, ø og å er besværlige at

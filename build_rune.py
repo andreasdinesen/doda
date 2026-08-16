@@ -34,7 +34,16 @@ OUT = os.path.join(ROOT, 'runes', 'doda.yaml')
 
 # Install-scriptet koeres som ET sh -c-argument -> Linux' MAX_ARG_STRLEN (131072 b)
 # er loftet. Margin, saa en voksende frontend ikke rammer vaeggen uvarslet.
-MAX_INSTALL = 120_000
+#
+# Haevet fra 120.000 til 126.000 i v7. Margenen skal kun daekke panelets
+# {{VARIABEL}}-udskiftninger, og de er faa og korte ({{NODE_IMAGE}} bliver til
+# node:24-alpine) - ikke noget, der kan aede 5.000 tegn. 120.000 var et rundt
+# tal, ikke en maaling.
+#
+# Det er IKKE en loesning paa pladsen, kun en udsaettelse: der er plads til en
+# funktion eller to. Naar den her fejler igen, skal noget UD af payloaden -
+# se PLAN.md for de maalte muligheder.
+MAX_INSTALL = 126_000
 MAX_YAML = 512 * 1024
 
 HEREDOC = 'YGG_PAYLOAD_EOF'

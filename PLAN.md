@@ -13,10 +13,10 @@
 
 | | |
 |---|---|
-| **Fase** | **v5 udgivet** (connector til claude.ai). v6 retter *Allow*-knappen. |
-| **Næste** | Andreas prøver connectoren mod den rigtige claude.ai |
-| **Tilstand** | 136 tests grønne, install-script 94 % af loftet |
-| **Udgivet version** | **5** — v6 bygget og klar |
+| **Fase** | **v6 udgivet** (connector + *Allow*-rettelsen). v7 er skallen. |
+| **Næste** | Udgivelse af v7 — og **pladsen i runen skal løses** (99 % af loftet) |
+| **Tilstand** | 138 tests grønne, install-script **118.974 / 120.000 (99 %)** |
+| **Udgivet version** | **6** — v7 bygget og klar |
 | **Sidst opdateret** | 2026-08-16 |
 
 **Sprog:** interfacet er **engelsk** (Andreas' valg — æøå er besværligt at taste).
@@ -411,6 +411,39 @@ sig selv og sende Andreas gennem et login. Se `docs/OAUTH.md`.
       det derfor aldrig
 
 ---
+
+## F13 · Skallen (v7)
+
+Andreas' ønsker efter at have brugt v6. Beslutningerne står i `DESIGN.md §2`.
+
+- [x] `↑`/`↓` går **ind** i listen uden at åbne noget — genvejstasterne var
+      i praksis uopnåelige, fordi fokus kun kunne komme fra et klik, og et
+      klik åbner opgaven. `Esc` slipper listen igen
+- [x] **Sideoversigt i højre side** (Notion-agtig): streger, der folder sig ud
+      på hover, markerer det afsnit man er i, og kan klikkes
+- [x] Gribefladen gjort tre gange større — ~24×10 px var for lille at ramme
+- [x] **Versionsnummer** nederst i sidebaren, samme tal som runens `version:`,
+      med advarsel hvis serveren har en nyere
+- [x] **Tema-knap** ved siden af versionen: ét klik mellem lyst og mørkt
+- [x] **Log ud** i en menu på brugerknappen
+- [x] Paletten kan **oprette** i `/`, `#` og `:`, ikke kun søge
+- [x] **Sidebaren kan foldes væk** til en hamburger, som i tingdo
+- [x] `tests/version.test.mjs`: de fem steder, versionen står, skal stemme
+- [ ] **Pladsen i runen** — 99 % af loftet. Se nedenfor
+- [ ] `APP_VERSION = 7` → build → **vent på Andreas' ja** → push
+
+### Pladsen i runen — skal løses inden næste funktion
+
+Install-scriptet fylder **118.974 af 120.000 tegn**. Build'et fejler højt ved
+loftet, så den næste funktion af nogen størrelse kan ikke være der. Målte
+muligheder, dyreste først:
+
+| Greb | Frigør | Koster |
+|---|---|---|
+| Fjern `app/public/icon-192.png` | **2.815 tegn** | iOS' hjemmeskærms-ikon (PNG er det eneste binære, og brotli komprimerer det ikke) |
+| Lad serveren tegne ikonet ved opstart | ~1.900 netto | ~40 linjers PNG-encoder med `zlib` + CRC32 |
+| Hæv assert'en 120.000 → 126.000 | 6.000 | Margenen mod `MAX_ARG_STRLEN` (131.072 b) falder fra 9 % til 4 % |
+| Minificér `app.js` | ukendt | Egen minifier = risiko; erfaringerne måler kommentar-strip til 0,8 % |
 
 ## Efter hver fase
 

@@ -8,9 +8,17 @@
 const MODER = {
   '+': { id: 'task', pil: '+ New Task', ph: 'Task title…', legend: ['/ project', '# context'], enter: 'Create' },
   '*': { id: 'note', pil: '* New Note', ph: 'Note title…', legend: ['/ project'], enter: 'Create' },
-  '/': { id: 'project', pil: '/ Projects', ph: 'Find a project…', legend: [], enter: 'Open' },
-  '#': { id: 'context', pil: '# Contexts', ph: 'Find a context…', legend: [], enter: 'Open' },
-  ':': { id: 'area', pil: ': Areas', ph: 'Find an area…', legend: [], enter: 'Open' },
+  '/': { id: 'project', pil: '/ Projects', ph: 'Find or create a project…', legend: [], enter: 'Open' },
+  '#': { id: 'context', pil: '# Contexts', ph: 'Find or create a context…', legend: [], enter: 'Open' },
+  ':': { id: 'area', pil: ': Areas', ph: 'Find or create an area…', legend: [], enter: 'Open' },
+};
+
+/* De tre navigations-tilstande er ens pa alt andet end hvad de hedder og
+   hvor de gemmer. Ét sted, sa en ny slags ikke skal tilfoejes fem steder. */
+const NAVIGATION = {
+  '/': { kilde: () => state.projects, hvad: 'project', flertal: 'projects', ikon: 'projects', sti: '/api/v1/projects', felt: 'project' },
+  '#': { kilde: () => state.contexts, hvad: 'context', flertal: 'contexts', ikon: 'contexts', sti: '/api/v1/contexts', felt: 'context' },
+  ':': { kilde: () => state.areas, hvad: 'area', flertal: 'areas', ikon: 'someday', sti: '/api/v1/areas', felt: 'area' },
 };
 
 const STANDARD_LEGEND = ['+ task', '* note', '/ projects', '# contexts', ': areas'];
@@ -130,26 +138,30 @@ function byggRaekker() {
   const raekker = [];
   const mode = omniState.mode;
 
-  // Navigation: vis det, man kan springe til.
-  if (mode === '/' || mode === '#' || mode === ':') {
-    const kilde = mode === '/' ? state.projects : mode === '#' ? state.contexts : state.areas;
+  // Navigation: vis det, man kan springe til - og tilbyd at oprette det,
+  // der ikke findes endnu.
+  if (NAVIGATION[mode]) {
+    const n = NAVIGATION[mode];
+    const kilde = n.kilde();
     const traf = kilde.filter((x) => !raa || x.name.toLowerCase().includes(raa.toLowerCase()));
     for (const x of traf.slice(0, 12)) {
       raekker.push({
         type: 'goto', mode, id: x.id, titel: x.name,
-        under: mode === '/' ? `${x.open_count || 0} open` : mode === '#' ? 'context' : 'area',
-        ikon: mode === '/' ? 'projects' : mode === '#' ? 'contexts' : 'someday',
+        under: mode === '/' ? `${x.open_count || 0} open` : n.hvad,
+        ikon: n.ikon,
       });
     }
-    if (!traf.length) {
-      const hvad = mode === '/' ? 'projects' : mode === '#' ? 'contexts' : 'areas';
-      // Skeln mellem "der findes ingen" og "din soegning gav intet" - to
-      // vidt forskellige situationer for brugeren.
-      raekker.push(raa
-        ? { type: 'tom', titel: `No ${hvad} matching “${raa}”`, under: 'Try another name' }
-        : { type: 'tom', titel: `No ${hvad} yet`,
-          under: mode === ':' ? 'Add one under Projects → Manage areas'
-            : `Type ${mode === '/' ? '@Name' : '#name'} when you capture, and it appears here` });
+
+    // Oprettelsen staar NEDERST her, modsat fangst-tilstanden. I fangst er
+    // det nye det normale; her er det at springe hen til noget, man har.
+    // Med oprettelsen oeverst ville Enter lave en dublet, hver gang man
+    // skrev de foerste bogstaver af et navn, der allerede findes.
+    const findes = raa && kilde.some((x) => x.name.toLowerCase() === raa.toLowerCase());
+    if (raa && !findes) raekker.push({ type: 'nyt', mode, navn: raa, ikon: n.ikon, hvad: n.hvad });
+
+    if (!raekker.length) {
+      raekker.push({ type: 'tom', titel: `No ${n.flertal} yet`,
+        under: `Type a name to create your first one` });
     }
     return raekker;
   }
@@ -205,6 +217,12 @@ function tegnPanel() {
         ${icon(r.ikon)}<span class="omni-row-main">
         <span class="omni-row-title">${esc(r.titel)}</span>
         <span class="omni-row-sub">${esc(r.under)}</span></span></button>`;
+    }
+    if (r.type === 'nyt') {
+      return `<button class="omni-row"${valgt} data-i="${i}">
+        ${icon('plus')}<span class="omni-row-main">
+        <span class="omni-row-title">${esc(r.navn)}</span>
+        <span class="omni-row-sub">NEW ${esc(r.hvad.toUpperCase())}</span></span></button>`;
     }
     // Quick Capture: den store, fremhaevede raekke.
     return `<button class="omni-row big${r.type === 'confirm' ? ' confirm' : ''}"${valgt} data-i="${i}">
@@ -268,14 +286,35 @@ async function aktiver() {
 
   if (raekke.type === 'item') { aabnElement(raekke.item); luk(); return; }
   if (raekke.type === 'tom') return;
-  if (raekke.type === 'goto') {
-    luk();
-    if (raekke.mode === '/') gaaTilProjekt(raekke.id);
-    else if (raekke.mode === '#') gaaTil('next', { context: raekke.id });
-    else { state.filterArea = raekke.id; gaaTil('projects'); }
-    return;
-  }
+  if (raekke.type === 'goto') { luk(); gaaTilNavigation(raekke.mode, raekke.id); return; }
+  if (raekke.type === 'nyt') { await opretNavigation(raekke); return; }
   await fangstNu(raekke.type === 'confirm');
+}
+
+function gaaTilNavigation(mode, id) {
+  if (mode === '/') gaaTilProjekt(id);
+  else if (mode === '#') gaaTil('next', { context: id });
+  else { state.filterArea = id; gaaTil('projects'); }
+}
+
+/**
+ * Opretter et projekt, en kontekst eller et omraade fra paletten - og gaar
+ * derhen bagefter. Serveren er idempotent pa navnet, sa to hurtige Enter
+ * ikke kan lave en dublet.
+ */
+async function opretNavigation(raekke) {
+  const n = NAVIGATION[raekke.mode];
+  if (!n) return;
+  try {
+    const svar = await api('POST', n.sti, { name: raekke.navn });
+    const ny = svar[n.felt];
+    luk();
+    await genindlaes();
+    if (ny && ny.id) gaaTilNavigation(raekke.mode, ny.id);
+    toast(`${n.hvad.charAt(0).toUpperCase()}${n.hvad.slice(1)} “${raekke.navn}” created`);
+  } catch (ex) {
+    toast(ex.message);
+  }
 }
 
 async function fangstNu(bekraeftet) {

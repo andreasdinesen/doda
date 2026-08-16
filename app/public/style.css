@@ -158,6 +158,92 @@ h2 { font-size: 20px; font-weight: 650; letter-spacing: -.01em; margin: 0 0 8px;
 
 .sidebar-foot { margin-top: auto; padding-top: 16px; }
 
+/* Versionen staar altid nederst i sidebaren. Samme tal som runens
+   version: i panelet - build stempler dem samtidig. */
+/* Brugermenuen. Lag 58: over indholdet og fokusbjaelken (55), under
+   toasts (60) og paletten (70). */
+.usermenu {
+  position: fixed;
+  z-index: 58;
+  min-width: 216px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--card);
+  box-shadow: var(--shadow-lift);
+}
+
+.usermenu-head { padding: 8px 10px 10px; border-bottom: 1px solid var(--border); margin-bottom: 6px; }
+.usermenu-name { font-weight: 600; }
+
+.usermenu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.usermenu-item:hover { background: var(--card-hover); }
+.usermenu-item svg { flex: none; opacity: .75; }
+.usermenu-item.danger { color: var(--danger, #b4462f); }
+.usermenu-item.danger svg { opacity: 1; }
+
+.foot-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 12px 2px;
+}
+
+/* Ét klik mellem lyst og moerkt. flex:none, sa den ikke klemmes sammen,
+   naar versionslinjen bliver lang (RUNE-ERFARINGER §4). */
+.temabtn {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.temabtn:hover { background: var(--card-hover); color: var(--text); border-color: var(--border); }
+.temabtn svg { display: block; }
+
+.version-line {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+  border: 0;
+  background: none;
+  color: var(--muted);
+}
+
+button.version-old {
+  color: var(--accent-text);
+  cursor: pointer;
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+button.version-old:hover { text-decoration: underline; }
+
 .main {
   flex: 1;
   min-width: 0;
@@ -766,6 +852,94 @@ textarea.input { resize: vertical; min-height: 90px; font-family: inherit; }
 }
 
 /* Nederste hoejre hjoerne: "tryk en tast for at fange" (tingdos signatur). */
+/* --------------------------------------------------- sideoversigten */
+
+/* Notion-agtig: en stak streger i hoejre side, som folder sig ud med
+   teksten paa hover. Lag 30 - under paletten (70), toasts (60) og
+   fokusbjaelken (55), men over indholdet. */
+.toc {
+  position: fixed;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  /* Den store venstre-padding er en usynlig gribeflade: uden den er hver
+     streg kun ~24x10 px, og man skal ramme praecist for at folde ud. Den
+     ligger i sidens hoejre margen, hvor der ikke er indhold at daekke. */
+  padding: 12px 10px 12px 30px;
+  border-radius: var(--r);
+  max-height: 70vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: transparent;
+  border: 1px solid transparent;
+  transition: background .14s, border-color .14s, box-shadow .14s;
+}
+
+.toc:hover {
+  background: var(--card);
+  border-color: var(--border);
+  box-shadow: var(--shadow-lift);
+}
+
+.toc-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 6px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--r-sm);
+}
+
+.toc-item:hover { color: var(--text); }
+
+/* Stregen er hele oversigten, naar musen er vaek. flex:none, ellers
+   klemmer flex-foraeldren den til ingenting (RUNE-ERFARINGER §4). */
+.toc-dash {
+  flex: none;
+  width: 16px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: .4;
+  transition: width .14s, opacity .14s, background .14s;
+}
+
+.toc-item.on .toc-dash { width: 24px; opacity: 1; background: var(--accent); }
+.toc-item.on { color: var(--text); }
+
+/* Teksten foldes ud med max-width, sa stribens bredde kan animeres.
+   Uden hvide mellemrum-bevarelse ville lange navne bryde i to linjer. */
+.toc-tekst {
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  transition: max-width .18s, opacity .14s;
+}
+
+.toc:hover .toc-tekst { max-width: 190px; opacity: 1; }
+
+/* Klik i oversigten ruller afsnittet op i toppen - uden luft ville
+   overskriften klistre til kanten. */
+#pageHost h2 { scroll-margin-top: 24px; }
+
+/* Under mobilgraensen er der ikke plads ved siden af indholdet. Samme
+   graense som sidebaren - ét tal, to steder (§4). */
+@media (max-width: 900px) {
+  .toc { display: none; }
+}
+
 .hint {
   position: fixed;
   right: 22px;
@@ -793,6 +967,54 @@ textarea.input { resize: vertical; min-height: 90px; font-family: inherit; }
 /* ------------------------------------------------------- menuknap/mobil */
 
 .navtoggle { display: none; position: fixed; top: 14px; left: 14px; z-index: 40; }
+
+/* --------------------------------------------- sidebaren kan foldes vaek */
+
+.pinbtn {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.pinbtn:hover { background: var(--card-hover); color: var(--text); border-color: var(--border); }
+.pinbtn svg { display: block; }
+/* Skjult tilstand: naalen ligger ned, som i tingdo. */
+.pinbtn.off svg { transform: rotate(45deg); opacity: .7; }
+
+/* Kun over mobilgraensen. Under den styrer mediegraensen allerede
+   overlayet, og flaget skal ikke blande sig (RUNE-ERFARINGER §4). */
+@media (min-width: 901px) {
+  body.navskjult .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 50;
+    transform: translateX(-100%);
+    transition: transform .18s ease;
+    box-shadow: var(--shadow-lift);
+  }
+
+  body.navskjult.navopen .sidebar { transform: none; }
+  body.navskjult .navtoggle { display: inline-flex; }
+
+  body.navskjult.navopen .backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 45;
+    background: rgba(0, 0, 0, .35);
+  }
+
+  /* Plads til hamburgeren. Mere specifik end .main, ellers vinder
+     grundreglen - media queries giver ingen specificitet (§4). */
+  body.navskjult .main { padding-left: 64px; }
+}
 
 /* 900 px, ikke 760: en iPad i portraet er 768/834 px og skal have overlay
    (RUNE-ERFARINGER §4). Tallet bor ogsaa i JS - hold dem i trit. */

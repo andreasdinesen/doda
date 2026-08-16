@@ -420,13 +420,16 @@ let INLINE_SCRIPT_HASH = '';
 // (OAuth) er ikke en del af SPA'en, men skal se ud som resten og foelge
 // samme tema - og med den ORDRET samme scripttekst er hashen allerede givet.
 let INLINE_SCRIPT_TEXT = '';
-let APP_VERSION_CSS = '1';
+// Appens version, laest ud af index.html (build stempler den samme vaerdi i
+// ?v=, i sw.js og i runens version:). Serveren har den derfor uden at skulle
+// have et tal, der kan komme ud af trit med frontendens.
+let APP_VERSION_FIL = '1';
 
 function computeInlineHash() {
   try {
     const html = fs.readFileSync(path.join(PUBLIC_DIR, 'index.html'), 'utf8');
     const v = html.match(/style\.css\?v=(\d+)/);
-    if (v) APP_VERSION_CSS = v[1];
+    if (v) APP_VERSION_FIL = v[1];
     const m = html.match(/<script data-theme-init>([\s\S]*?)<\/script>/);
     if (!m) return;
     INLINE_SCRIPT_TEXT = m[1];
@@ -1236,6 +1239,11 @@ const ROUTES = {
   'GET /api/public-config': (req, res) => {
     sendJson(res, 200, {
       appName: APP_NAME,
+      // Den version, SERVEREN udleverer. Stemmer den ikke med den
+      // APP_VERSION, browseren koerer, sidder der en gammel app.js i cachen
+      // - og sa skal brugeren vide det frem for at lede efter en funktion,
+      // der ikke er indlaest.
+      version: Number(APP_VERSION_FIL),
       // Naar der ingen bruger er, skal foerste-gangs-opsaetningen vises.
       needsSetup: userCount() === 0,
       secureContext: isHttps(req),
@@ -2176,7 +2184,7 @@ function oauthSide(indhold) {
 <title>doda</title>
 <meta name="color-scheme" content="light dark">
 <script data-theme-init>${INLINE_SCRIPT_TEXT}</script>
-<link rel="stylesheet" href="/style.css?v=${APP_VERSION_CSS}">
+<link rel="stylesheet" href="/style.css?v=${APP_VERSION_FIL}">
 </head>
 <body>
 <div class="gate"><div class="card">${indhold}</div></div>
@@ -3100,5 +3108,10 @@ sweep();
 setInterval(sweep, 6 * 3600 * 1000).unref();
 
 server.listen(BIND_PORT, () => {
-  log(`doda lytter paa port ${BIND_PORT} (data: ${DATA_DIR})`);
+  // Den port, der FAKTISK blev bundet - ikke variablen. At skrive sit eget
+  // oenske tilbage beviser ingenting: netop dét gjorde, at v2's portfejl ikke
+  // kunne ses i den linje, serveren selv skrev. Med BIND_PORT=0 (som en test
+  // kan bruge for at undgaa en optaget port) er det ogsaa det eneste sted,
+  // portnummeret findes.
+  log(`doda lytter paa port ${server.address().port} (data: ${DATA_DIR})`);
 });

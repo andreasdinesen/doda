@@ -5,7 +5,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 6;
+const APP_VERSION = 7;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -121,6 +121,15 @@ function nuvaerendeTema() {
   try { return localStorage.getItem('doda_theme') || 'auto'; } catch { return 'auto'; }
 }
 
+/* Det tema, man rent faktisk SER. "Follow system" er ikke en tredje farve -
+   den er lys eller moerk, afhaengigt af maskinen, og knappen i sidebaren skal
+   vise vejen til den modsatte af det, oejet ser. */
+function visuelTema() {
+  const valg = nuvaerendeTema();
+  if (valg === 'light' || valg === 'dark') return valg;
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
 /* -------------------------------------------------------------- ikoner */
 
 const ICONS = {
@@ -141,6 +150,10 @@ const ICONS = {
   plus: '<path d="M12 5.5v13M5.5 12h13"/>',
   note: '<path d="M6 4.5h8.5L19 9v10.5H6z"/><path d="M14 4.5V9h5"/><path d="M9 13h7M9 16h4"/>',
   clock: '<circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 1.8"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 3.5v2M12 18.5v2M20.5 12h-2M5.5 12h-2M17.8 6.2l-1.4 1.4M7.6 16.4l-1.4 1.4M17.8 17.8l-1.4-1.4M7.6 7.6L6.2 6.2"/>',
+  moon: '<path d="M20 14.6A8.6 8.6 0 019.4 4 8.6 8.6 0 1020 14.6z"/>',
+  pin: '<path d="M9 3.5h6l-1 5 3 3.5H7l3-3.5z"/><path d="M12 12v8.5"/>',
+  out: '<path d="M14.5 4.5H18a1.5 1.5 0 011.5 1.5v12a1.5 1.5 0 01-1.5 1.5h-3.5"/><path d="M4.5 12h10M11 8.5l3.5 3.5-3.5 3.5"/>',
   link: '<path d="M10.5 13.5a3.5 3.5 0 005 0l3-3a3.5 3.5 0 00-5-5l-1 1"/><path d="M13.5 10.5a3.5 3.5 0 00-5 0l-3 3a3.5 3.5 0 005 5l1-1"/>',
 };
 
@@ -162,7 +175,10 @@ const VIEWS = [
   { id: 'contexts', label: 'Contexts', icon: 'contexts', group: 3 },
   { id: 'log', label: 'Logbook', icon: 'log', group: 4 },
   { id: 'review', label: 'Review', icon: 'review', group: 4 },
-  { id: 'settings', label: 'Settings', icon: 'settings', group: 5 },
+  // group: 0 = staar IKKE i navigationen. Settings naas fra menuen paa
+  // brugerknappen, hvor kontoen i forvejen bor - to indgange til det samme
+  // sted er én for meget.
+  { id: 'settings', label: 'Settings', icon: 'settings', group: 0 },
 ];
 
 const viewById = (id) => VIEWS.find((v) => v.id === id) || VIEWS[0];
@@ -269,8 +285,9 @@ function bindGate() {
 }
 
 function navHtml() {
-  const grupper = [...new Set(VIEWS.map((v) => v.group))];
-  return grupper.map((g) => `<nav class="nav">${VIEWS.filter((v) => v.group === g).map((v) => {
+  const iNav = VIEWS.filter((v) => v.group > 0);
+  const grupper = [...new Set(iNav.map((v) => v.group))];
+  return grupper.map((g) => `<nav class="nav">${iNav.filter((v) => v.group === g).map((v) => {
     const antal = v.tael ? (state.counts[v.tael] || 0) : 0;
     return `<button class="nav-item" data-view="${v.id}" ${v.id === state.view ? 'aria-current="page"' : ''}>
         ${icon(v.icon)}<span>${esc(v.label)}</span>
@@ -285,10 +302,14 @@ function shellHtml() {
   <div class="backdrop" id="backdrop"></div>
   <div class="app">
     <aside class="sidebar">
-      <div class="brand">${icon('logo', 24)} doda</div>
+      <div class="brand">${icon('logo', 24)} <span style="flex:1">doda</span>
+        <button class="pinbtn" id="pinBtn" aria-label="Hide the menu"
+          title="Hide the menu">${icon('pin', 16)}</button></div>
       <div id="navHost">${navHtml()}</div>
       <div class="sidebar-foot">
-        <button class="nav-item" id="userBtn">${icon('settings')}<span>${esc(state.user.username)}</span></button>
+        <button class="nav-item" id="userBtn"
+          ${state.view === 'settings' ? 'aria-current="page"' : ''}>${icon('settings')}<span>${esc(state.user.username)}</span></button>
+        <div class="foot-row" id="footRow">${versionHtml()}${temaKnapHtml()}</div>
       </div>
     </aside>
     <main class="main">
@@ -311,6 +332,7 @@ function shellHtml() {
       <div id="pageHost"></div>
     </main>
   </div>
+  <nav class="toc" id="tocRail" aria-label="On this page" hidden></nav>
   <div class="hint"><span class="key">A</span><span class="meta">type to capture</span></div>
   <nav class="bottomnav" id="bottomNav">
     ${BUND.map((id) => {
@@ -324,6 +346,55 @@ function shellHtml() {
     <button class="bottomnav-item" id="bottomCapture" aria-label="Capture">
       ${icon('plus', 21)}<span>Capture</span></button>
   </nav>`;
+}
+
+/*
+ * Versionen, altid synlig. Det er SAMME tal som runens version: i panelet -
+ * build_rune.py stempler APP_VERSION i index.html, sw.js og runen pa én gang.
+ *
+ * Serveren melder sit eget tal med i /api/public-config. Er de to forskellige,
+ * er app.js i browserens cache aeldre end den, serveren udleverer, og sa er
+ * det dét, brugeren skal vide - ikke versionsnummeret alene.
+ */
+function versionHtml() {
+  const server = state.config.version;
+  const gammel = server && server !== APP_VERSION;
+  if (gammel) {
+    return `<button class="version-line meta version-old" id="versionBtn"
+      title="Your browser is running v${APP_VERSION}, but the server has v${server}. Click to reload.">
+      v${APP_VERSION} · v${server} available — reload</button>`;
+  }
+  return `<div class="version-line meta">v${esc(String(APP_VERSION))}</div>`;
+}
+
+/* Ét klik mellem lyst og moerkt, uden at gaa i Settings. Knappen viser det
+   tema, man skifter TIL - ikke det, man er i. Alle tre valg (inklusive
+   "Follow system") bliver staaende under Settings. */
+function temaKnapHtml() {
+  const naeste = visuelTema() === 'dark' ? 'light' : 'dark';
+  return `<button class="temabtn" id="temaBtn" data-naeste="${naeste}"
+    aria-label="Switch to ${naeste} theme" title="Switch to ${naeste} theme">
+    ${icon(naeste === 'dark' ? 'moon' : 'sun', 16)}</button>`;
+}
+
+/* Temaet kan skiftes to steder (her og i Settings), og knappen skal foelge
+   med begge veje - ellers viser den vej til det tema, man allerede er i. */
+function opdaterTemaKnap() {
+  const gammel = document.getElementById('temaBtn');
+  if (!gammel) return;
+  gammel.outerHTML = temaKnapHtml();
+  bindTemaKnap();
+}
+
+function bindTemaKnap() {
+  const el = document.getElementById('temaBtn');
+  if (!el) return;
+  el.addEventListener('click', () => {
+    anvendTema(el.dataset.naeste);
+    opdaterTemaKnap();
+    // Er man PAA indstillingssiden, skal de tre knapper der ogsaa foelge med.
+    if (state.view === 'settings') tegnSide();
+  });
 }
 
 function statsHtml() {
@@ -360,6 +431,13 @@ function tegnGennemgangsbaand() {
 function opdaterNav() {
   const host = document.getElementById('navHost');
   if (host) { host.innerHTML = navHtml(); bindNav(); }
+  // Settings staar ikke i navigationen laengere - brugerknappen er indgangen,
+  // og saa skal den ogsaa vise, naar man er der. Ellers er INTET markeret.
+  const bruger = document.getElementById('userBtn');
+  if (bruger) {
+    if (state.view === 'settings') bruger.setAttribute('aria-current', 'page');
+    else bruger.removeAttribute('aria-current');
+  }
   // Bundlinjen har sin egen markering af den aktive side og sit eget tal.
   document.querySelectorAll('.bottomnav-item[data-view]').forEach((el) => {
     if (el.dataset.view === state.view) el.setAttribute('aria-current', 'page');
@@ -383,7 +461,14 @@ function bindNav() {
 
 function bindShell() {
   bindNav();
-  document.getElementById('userBtn').addEventListener('click', () => gaaTil('settings'));
+  document.getElementById('userBtn').addEventListener('click', visBrugerMenu);
+  saetNavSkjult(navErSkjult());
+  document.getElementById('pinBtn').addEventListener('click', () => {
+    const skjul = !document.body.classList.contains('navskjult');
+    saetNavSkjult(skjul);
+    // Foldes den vaek, mens man staar i den, skal overlayet ogsaa lukke.
+    if (skjul) document.body.classList.remove('navopen');
+  });
   document.querySelectorAll('.bottomnav-item[data-view]').forEach((el) => {
     el.addEventListener('click', () => gaaTil(el.dataset.view));
   });
@@ -392,6 +477,22 @@ function bindShell() {
     const o = omniEl();
     if (o) { o.scrollIntoView({ block: 'start' }); o.focus(); }
   });
+  // Er serverens version nyere end den indlaeste, sidder der en gammel
+  // app.js i service workerens cache. Ryd den FOER genindlaesningen -
+  // ellers serverer den bare den samme gamle fil igen.
+  bindTemaKnap();
+  const vBtn = document.getElementById('versionBtn');
+  if (vBtn) {
+    vBtn.addEventListener('click', async () => {
+      try {
+        if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+          navigator.serviceWorker.controller.postMessage('ryd');
+        }
+        if (window.caches) await Promise.all((await caches.keys()).map((n) => caches.delete(n)));
+      } catch { /* uden cache-api er der ikke noget at rydde */ }
+      location.reload();
+    });
+  }
   document.getElementById('navToggle').addEventListener('click', () => document.body.classList.toggle('navopen'));
   document.getElementById('backdrop').addEventListener('click', () => document.body.classList.remove('navopen'));
   bindOmni();
@@ -432,6 +533,174 @@ async function hentState() {
     if (ex.status !== 401) toast(ex.message);
   }
 }
+
+/* ------------------------------------------------------ sidebaren */
+
+/*
+ * Sidebaren kan foldes helt vaek, sa der kun staar en hamburger tilbage
+ * (som i tingdo). Skjult ligger den som et overlay over indholdet i stedet
+ * for at skubbe det - ellers ville hele siden hoppe, hver gang man kiggede
+ * i menuen.
+ *
+ * Valget huskes. Pa mobil styrer mediegraensen det i forvejen, og der
+ * roerer flaget ingenting.
+ */
+function navErSkjult() {
+  try { return localStorage.getItem('doda_nav_skjult') === '1'; } catch { return false; }
+}
+
+function saetNavSkjult(skjult) {
+  try { localStorage.setItem('doda_nav_skjult', skjult ? '1' : '0'); } catch { /* privat */ }
+  document.body.classList.toggle('navskjult', skjult);
+  if (!skjult) document.body.classList.remove('navopen');
+  // Brugermenuen haenger fast pa brugerknappen. Foldes sidebaren vaek, mens
+  // menuen staar aaben, ville den blive svaevende tilbage over ingenting.
+  const menu = document.getElementById('userMenu');
+  if (menu) menu.remove();
+  const knap = document.getElementById('pinBtn');
+  if (knap) {
+    const tekst = skjult ? 'Keep the menu open' : 'Hide the menu';
+    knap.setAttribute('aria-label', tekst);
+    knap.title = tekst;
+    knap.classList.toggle('off', skjult);
+  }
+}
+
+/* --------------------------------------------------- brugermenuen */
+
+/* Log ud skal kunne naas uden at gaa i indstillingerne. Menuen er en lille
+   popover over brugerknappen - samme sted, man i forvejen klikker. */
+function visBrugerMenu() {
+  const gammel = document.getElementById('userMenu');
+  if (gammel) { gammel.remove(); return; }
+  const anker = document.getElementById('userBtn');
+  if (!anker) return;
+
+  const host = document.createElement('div');
+  host.className = 'usermenu';
+  host.id = 'userMenu';
+  host.innerHTML = `
+    <div class="usermenu-head">
+      <div class="usermenu-name">${esc(state.user.username)}</div>
+      <div class="meta">Signed in${state.config.secureContext ? '' : ' · plain http'}</div>
+    </div>
+    <button class="usermenu-item" data-go="settings">${icon('settings', 17)}<span>Settings</span></button>
+    <button class="usermenu-item" data-go="shortcuts">${icon('log', 17)}<span>Keyboard shortcuts</span></button>
+    <button class="usermenu-item danger" data-go="logout">${icon('out', 17)}<span>Log out</span></button>`;
+
+  const r = anker.getBoundingClientRect();
+  host.style.left = `${Math.round(r.left)}px`;
+  host.style.bottom = `${Math.round(window.innerHeight - r.top + 8)}px`;
+  document.body.appendChild(host);
+
+  const luk = () => host.remove();
+  host.querySelectorAll('[data-go]').forEach((el) => {
+    el.addEventListener('click', async () => {
+      const hvad = el.dataset.go;
+      luk();
+      if (hvad === 'settings') gaaTil('settings');
+      else if (hvad === 'shortcuts') visGenveje();
+      else {
+        await api('POST', '/api/logout', {});
+        state.user = null;
+        // Koen og fokus hoerer til den bruger, der lige gik.
+        try { localStorage.removeItem('doda_focus'); } catch { /* privat */ }
+        render();
+      }
+    });
+  });
+  // Ét klik udenfor lukker igen. setTimeout, sa klikket der AABNEDE menuen
+  // ikke lukker den med det samme.
+  setTimeout(() => {
+    document.addEventListener('click', function udenfor(e) {
+      if (host.isConnected && !host.contains(e.target) && e.target !== anker) {
+        luk();
+        document.removeEventListener('click', udenfor);
+      }
+    });
+  }, 0);
+}
+
+/* --------------------------------------------------- sideoversigten */
+
+/*
+ * Notion-agtig oversigt i hoejre side: en stak streger, én pr. afsnit, som
+ * folder sig ud med teksten, naar musen er over den.
+ *
+ * Den bor i <body>, ikke i #pageHost. Alt inde i pageHost bliver skiftet ud
+ * ved hver optegning, og sa ville oversigten forsvinde - samme grund som
+ * fokusbjaelken ligger fast i body (RUNE-ERFARINGER, F8).
+ */
+const tocState = { punkter: [], aktiv: -1 };
+
+function byggToc() {
+  const rail = document.getElementById('tocRail');
+  if (!rail) return;
+  const host = document.getElementById('pageHost');
+  // Kun sidens egne afsnit. En modal har ogsa h2'er, men den ligger i body
+  // og bliver derfor ikke fanget her.
+  const fundne = host ? [...host.querySelectorAll('h2')] : [];
+
+  // Under to afsnit er der ingen oversigt at lave, og pa en telefon ville
+  // en fast stribe i hoejre side ligge oven i indholdet.
+  if (fundne.length < 2 || smalSkaerm()) {
+    rail.hidden = true;
+    rail.innerHTML = '';
+    tocState.punkter = [];
+    return;
+  }
+
+  tocState.punkter = fundne.map((el, i) => {
+    if (!el.id) el.id = `afsnit-${i}`;
+    // Tallet i .group-count hoerer til overskriften, ikke til navnet.
+    const taeller = el.querySelector('.group-count');
+    const navn = (taeller ? el.textContent.replace(taeller.textContent, '') : el.textContent).trim();
+    return { el, navn: navn || `Section ${i + 1}` };
+  });
+  tocState.aktiv = -1;
+
+  rail.innerHTML = tocState.punkter.map((p, i) => `
+    <button class="toc-item" data-toc="${i}" title="${esc(p.navn)}">
+      <span class="toc-dash"></span><span class="toc-tekst">${esc(p.navn)}</span>
+    </button>`).join('');
+  rail.hidden = false;
+
+  rail.querySelectorAll('[data-toc]').forEach((el) => {
+    el.addEventListener('click', () => {
+      const p = tocState.punkter[Number(el.dataset.toc)];
+      if (p) p.el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+  markerToc();
+}
+
+/** Afsnittet, der lige er rullet forbi toppen, er det man er i. */
+function markerToc() {
+  if (!tocState.punkter.length) return;
+  let i = 0;
+  for (let n = 0; n < tocState.punkter.length; n++) {
+    if (tocState.punkter[n].el.getBoundingClientRect().top <= 140) i = n;
+  }
+  if (i === tocState.aktiv) return;
+  tocState.aktiv = i;
+  const rail = document.getElementById('tocRail');
+  if (!rail) return;
+  rail.querySelectorAll('[data-toc]').forEach((el) => {
+    el.classList.toggle('on', Number(el.dataset.toc) === i);
+  });
+}
+
+// Én rAF pr. rulning: getBoundingClientRect pa hvert afsnit ved hvert
+// scroll-tick ville ellers laese layout hundredvis af gange i sekundet.
+let tocVenter = false;
+window.addEventListener('scroll', () => {
+  if (tocVenter || !tocState.punkter.length) return;
+  tocVenter = true;
+  requestAnimationFrame(() => { tocVenter = false; markerToc(); });
+}, { passive: true });
+
+// Skiftes der mellem telefon og desktop, skal oversigten med.
+window.addEventListener('resize', () => { byggToc(); });
 
 /* ------------------------------------------------------------ connector */
 

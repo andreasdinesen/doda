@@ -32,7 +32,7 @@ async function sideStatusliste(status, titel) {
         placeholder="Who?" aria-label="Waiting on whom">
   </div>`);
   }).join('')}</div>
-    <p class="hintline meta">↑↓ move · enter open · n back to next · space done</p>
+    <p class="hintline meta">↑↓ select · enter open · n back to next · space done · esc leave</p>
   </section>`;
   bindListe();
 
@@ -528,6 +528,7 @@ function visTodoistForhaandsvisning(laest) {
 const GENVEJE = [
   ['Anywhere', [
     ['any key', 'Start capturing — the palette opens with what you typed'],
+    ['↑ ↓', 'Step into the list below, without opening anything'],
     ['?', 'This list'],
     ['esc', 'Close whatever is open'],
   ]],
@@ -539,6 +540,7 @@ const GENVEJE = [
   ]],
   ['In a list', [
     ['↑ ↓', 'Move between items (or j / k)'],
+    ['esc', 'Leave the list — letters go back to capturing'],
     ['enter', 'Open the item'],
     ['space', 'Mark it done'],
     ['n', 'Next Actions'], ['w', 'Waiting For'], ['s', 'Someday'], ['q', 'Queued'],

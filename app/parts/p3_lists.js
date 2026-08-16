@@ -5,7 +5,15 @@ const sideState = { fokusId: null };
 
 /* --------------------------------------------------------- optegning */
 
+/* Optegning + sideoversigten i hoejre side. Oversigten skal bygges EFTER
+   indholdet, og der er mange veje ud af tegnSideIndhold - derfor ét sted
+   her i stedet for et kald i hver gren. */
 async function tegnSide() {
+  await tegnSideIndhold();
+  byggToc();
+}
+
+async function tegnSideIndhold() {
   const host = document.getElementById('pageHost');
   if (!host) return;
   const view = viewById(state.view);
@@ -71,7 +79,7 @@ function sideInbox() {
     ${items.length ? `
       <p class="meta" style="margin-bottom:12px">${items.length} item${items.length === 1 ? '' : 's'} · oldest first</p>
       <div class="list" data-keynav>${items.map((it, i) => elementRaekke(it, i)).join('')}</div>
-      <p class="hintline meta">↑↓ move · enter open · space done · n next · w waiting · s someday · x delete</p>
+      <p class="hintline meta">↑↓ select · enter open · space done · n next · w waiting · s someday · x delete · esc leave</p>
     ` : tomInbox()}
   </section>`;
 }
@@ -128,7 +136,7 @@ function sideNext() {
         <h2 class="group meta">${esc(navn)} <span class="group-count">${liste.length}</span></h2>
         <div class="list">${liste.map((it) => elementRaekke(it, n++)).join('')}</div>`).join('')}
     </div>
-    <p class="hintline meta">↑↓ move · enter open · space done</p>
+    <p class="hintline meta">↑↓ select · enter open · space done · esc leave</p>
   </section>`;
 }
 
@@ -185,6 +193,33 @@ function bindListe() {
   }
 }
 
+/**
+ * Piletasterne gaar IND i listen, uden at man skal klikke foerst.
+ *
+ * Raekkerne ejer bogstaverne (n/w/s/x), men kun naar de har fokus - og fokus
+ * kunne foer kun komme fra et klik, som samtidig aabner opgaven. Der var
+ * altsa ingen vej til at markere en raekke uden at aabne den.
+ *
+ * Kun piletaster maa gore det. Bogstaver hoerer til "begynd bare at skrive",
+ * som er appens signatur (DESIGN.md §2) - ville j og k ogsa fange listen,
+ * kunne man ikke laengere fange en opgave, der begynder med dem.
+ */
+document.addEventListener('keydown', (e) => {
+  if (!state.user) return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+  const el = document.activeElement;
+  if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+  if (document.querySelector('.modal')) return;
+  // Er man allerede inde i listen, klarer raekkens egen handler det.
+  if (el && el.closest && el.closest('[data-keynav]')) return;
+
+  const raekker = document.querySelectorAll('[data-keynav] .item-row');
+  if (!raekker.length) return;
+  e.preventDefault();
+  (e.key === 'ArrowDown' ? raekker[0] : raekker[raekker.length - 1]).focus();
+});
+
 function naboRaekke(el, retning) {
   const alle = [...document.querySelectorAll('.item-row')];
   const i = alle.indexOf(el);
@@ -198,6 +233,8 @@ async function raekkeTaster(e) {
 
   if (e.key === 'ArrowDown' || e.key === 'j') { e.preventDefault(); naboRaekke(el, 1).focus(); return; }
   if (e.key === 'ArrowUp' || e.key === 'k') { e.preventDefault(); naboRaekke(el, -1).focus(); return; }
+  // Ud af listen igen - sa ejer "begynd bare at skrive" bogstaverne pa ny.
+  if (e.key === 'Escape') { e.preventDefault(); el.blur(); return; }
   if (e.key === 'Enter') {
     e.preventDefault();
     const it = state.items.find((x) => x.id === id);
@@ -835,7 +872,9 @@ function bindSettings() {
   tegnPasskeys();
   tegnForbindelser();
   document.querySelectorAll('[data-tema]').forEach((el) => {
-    el.addEventListener('click', () => { anvendTema(el.dataset.tema); tegnSide(); });
+    // Knappen i sidebaren skal med - ellers peger den paa det tema, man
+    // lige har valgt.
+    el.addEventListener('click', () => { anvendTema(el.dataset.tema); opdaterTemaKnap(); tegnSide(); });
   });
 
   document.getElementById('logoutBtn').addEventListener('click', async () => {
