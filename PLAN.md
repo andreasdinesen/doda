@@ -13,10 +13,10 @@
 
 | | |
 |---|---|
-| **Fase** | **v4 udgivet.** F0–F11 bygget; connector til claude.ai bygget og testet. |
-| **Næste** | Udgivelse af connectoren: bump til `APP_VERSION = 5`, build, push |
-| **Tilstand** | OAuth 2.1 klar i arbejdsmappen, 135 tests grønne, install-script 93 % af loftet |
-| **Udgivet version** | **4** (`/projekt` inline + icon.svg) |
+| **Fase** | **v5 udgivet** (connector til claude.ai). v6 retter *Allow*-knappen. |
+| **Næste** | Andreas prøver connectoren mod den rigtige claude.ai |
+| **Tilstand** | 136 tests grønne, install-script 94 % af loftet |
+| **Udgivet version** | **5** — v6 bygget og klar |
 | **Sidst opdateret** | 2026-08-16 |
 
 **Sprog:** interfacet er **engelsk** (Andreas' valg — æøå er besværligt at taste).
@@ -403,7 +403,12 @@ sig selv og sende Andreas gennem et login. Se `docs/OAUTH.md`.
 - [x] Settings → **Connected apps** med scope, sidst brugt og *Revoke*
 - [x] 18 tests i `tests/oauth.test.mjs` mod en rigtig server, inkl. kode-tyveri
       mellem klienter, rotation og udløb (uret flyttes i databasen ved siden af)
-- [ ] `APP_VERSION = 5` → build → **vent på Andreas' ja** → push
+- [x] `APP_VERSION = 5` → build → push
+- [x] **v6:** `form-action` skal tillade klientens redirect-oprindelse, ellers
+      blokerer browseren hele samtykke-POST'en, og *Allow* gør ingenting.
+      Regressionstest på headeren — `fetch` i Node håndhæver ingen CSP, og et
+      manuelt gennemløb med redirect til `localhost` er same-origin og opdager
+      det derfor aldrig
 
 ---
 

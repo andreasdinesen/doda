@@ -101,3 +101,26 @@ Peger headeren på `/.well-known/oauth-protected-resource/mcp`, er opdagelsen p�
 plads. Resten dækkes af `tests/oauth.test.mjs`, som går hele vejen igennem mod
 en rigtig server — inklusive at en kode udstedt til klient A ikke kan indløses
 af klient B, at refresh roterer, og at access-tokenet rent faktisk udløber.
+
+---
+
+## 6 · Fælden, der kostede en udgivelse
+
+I v5 skete der **ingenting**, når man trykkede *Allow*. Ingen navigation, ingen
+serverlog. Årsagen var CSP'ens `form-action 'self'`:
+
+> `form-action` håndhæves også på den **omdirigering**, indsendelsen fører til —
+> ikke kun på formularens egen `action`.
+
+Samtykkesiden POSTer til sig selv (`'self'`, ser rigtigt ud) og svarer 302 til
+`https://claude.ai/…`. Browseren blokerer hele indsendelsen, og konsolfejlen
+peger på `/oauth/authorize` — altså på den adresse, der *er* tilladt.
+
+Derfor sender samtykkesiden nu `form-action 'self' <klientens oprindelse>`, hvor
+oprindelsen kommer fra den `redirect_uri`, der allerede er valideret mod
+klientens registrerede liste. Resten af appen er urørt.
+
+**Testene så det ikke**, fordi `fetch` i Node ikke håndhæver CSP, og fordi det
+manuelle gennemløb i browseren brugte en `redirect_uri` tilbage til `localhost`
+— same-origin, altså ingen overtrædelse. `tests/oauth.test.mjs` tjekker nu
+headeren direkte.

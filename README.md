@@ -385,6 +385,7 @@ Se `PLAN.md` for faseoversigt og status, `DESIGN.md` for de trufne beslutninger 
 
 | Version | Ændringer |
 |---|---|
+| 6 | **Rettelse:** *Allow* på samtykkesiden gjorde ingenting. CSP'ens `form-action 'self'` håndhæves også på den **omdirigering**, indsendelsen fører til — og den peger på `claude.ai`. Browseren blokerede hele POST'en, og fejlen pegede på doda's egen adresse. Siden tillader nu præcis den oprindelse, klienten er registreret med. |
 | 5 | **Connector til claude.ai.** Webklienten kan ikke sende en nøgle i en header, så doda taler nu **OAuth 2.1**: dynamisk klientregistrering, PKCE, engangs-koder, roterende refresh og en samtykkeside uden JavaScript. Tilføj `https://DIN-ADRESSE/mcp` som custom connector — Claude finder selv resten. Forbindelser står under **Settings → Connected apps** og kan tilbagekaldes øjeblikkeligt. Se [docs/OAUTH.md](docs/OAUTH.md). |
 | 4 | **Rettelse:** `/projekt` virkede kun som første tegn i paletten, ikke midt i en sætning — selv om legenden lover `/ projects`. Nu betyder `@` og `/` præcis det samme, og hverken URL'er, datoer eller `ja/nej` bliver ramt. |
 | 3 | **Rettelse: v2 kunne ikke nås i panelet.** Serveren bandt sig til den host-port, panelet havde allokeret, i stedet for container-porten 3000. Der er nu en regressionstest, der starter serveren med panelets præcise miljø. |

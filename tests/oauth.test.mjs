@@ -46,6 +46,10 @@ async function registrer(navn, uris) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ client_name: navn, redirect_uris: uris || [REDIRECT] }),
   });
+  // En 429 her ville ellers foerst vise sig tre trin senere som "ukendt
+  // klient" paa samtykkesiden - samme vildledende sti som en rigtig bruger
+  // faar. Sig det hoejt med det samme.
+  if (r.status === 429) throw new Error('registreringsgraensen ramt - er den for lav?');
   return { status: r.status, krop: await r.json() };
 }
 
@@ -225,6 +229,26 @@ test('samtykkesiden kraever en session — ellers sendes man til login og tilbag
   const sted = new URL(r.headers.get('location'), BASE);
   assert.equal(sted.pathname, '/');
   assert.equal(sted.searchParams.get('next'), sti);
+});
+
+test('CSP: form-action skal tillade klientens redirect, ellers doer Allow-knappen tavst', async () => {
+  // form-action haandhaeves ogsa pa den OMDIRIGERING, indsendelsen foerer til.
+  // Med bare 'self' blokerer browseren hele POST'en, fejlen peger paa
+  // /oauth/authorize, og der sker INTET: ingen navigation, ingen serverlog.
+  // Det ramte v5 i praksis, og en test med en redirect tilbage til samme
+  // vaert ville aldrig have fanget det.
+  const { krop: klient } = await registrer('CSP-kontrol');
+  const sti = autoriseringsUrl({ client_id: klient.client_id, code_challenge: udfordring('q'.repeat(43)) });
+  const r = await fetch(BASE + sti, { headers: { cookie } });
+  assert.equal(r.status, 200);
+  const csp = r.headers.get('content-security-policy');
+  assert.match(csp, /form-action 'self' https:\/\/claude\.ai/);
+  // Kun oprindelsen - ikke hele stien, og ikke https: i al almindelighed.
+  assert.ok(!csp.includes('auth_callback'));
+
+  // Og resten af appen skal vaere uroert.
+  const app = await fetch(`${BASE}/`);
+  assert.match(app.headers.get('content-security-policy'), /form-action 'self';/);
 });
 
 test('en POST uden gyldigt bevis afvises — samtykket skal komme fra denne browser', async () => {

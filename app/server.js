@@ -2184,8 +2184,25 @@ function oauthSide(indhold) {
 </html>`;
 }
 
-function sendHtml(res, status, html) {
+/**
+ * @param {string} [formAction]  Ekstra oprindelse i CSP'ens form-action.
+ *
+ * `form-action` haandhaeves ogsa pa den OMDIRIGERING, indsendelsen foerer til,
+ * ikke kun pa formularens egen adresse. Samtykkesiden POSTer til sig selv, men
+ * svarer 302 til klientens redirect_uri - og med bare 'self' blokerer browseren
+ * hele indsendelsen. Fejlen peger pa /oauth/authorize, sa det ser ud som om
+ * knappen ikke virker: intet sker, ingen navigation, ingen serverlog.
+ *
+ * Derfor tilfoejes praecis den ene oprindelse, klienten er registreret med -
+ * ikke https: i al almindelighed.
+ */
+function sendHtml(res, status, html, formAction) {
   securityHeaders(res);
+  if (formAction) {
+    res.setHeader('Content-Security-Policy',
+      String(res.getHeader('Content-Security-Policy'))
+        .replace("form-action 'self'", `form-action 'self' ${formAction}`));
+  }
   res.writeHead(status, {
     'Content-Type': 'text/html; charset=utf-8',
     'Content-Length': Buffer.byteLength(html),
@@ -2282,7 +2299,11 @@ async function haandterOauth(req, res, urlPath, query) {
   /* --- dynamisk klientregistrering (RFC 7591) --- */
   if (urlPath === '/oauth/register' && metode === 'POST') {
     oauthCors(res);
-    if (!rateAllow(`oauth-register:${clientIp(req)}`, 20, 3600)) {
+    // 60 i timen. En klient registrerer sig ved hvert forsoeg, ogsa dem der
+    // afbrydes, sa graensen skal ligge langt over almindelig fumlen: rammes
+    // den, findes klienten aldrig, og brugeren far "ukendt klient" pa
+    // samtykkesiden - en fejl, der peger et helt andet sted hen end aarsagen.
+    if (!rateAllow(`oauth-register:${clientIp(req)}`, 60, 3600)) {
       sendJson(res, 429, { error: 'temporarily_unavailable', error_description: 'Too many registrations. Try again later.' });
       return;
     }
@@ -2346,7 +2367,12 @@ async function haandterOauth(req, res, urlPath, query) {
     if (o.fejl) { oauthFejlside(res, o.fejl); return; }
 
     if (metode === 'GET') {
-      sendHtml(res, 200, samtykkeHtml(req, felter, Object.assign({ bruger: bruger.username }, o)));
+      // Oprindelsen kommer fra en redirect_uri, der ALLEREDE er valideret mod
+      // klientens registrerede liste - ikke fra det, browseren sendte.
+      let maal = '';
+      try { maal = new URL(o.redirect).origin; } catch { /* kan ikke ske efter tjekket */ }
+      sendHtml(res, 200,
+        samtykkeHtml(req, felter, Object.assign({ bruger: bruger.username }, o)), maal);
       return;
     }
 
