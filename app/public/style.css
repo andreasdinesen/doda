@@ -1,0 +1,378 @@
+/* doda - design efter tingdo.app. Tokens og begrundelser: DESIGN.md §2. */
+
+:root {
+  --bg: #efe9e2;
+  --sidebar: #e7e0d7;
+  --card: #f7f3ee;
+  --card-hover: #f2ece4;
+  --border: #dcd3c7;
+  --border-soft: #e5ded4;
+  --text: #1c1917;
+  --muted: #8b8078;
+  --accent: #b07d14;
+  --accent-soft: #f0e4cb;
+  --accent-text: #8a6212;
+  --shadow: 0 1px 2px rgba(60, 45, 20, .05);
+  --shadow-lift: 0 4px 24px rgba(60, 45, 20, .10);
+
+  --r-sm: 8px;
+  --r: 14px;
+  --r-lg: 20px;
+  --pill: 999px;
+
+  --sidebar-w: 264px;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+}
+
+:root[data-theme="dark"] {
+  --bg: #141210;
+  --sidebar: #1a1714;
+  --card: #211d19;
+  --card-hover: #282320;
+  --border: #312a23;
+  --border-soft: #272119;
+  --text: #ede8e1;
+  --muted: #95897c;
+  --accent: #d9a441;
+  --accent-soft: #3a2e17;
+  --accent-text: #e8bd63;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3);
+  --shadow-lift: 0 4px 24px rgba(0, 0, 0, .45);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141210;
+    --sidebar: #1a1714;
+    --card: #211d19;
+    --card-hover: #282320;
+    --border: #312a23;
+    --border-soft: #272119;
+    --text: #ede8e1;
+    --muted: #95897c;
+    --accent: #d9a441;
+    --accent-soft: #3a2e17;
+    --accent-text: #e8bd63;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3);
+    --shadow-lift: 0 4px 24px rgba(0, 0, 0, .45);
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+/* Uden denne vinder display:flex over hidden-attributten (RUNE-ERFARINGER §4). */
+[hidden] { display: none !important; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  /* Lange ubrudte ord fra importeret indhold er den hyppigste kilde til
+     vandret scroll pa telefon (RUNE-ERFARINGER §4). */
+  overflow-wrap: break-word;
+}
+
+button, input, textarea, select { font: inherit; color: inherit; }
+
+/* ------------------------------------------------------------ typografi */
+
+h1 { font-size: 34px; font-weight: 700; letter-spacing: -.02em; margin: 0 0 4px; }
+h2 { font-size: 20px; font-weight: 650; letter-spacing: -.01em; margin: 0 0 8px; }
+
+.meta {
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.lead { color: var(--muted); margin: 0; }
+
+/* ------------------------------------------------------------- layout */
+
+.app { display: flex; min-height: 100%; }
+
+.sidebar {
+  width: var(--sidebar-w);
+  flex: none;
+  background: var(--sidebar);
+  border-right: 1px solid var(--border-soft);
+  display: flex;
+  flex-direction: column;
+  padding: 20px 16px;
+  gap: 4px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px 24px;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+}
+
+.brand svg { color: var(--accent); flex: none; }
+
+.nav { display: flex; flex-direction: column; gap: 2px; }
+.nav + .nav { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--border); }
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+}
+
+.nav-item:hover { background: var(--card-hover); }
+
+.nav-item[aria-current="page"] {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.nav-item svg { flex: none; opacity: .75; }
+.nav-item[aria-current="page"] svg { opacity: 1; }
+.nav-count { margin-left: auto; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.sidebar-foot { margin-top: auto; padding-top: 16px; }
+
+.main {
+  flex: 1;
+  min-width: 0;
+  padding: 22px clamp(20px, 5vw, 64px) 80px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.page { width: 100%; max-width: 760px; }
+.page-head { margin: 40px 0 24px; }
+
+/* ------------------------------------------------------- kommandobaren */
+
+.topbar { width: 100%; max-width: 940px; display: flex; flex-direction: column; align-items: center; }
+
+.stats { align-self: flex-end; display: flex; gap: 6px; padding: 0 4px 14px; }
+.stats span::after { content: "·"; margin-left: 6px; opacity: .5; }
+.stats span:last-child::after { content: ""; }
+
+.omni {
+  width: 100%;
+  max-width: 800px;
+  position: relative;
+}
+
+.omni-input {
+  width: 100%;
+  padding: 20px 24px 20px 58px;
+  border: 1px solid transparent;
+  border-radius: var(--pill);
+  background: var(--card);
+  box-shadow: var(--shadow);
+  font-size: 18px;
+  outline: none;
+}
+
+.omni-input::placeholder { color: var(--muted); }
+
+.omni-input:focus {
+  border-color: var(--border);
+  box-shadow: var(--shadow-lift);
+  background: var(--card);
+}
+
+.omni-icon {
+  position: absolute;
+  left: 22px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  pointer-events: none;
+}
+
+/* Chips der viser hvordan teksten er tolket, mens der skrives. */
+.omni-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 8px 0; justify-content: center; }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: var(--pill);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.chip.neutral { background: var(--card); color: var(--muted); border: 1px solid var(--border); }
+
+/* -------------------------------------------------------------- kort */
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r);
+  padding: 18px 20px;
+  box-shadow: var(--shadow);
+}
+
+.card + .card { margin-top: 10px; }
+
+.divider { height: 1px; background: var(--border); border: 0; margin: 22px 0; }
+
+/* Tom tilstand: rolig og bekraeftende, aldrig en tom kasse (handover §5.2). */
+.empty { text-align: center; padding: 56px 20px; color: var(--muted); }
+.empty svg { color: var(--accent); opacity: .55; margin-bottom: 14px; }
+.empty p { margin: 0; }
+.empty .empty-title { color: var(--text); font-weight: 600; font-size: 17px; margin-bottom: 4px; }
+
+/* ------------------------------------------------------------ knapper */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--card);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.btn:hover { background: var(--card-hover); }
+
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover { filter: brightness(1.06); }
+:root[data-theme="dark"] .btn.primary { color: #1a1512; }
+.btn.ghost { border-color: transparent; background: transparent; color: var(--muted); }
+.btn.ghost:hover { background: var(--card-hover); color: var(--text); }
+
+/* ------------------------------------------------------------- felter */
+
+.field { display: block; margin-bottom: 14px; }
+.field span { display: block; margin-bottom: 6px; font-weight: 600; font-size: 13px; }
+
+.input {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  outline: none;
+}
+
+.input:focus { border-color: var(--accent); }
+
+/* ---------------------------------------------------------- login-side */
+
+.gate { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+.gate .card { width: 100%; max-width: 400px; padding: 32px; }
+.gate .brand { justify-content: center; padding-top: 0; }
+.gate-note { margin: 16px 0 0; font-size: 13px; color: var(--muted); text-align: center; }
+.gate-error { margin: 0 0 14px; padding: 10px 14px; border-radius: var(--r-sm); background: var(--accent-soft); color: var(--accent-text); font-size: 14px; }
+
+/* ------------------------------------------------------------- toast */
+
+.toasts { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; z-index: 60; }
+
+.toast {
+  padding: 11px 18px;
+  border-radius: var(--pill);
+  background: var(--text);
+  color: var(--bg);
+  font-size: 14px;
+  font-weight: 500;
+  box-shadow: var(--shadow-lift);
+}
+
+/* Nederste hoejre hjoerne: "tryk en tast for at fange" (tingdos signatur). */
+.hint {
+  position: fixed;
+  right: 22px;
+  bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.key {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--card);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------- menuknap/mobil */
+
+.navtoggle { display: none; position: fixed; top: 14px; left: 14px; z-index: 40; }
+
+/* 900 px, ikke 760: en iPad i portraet er 768/834 px og skal have overlay
+   (RUNE-ERFARINGER §4). Tallet bor ogsaa i JS - hold dem i trit. */
+@media (max-width: 900px) {
+  .navtoggle { display: inline-flex; }
+
+  .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 50;
+    transform: translateX(-100%);
+    transition: transform .18s ease;
+    box-shadow: var(--shadow-lift);
+  }
+
+  body.navopen .sidebar { transform: none; }
+
+  body.navopen .backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 45;
+    background: rgba(0, 0, 0, .35);
+  }
+
+  /* Media queries giver ingen specificitet - body.navfold-varianten skal
+     naevnes eksplicit, ellers beholder mobilen desktop-indrykningen. */
+  .main, body.navopen .main { padding: 64px 18px 90px; }
+
+  .omni-input { font-size: 16px; padding: 16px 18px 16px 48px; }
+  .omni-icon { left: 17px; }
+  .hint { display: none; }
+  h1 { font-size: 27px; }
+
+  /* Kun under mobilgraensen: et net, saa et layoutbrud ikke goer siden
+     sidelaens scrollbar. Aldrig pa desktop - der skal fejlen forblive synlig. */
+  html, body { overflow-x: hidden; }
+}

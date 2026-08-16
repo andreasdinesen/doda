@@ -1,0 +1,11 @@
+{
+  "name": "doda",
+  "short_name": "doda",
+  "description": "Personlig opgave- og noteapp efter GTD-metoden.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#efe9e2",
+  "theme_color": "#efe9e2",
+  "lang": "da"
+}
