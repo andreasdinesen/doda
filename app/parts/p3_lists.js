@@ -446,6 +446,27 @@ function sideSettings() {
       read your whole system — prefer <strong>capture only</strong> unless you need more.</p>
     </div>
 
+    <div class="card"><h2>Calendar subscription</h2>
+      <p class="lead" style="margin:6px 0 12px">A feed your calendar app can follow.
+      It contains <strong>only real deadlines</strong> — never your whole task list.
+      The address is the secret; revoking it stops the old one immediately.</p>
+      <div id="calBox">Loading…</div>
+    </div>
+
+    <div class="card"><h2>Your data</h2>
+      <p class="lead" style="margin:6px 0 14px">Everything in one open JSON file.
+      Export it, wipe the database, import it back, and you have the same system.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" id="expData">Export data</button>
+        <button class="btn" id="expAll">Export with files</button>
+        <button class="btn" id="impBtn">Import…</button>
+        <input type="file" id="impFile" accept="application/json,.json" hidden>
+      </div>
+      <p class="gate-note" style="text-align:left">Import is matched on id, so the same
+      file can be run twice without creating duplicates. Large files are sent in
+      portions, so nothing is rejected for being too big.</p>
+    </div>
+
     <div class="card"><h2>Change password</h2>
       <p class="gate-error" id="pwMsg" hidden></p>
       <form id="pwForm" style="margin-top:12px">
@@ -566,6 +587,7 @@ function bindNoegler() {
 
 function bindSettings() {
   bindNoegler();
+  bindData();
   document.querySelectorAll('[data-tema]').forEach((el) => {
     el.addEventListener('click', () => { anvendTema(el.dataset.tema); tegnSide(); });
   });

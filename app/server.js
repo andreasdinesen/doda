@@ -1501,6 +1501,75 @@ const ROUTES = {
     });
   },
 
+  /* Eksport virker bade fra UI'et og via API'et - Andreas' krav. En genvej
+     eller et script kan tage en kopi uden at aabne browseren. */
+  'GET /api/v1/export': (req, res, ctx) => {
+    const auth = godkend(req, res, 'read');
+    if (!auth) return;
+    const medFiler = ctx.query.get('files') === '1';
+    // ?files=1 laeser ALT filindhold i hukommelsen som base85... base64, hvilket
+    // fylder 4/3. Kokkeri gik ned ad praecis den vej (247,9 MB i ét svar), sa
+    // her er der en haard spaerre med en besked, der peger pa den rigtige vej.
+    if (medFiler) {
+      const bytes = samletStoerrelse();
+      if (bytes > 150 * 1024 * 1024) {
+        apiFejl(res, 413, 'too_much_data',
+          `Your attachments are ${Math.round(bytes / 1024 / 1024)} MB — too much for a single file. `
+          + 'Export without files, and let the panel backup carry /data/files instead.');
+        return;
+      }
+    }
+    const data = JSON.stringify(byggEksport(medFiler), null, medFiler ? 0 : 1);
+    const navn = `doda-${iDag()}${medFiler ? '-med-filer' : ''}.json`;
+    res.writeHead(200, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${navn}"`,
+      'Content-Length': Buffer.byteLength(data),
+      'Cache-Control': 'no-store',
+    });
+    res.end(data);
+  },
+
+  'POST /api/v1/import': async (req, res) => {
+    const auth = godkend(req, res, 'write');
+    if (!auth) return;
+    const body = await readJsonBody(req, auth.viaToken);
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      apiFejl(res, 400, 'bad_import', 'Send a doda export document, or one chunk of one.');
+      return;
+    }
+    try {
+      const tal = importer(body);
+      audit('import', null, JSON.stringify(tal));
+      sendJson(res, 200, { imported: tal, message: `Imported ${Object.entries(tal).map(([k, v]) => `${v} ${k}`).join(', ') || 'nothing'}` });
+    } catch (err) {
+      logError(`import: ${err.stack || err}`);
+      apiFejl(res, 400, 'import_failed', `The import failed: ${err.message}`);
+    }
+  },
+
+  /* Kalenderfeedets adresse. Tokenet vises kun til en indlogget bruger. */
+  'GET /api/v1/calendar': (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    sendJson(res, 200, { token: icalToken(false) });
+  },
+
+  'POST /api/v1/calendar': async (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    const body = await readJsonBody(req);
+    if (body.action === 'revoke') {
+      db.prepare("DELETE FROM settings WHERE key = 'ical_token'").run();
+      audit('ical-token-tilbagekaldt', null, clientIp(req));
+      sendJson(res, 200, { token: null });
+      return;
+    }
+    // Nyt token: det gamle holder oejeblikkeligt op med at virke.
+    db.prepare("DELETE FROM settings WHERE key = 'ical_token'").run();
+    sendJson(res, 200, { token: icalToken(true) });
+  },
+
   'GET /api/v1/recurrences': (req, res) => {
     const auth = godkend(req, res, 'read');
     if (!auth) return;
@@ -1649,6 +1718,171 @@ function projektMedIndhold(id) {
     notes: raekker.filter((r) => r.kind === 'note'),
     children: hentProjekter().filter((x) => x.parent_id === id),
   };
+}
+
+/* ------------------------------------------------------ kalenderfeed */
+
+/**
+ * iCal-feed med KUN reelle deadlines.
+ *
+ * To ting er kritiske her (RUNE-ERFARINGER §4-5):
+ *  - Endepunktet er UDEN login (kalender-apps kan ikke sende cookies), sa det
+ *    ma ALDRIG scanne hele datasaettet. Kalendere poller hvert kvarter, og
+ *    Kokkeris feed la og parsede hele biblioteket doegnet rundt. Her rammer
+ *    forespoergslen items_forfald-indekset og henter kun poster MED en dato.
+ *  - Adressen er hemmeligheden. Den kan tilbagekaldes, og et nyt token gor
+ *    det gamle vaerdiloest med det samme.
+ */
+function icalToken(opret) {
+  let t = getSetting('ical_token');
+  if (!t && opret) {
+    t = crypto.randomBytes(24).toString('base64url');
+    setSetting('ical_token', t);
+    audit('ical-token-oprettet', null, null);
+  }
+  return t;
+}
+
+function icalEscape(s) {
+  return String(s || '').replace(/([\\;,])/g, '\\$1').replace(/\n/g, '\\n');
+}
+
+function foldLinje(l) {
+  // RFC 5545: linjer over 75 oktetter skal foldes, ellers afviser strenge
+  // klienter hele filen.
+  if (Buffer.byteLength(l) <= 74) return l;
+  const dele = [];
+  let rest = l;
+  while (Buffer.byteLength(rest) > 74) {
+    let n = 74;
+    while (Buffer.byteLength(rest.slice(0, n)) > 74) n--;
+    dele.push(dele.length ? ` ${rest.slice(0, n)}` : rest.slice(0, n));
+    rest = rest.slice(n);
+  }
+  dele.push(` ${rest}`);
+  return dele.join('\r\n');
+}
+
+function byggIcal() {
+  const raekker = db.prepare(`
+    SELECT i.id, i.title, i.due_date, i.due_time, i.status, i.updated_at, p.name AS projekt
+      FROM items i LEFT JOIN projects p ON p.id = i.project_id
+     WHERE i.due_date IS NOT NULL AND i.deleted = 0
+       AND i.status NOT IN ('done','dropped')
+     ORDER BY i.due_date LIMIT 2000`).all();
+
+  const stempel = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const ud = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//doda//EN',
+    'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', `X-WR-CALNAME:${icalEscape(APP_NAME)}`];
+
+  for (const r of raekker) {
+    const d = r.due_date.replace(/-/g, '');
+    ud.push('BEGIN:VEVENT', `UID:${r.id}@doda`, `DTSTAMP:${stempel}`);
+    if (r.due_time) {
+      // Lokal tid MED tidszone-reference. Konverteres der til UTC her, driver
+      // aftalen en time hen over sommertidsskiftet.
+      const t = `${d}T${r.due_time.replace(':', '')}00`;
+      ud.push(`DTSTART;TZID=Europe/Copenhagen:${t}`, `DTEND;TZID=Europe/Copenhagen:${t}`);
+    } else {
+      const slut = new Date(`${r.due_date}T12:00:00`);
+      slut.setDate(slut.getDate() + 1);
+      ud.push(`DTSTART;VALUE=DATE:${d}`, `DTEND;VALUE=DATE:${parse.fmtDato(slut).replace(/-/g, '')}`);
+    }
+    ud.push(foldLinje(`SUMMARY:${icalEscape(r.title)}`));
+    if (r.projekt) ud.push(foldLinje(`DESCRIPTION:${icalEscape(r.projekt)}`));
+    ud.push('END:VEVENT');
+  }
+  ud.push('END:VCALENDAR');
+  return `${ud.join('\r\n')}\r\n`;
+}
+
+/* --------------------------------------------------- eksport / import */
+
+/** Alt i ét aabent format. Ingen indelasning. */
+function byggEksport(medFiler) {
+  const raa = (sql) => db.prepare(sql).all();
+  const ud = {
+    doda: 1,
+    exportedAt: new Date().toISOString(),
+    settings: Object.fromEntries(raa('SELECT key, value FROM settings')
+      // Hemmeligheder hoerer ikke i en eksportfil, brugeren maaske deler.
+      .filter((r) => !['ical_token'].includes(r.key)).map((r) => [r.key, r.value])),
+    areas: raa('SELECT * FROM areas'),
+    contexts: raa('SELECT * FROM contexts'),
+    projects: raa('SELECT * FROM projects WHERE deleted = 0'),
+    items: raa('SELECT * FROM items WHERE deleted = 0'),
+    item_contexts: raa('SELECT * FROM item_contexts'),
+    recurrences: raa('SELECT * FROM recurrences WHERE deleted = 0'),
+    attachments: raa('SELECT * FROM attachments WHERE deleted = 0'),
+  };
+  if (medFiler) {
+    for (const a of ud.attachments) {
+      const sti = filSti(a.id);
+      try { a.data = fs.readFileSync(sti).toString('base64'); } catch { a.data = null; }
+    }
+  }
+  return ud;
+}
+
+const IMPORT_TABELLER = {
+  areas: ['id', 'name', 'seq', 'created_at', 'updated_at'],
+  contexts: ['id', 'name', 'seq', 'created_at', 'updated_at'],
+  projects: ['id', 'name', 'outcome', 'area_id', 'parent_id', 'status', 'seq', 'reviewed_at',
+    'created_at', 'updated_at', 'deleted'],
+  items: ['id', 'kind', 'status', 'title', 'note', 'project_id', 'area_id', 'due_date', 'due_time',
+    'defer_date', 'waiting_for', 'seq', 'recurrence_id', 'skipped', 'created_at', 'updated_at',
+    'completed_at', 'deleted', 'dropped_with_project'],
+  recurrences: ['id', 'rule', 'mode', 'template', 'next_due', 'next_time', 'paused', 'skips',
+    'last_completed_at', 'created_at', 'updated_at', 'deleted'],
+  item_contexts: ['item_id', 'context_id'],
+  attachments: ['id', 'item_id', 'name', 'mime', 'size', 'sha', 'width', 'height', 'created_at', 'deleted'],
+};
+
+/**
+ * Importerer én portion. Idempotent pa id, sa samme fil kan koeres to gange
+ * uden dubletter - og i portioner, fordi en fuld backup let overstiger
+ * body-graensen (Kokkeris 260 MB-backup var i praksis ubrugelig).
+ */
+function importer(data) {
+  const tal = {};
+  db.exec('BEGIN');
+  try {
+    for (const [tabel, kolonner] of Object.entries(IMPORT_TABELLER)) {
+      const raekker = Array.isArray(data[tabel]) ? data[tabel] : null;
+      if (!raekker || !raekker.length) continue;
+      const huller = kolonner.map(() => '?').join(',');
+      const ins = db.prepare(
+        `INSERT OR REPLACE INTO ${tabel} (${kolonner.join(',')}) VALUES (${huller})`);
+      let n = 0;
+      for (const r of raekker.slice(0, 5000)) {
+        if (!r || typeof r !== 'object') continue;
+        // Whitelist pr. kolonne: importfilen bestemmer aldrig skemaet.
+        try { ins.run(...kolonner.map((k) => (r[k] === undefined ? null : r[k]))); n++; }
+        catch { /* fremmednoegle der ikke er importeret endnu - spring over */ }
+      }
+      tal[tabel] = n;
+    }
+    if (data.settings && typeof data.settings === 'object') {
+      const OK = new Set(['theme', 'review_weekday', 'review_done']);
+      for (const [k, v] of Object.entries(data.settings)) if (OK.has(k)) setSetting(k, String(v));
+    }
+    db.exec('COMMIT');
+  } catch (err) { db.exec('ROLLBACK'); throw err; }
+
+  // Filindhold skrives EFTER commit: en halvskreven fil ma ikke rulle
+  // databasen tilbage, og metadataene er det, der taeller.
+  let filer = 0;
+  if (Array.isArray(data.attachments)) {
+    sikreFilesDir();
+    for (const a of data.attachments) {
+      if (!a || !a.data || !a.id) continue;
+      const sti = filSti(a.id);
+      if (!sti) continue;
+      try { fs.writeFileSync(sti, Buffer.from(a.data, 'base64')); filer++; } catch { /* springes over */ }
+    }
+  }
+  if (filer) tal.files = filer;
+  return tal;
 }
 
 /* ------------------------------------------------------------- mcp */
@@ -2154,6 +2388,32 @@ const server = http.createServer(async (req, res) => {
   }
 
   try {
+    // Kalenderfeedet er UDEN login - en kalender-app kan ikke sende cookies.
+    // Adressen ER hemmeligheden, og den kan tilbagekaldes.
+    const ical = urlPath.match(/^\/ical\/([\w-]{16,64})\.ics$/);
+    if (ical) {
+      const gyldigt = icalToken(false);
+      // timingSafeEqual kraever ens laengde - laengdeforskellen er i sig selv
+      // harmloes at afsloere.
+      const ok = gyldigt && gyldigt.length === ical[1].length
+        && crypto.timingSafeEqual(Buffer.from(gyldigt), Buffer.from(ical[1]));
+      if (!ok) {
+        logSecurity(`ical-token-afvist ip=${clientIp(req)}`);
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('Not found');
+        return;
+      }
+      const krop = byggIcal();
+      res.writeHead(200, {
+        'Content-Type': 'text/calendar; charset=utf-8',
+        'Content-Length': Buffer.byteLength(krop),
+        'Cache-Control': 'no-store',
+        'X-Content-Type-Options': 'nosniff',
+      });
+      res.end(req.method === 'HEAD' ? undefined : krop);
+      return;
+    }
+
     // MCP ligger pa /mcp - kort nok til at skrive i en klient-konfiguration.
     if (urlPath === '/mcp') {
       securityHeaders(res);

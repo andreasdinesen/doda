@@ -13,9 +13,9 @@
 
 | | |
 |---|---|
-| **Fase** | F8 · Gennemgang, logbog, ventelister, fokus — **færdig og testet lokalt** |
-| **Næste** | F9 · Kalenderfeed, eksport/import, backup |
-| **Tilstand** | F0–F7 pushet. F8 ikke committet — venter på Andreas' ja. |
+| **Fase** | F9 · Kalenderfeed, eksport/import, backup — **færdig og testet lokalt** |
+| **Næste** | F10 · Sikkerhedsgennemgang + udgivelse af v1 |
+| **Tilstand** | F0–F8 pushet. F9 ikke committet — venter på Andreas' ja. |
 | **Udgivet version** | — (`APP_VERSION = 1` er stadig ubrugt; bumpes først ved reel udgivelse) |
 | **Sidst opdateret** | 2026-08-16 |
 
@@ -113,6 +113,24 @@ vandret overløb.
 ⚠️ Install-scriptet er nu på **83 %**. F9 er den sidste fase med reel kode; bliver det
 trangt, flyttes ikonerne ud af payloaden.
 
+**Verificeret i F9 — acceptkriterie 6 er opfyldt:** `tests/roundtrip.test.mjs` fylder en
+rigtig server med projekter, områder, kontekster, noter, gentagelser og en vedhæftning,
+eksporterer alt, **sletter databasen og filmappen fysisk**, starter serveren forfra og
+importerer i portioner som UI'et gør. Derefter sammenlignes et fingeraftryk af hele
+systemet felt for felt — og **filens indhold hentes og sammenlignes byte for byte**.
+Dertil: importen er idempotent (samme fil to gange giver ingen dubletter) · eksport og
+import virker **både fra UI og via API-nøgle**, og en `read`-nøgle får 403 på import ·
+iCal-feedet indeholder kun ting **med** en deadline (opgaver uden dato og noter lækker
+ikke ud), bruger `TZID=Europe/Copenhagen` i stedet for at konvertere til UTC, svarer
+uden login på en hemmelig adresse, og tilbagekaldelse virker øjeblikkeligt · forkert
+token giver 404 uden at røbe at feedet findes.
+
+**Målt på 5.000 elementer:** eksport 3,8 MB på under et sekund · `/next` på 5 ms ·
+iCal-feedet på 2 ms (det rammer `items_forfald`-indekset og scanner aldrig datasættet —
+kalendere poller hvert kvarter) · import i portioner à 100 på 0,1 s.
+`?files=1` har en hård spærre ved 150 MB med en besked, der peger på panelets backup —
+det er den vej, Kokkeri gik ned ad med 247,9 MB i ét svar.
+
 ### Faseoversigt
 
 | # | Fase | Leverance | Status |
@@ -126,7 +144,7 @@ trangt, flyttes ikonerne ud af payloaden.
 | **F6** | PWA + offline | Hjemmeskærm, offline-læsning, fangst-kø | ✅ Færdig |
 | **F7** | Vedhæftninger | Billeder og filer på opgaver og noter | ✅ Færdig |
 | **F8** | Gennemgang, logbog, ventelister, fokus | Ugentlig gennemgang, Venter på, Engang måske, timer | ✅ Færdig |
-| **F9** | Kalenderfeed, eksport/import, backup | Data ind og ud, verificeret gendannelse | ⬜ |
+| **F9** | Kalenderfeed, eksport/import, backup | Data ind og ud, verificeret gendannelse | ✅ Færdig |
 | **F10** | Sikkerhedsgennemgang + udgivelse | Hærdning, README, v1 | ⬜ |
 
 Hver fase leveres som noget, der **virker og kan tages i brug**. Ingen fase efterlader
@@ -238,12 +256,14 @@ billeder inde i de items, listen henter, gav et login-svar på 247,9 MB.
 
 ## F9 · Kalenderfeed, eksport/import, backup
 
-- [ ] iCal-feed med **kun reelle deadlines**, hemmelig og tilbagekaldelig adresse, indekseret opslag (aldrig fuld scanning)
-- [ ] Fuld eksport + import i åbent format (JSON), rundtur verificeret: eksportér alt → slet databasen → importér → samme system tilbage
-- [ ] **Eksport og import skal virke begge veje: både fra UI'et og via API'et** — `GET /api/v1/export` (hele datasættet i ét svar) og `POST /api/v1/import`. Så kan en iOS-genvej, et script eller MCP tage en kopi uden at åbne browseren
-- [ ] Import skal være idempotent på id, så samme fil kan køres to gange uden dubletter, og skal kunne køre i portioner (Kokkeris 260 MB-backup blev afvist af serverens egen body-grænse)
-- [ ] Backup/gendan dokumenteret **og testet** — også på en stor database
-- [ ] Valgfri tingdo-import som separat trin
+- [x] iCal-feed med **kun reelle deadlines**, hemmelig og tilbagekaldelig adresse, indekseret opslag (aldrig fuld scanning)
+- [x] Fuld eksport + import i åbent format (JSON), rundtur verificeret: eksportér alt → slet databasen → importér → samme system tilbage
+- [x] **Eksport og import skal virke begge veje: både fra UI'et og via API'et** — `GET /api/v1/export` (hele datasættet i ét svar) og `POST /api/v1/import`. Så kan en iOS-genvej, et script eller MCP tage en kopi uden at åbne browseren
+- [x] Import skal være idempotent på id, så samme fil kan køres to gange uden dubletter, og skal kunne køre i portioner (Kokkeris 260 MB-backup blev afvist af serverens egen body-grænse)
+- [x] Backup/gendan dokumenteret **og testet** — også på en stor database
+- [ ] Valgfri tingdo-import — **ikke bygget**: jeg har ikke tingdos eksportformat.
+      Send en eksportfil derfra, så bygger jeg importen mod den. Handoveren kalder
+      det selv »hvis formatet er tilgængeligt«, og det er et separat, valgfrit trin
 
 ## F10 · Sikkerhedsgennemgang + udgivelse
 

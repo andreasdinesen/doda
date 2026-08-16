@@ -304,3 +304,119 @@ function tegnFokus() {
   // ikke drive, selv om fanen har vaeret i baggrunden.
   fokus.timer = setInterval(tegn, 1000);
 }
+
+/* ------------------------------------------- kalender, eksport, import */
+
+async function bindData() {
+  const boks = document.getElementById('calBox');
+  if (!boks) return;
+
+  const tegnKalender = (token) => {
+    if (!token) {
+      boks.innerHTML = '<button class="btn" id="calMake">Create subscription address</button>';
+      boks.querySelector('#calMake').addEventListener('click', async () => {
+        const d = await api('POST', '/api/v1/calendar', {});
+        tegnKalender(d.token);
+        toast('Address created');
+      });
+      return;
+    }
+    const url = `${location.origin}/ical/${token}.ics`;
+    boks.innerHTML = `<div class="keyshow" id="calUrl">${esc(url)}</div>
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+        <button class="btn" id="calCopy">Copy address</button>
+        <button class="btn ghost" id="calNew">Replace</button>
+        <button class="btn ghost" id="calOff">Turn off</button>
+      </div>
+      <p class="gate-note" style="text-align:left">In Apple Calendar:
+      File → New Calendar Subscription, and paste this.</p>`;
+    boks.querySelector('#calCopy').addEventListener('click', () => kopiér(url));
+    boks.querySelector('#calNew').addEventListener('click', async () => {
+      const d = await api('POST', '/api/v1/calendar', {});
+      tegnKalender(d.token);
+      toast('New address — the old one stopped working');
+    });
+    boks.querySelector('#calOff').addEventListener('click', async () => {
+      await api('POST', '/api/v1/calendar', { action: 'revoke' });
+      tegnKalender(null);
+      toast('Subscription turned off');
+    });
+  };
+  try { tegnKalender((await api('GET', '/api/v1/calendar')).token); }
+  catch (ex) { boks.innerHTML = `<p class="lead">${esc(ex.message)}</p>`; }
+
+  const hent = (medFiler) => {
+    // Browseren henter selv filen; en <a download> med samme oprindelse
+    // faar Content-Disposition fra serveren.
+    const a = document.createElement('a');
+    a.href = `/api/v1/export${medFiler ? '?files=1' : ''}`;
+    a.download = '';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+  document.getElementById('expData').addEventListener('click', () => hent(false));
+  document.getElementById('expAll').addEventListener('click', () => hent(true));
+
+  const felt = document.getElementById('impFile');
+  document.getElementById('impBtn').addEventListener('click', () => felt.click());
+  felt.addEventListener('change', async () => {
+    const f = felt.files[0];
+    felt.value = '';
+    if (!f) return;
+    try {
+      const doc = JSON.parse(await f.text());
+      if (!doc || doc.doda !== 1) { toast('That is not a doda export file.'); return; }
+      toast('Importing…');
+      const tal = await importerIPortioner(doc);
+      await genindlaes();
+      tegnSide();
+      toast(`Imported ${Object.entries(tal).map(([k, v]) => `${v} ${k}`).join(', ')}`);
+    } catch (ex) { toast(`Import failed: ${ex.message}`); }
+  });
+}
+
+/**
+ * Sender importen i portioner.
+ *
+ * En fuld backup overstiger let serverens body-graense. Kokkeris 260 MB-backup
+ * blev afvist af serverens egen 25 MB-graense og var i praksis ubrugelig, uden
+ * at nogen opdagede det (RUNE-ERFARINGER §4). Derfor: smaa portioner, og
+ * strukturen (omraader, projekter, kontekster) FOERST, sa fremmednoeglerne
+ * findes, naar elementerne kommer.
+ */
+async function importerIPortioner(doc) {
+  const total = {};
+  const laeg = (t) => { for (const [k, v] of Object.entries(t)) total[k] = (total[k] || 0) + v; };
+
+  laeg((await api('POST', '/api/v1/import', {
+    areas: doc.areas, contexts: doc.contexts, projects: doc.projects,
+    recurrences: doc.recurrences, settings: doc.settings,
+  })).imported);
+
+  for (let i = 0; i < (doc.items || []).length; i += 100) {
+    laeg((await api('POST', '/api/v1/import', { items: doc.items.slice(i, i + 100) })).imported);
+  }
+  laeg((await api('POST', '/api/v1/import', { item_contexts: doc.item_contexts })).imported);
+
+  // Filerne kan vaere store - én ad gangen, sa en enkelt aldrig sprænger loftet.
+  for (const a of doc.attachments || []) {
+    laeg((await api('POST', '/api/v1/import', { attachments: [a] })).imported);
+  }
+  return total;
+}
+
+function kopiér(tekst) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(tekst);
+    else {
+      const t = document.createElement('textarea');
+      t.value = tekst;
+      document.body.appendChild(t);
+      t.select();
+      document.execCommand('copy');
+      t.remove();
+    }
+    toast('Copied');
+  } catch { toast('Could not copy — select the text manually'); }
+}

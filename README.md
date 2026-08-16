@@ -61,7 +61,7 @@ completion«), så valget aldrig er skjult i et udråbstegn.
    springer aldrig frem af sig selv.
 
 Bliver en fast plan overskredet, rulles den frem — og hvert oversprunget gang
-**tælles**. Ikke som en fejl, men som information: skærmen *Repeating* viser
+**tælles**. Ikke som en fejl, men som information: skærmen *Recurring* viser
 næste forfald ved siden af antal spring, og det er dér, du opdager, at en vane
 ikke virker.
 
@@ -240,6 +240,42 @@ et vilkårligt billede.
 
 ---
 
+## Kalender, eksport og import
+
+### Kalenderabonnement
+
+**Settings → Calendar subscription** giver dig en hemmelig adresse, Apple Kalender
+kan følge (File → New Calendar Subscription).
+
+Feedet indeholder **kun ting med en reel deadline** — aldrig hele din opgaveliste,
+og aldrig dine noter. Adressen er hemmeligheden: *Replace* laver en ny og gør den
+gamle værdiløs med det samme, *Turn off* slukker feedet helt.
+
+### Dine data
+
+**Settings → Your data**. Alt ligger i én åben JSON-fil.
+
+| Knap | Hvad |
+|---|---|
+| **Export data** | Alt undtagen filindhold. Lille og læsbar |
+| **Export with files** | Selvstændig kopi med vedhæftningerne indlejret |
+| **Import…** | Læser en eksportfil tilbage |
+
+Importen matcher på id, så den samme fil kan køres to gange uden at lave dubletter,
+og den sendes i portioner — intet bliver afvist for at være for stort.
+
+Begge dele virker **også via API'et**, så et script eller en genvej kan tage en kopi
+uden at åbne browseren:
+
+```bash
+curl -s https://DIN-ADRESSE/api/v1/export -H "Authorization: Bearer doda_DIN-NØGLE" -o doda-backup.json
+```
+
+> Har du mange vedhæftninger, afviser `Export with files` sig selv over 150 MB og
+> henviser til panelets backup. Én kæmpe JSON-fil er en dårlig sikkerhedskopi.
+
+---
+
 ## Backup og gendannelse
 
 `backup.include: []` betyder **hele datamappen**, altså også `doda.db`.
@@ -257,8 +293,10 @@ panelets Schedules, hvis den skal køre automatisk.
 **Nulstil helt:** Serveren → *Wipe*. Sletter `doda.db` (+ WAL-filerne) og tager
 automatisk en backup først.
 
-Ud over panelets backup kan alt eksporteres i et åbent format inde i appen
-(kommer i F8) — ingen indelåsning.
+**Prøvet af, ikke bare påstået:** der findes en test, der fylder en server med data,
+eksporterer alt, **sletter databasen og filmappen**, starter forfra, importerer igen
+og sammenligner hele systemet felt for felt — inklusive at hente en vedhæftet fil og
+sammenligne dens indhold byte for byte. Den kører med `node --test tests/`.
 
 ---
 
