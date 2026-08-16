@@ -378,5 +378,6 @@ Se `PLAN.md` for faseoversigt og status, `DESIGN.md` for de trufne beslutninger 
 
 | Version | Ændringer |
 |---|---|
+| 3 | **Rettelse: v2 kunne ikke nås i panelet.** Serveren bandt sig til den host-port, panelet havde allokeret, i stedet for container-porten 3000. Der er nu en regressionstest, der starter serveren med panelets præcise miljø. |
 | 2 | Genvejsoversigt med `?`, `c`/`p` til kontekst og projekt fra en liste, og bundnavigation på mobil — de tre punkter fra beskrivelsen, der manglede i v1. |
 | 1 | Første udgave. Fangst med genvejssyntaks, inbox med tastaturafklaring, næste handlinger efter kontekst, projekter og områder, markdown-noter, gentagelser med Todoist-syntaks, vedhæftninger, ugentlig gennemgang, logbog, fokustimer, kalenderfeed, eksport/import, Todoist-import, API til iOS Shortcuts, MCP-server til Claude, passkeys, PWA med offline-fangst. |

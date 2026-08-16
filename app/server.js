@@ -23,7 +23,17 @@ const { DatabaseSync } = require('node:sqlite');
 const parse = require('./shared/parse.js');
 
 const DATA_DIR = process.env.DATA_DIR || process.cwd();
-const BIND_PORT = Number(process.env.BIND_PORT || process.env.PORT_web || 3000);
+// KUN BIND_PORT, aldrig PORT_web.
+//
+// Panelet injicerer PORT_<navn> og <NAVN>_PORT med den HOST-port, den har
+// allokeret (25000-30000) - ikke container-porten. Container-siden er den
+// konstant, runen selv erklaerer i ports.default, altsa 3000. Binder appen
+// sig til host-porten inde i containeren, peger panelets mapping paa 3000,
+// hvor der ikke lytter noget, og serveren er utilgaengelig.
+//
+// Der findes med vilje ingen env-variabel med container-porten: den er ikke
+// dynamisk. BIND_PORT er kun til lokal koersel.
+const BIND_PORT = Number(process.env.BIND_PORT || 3000);
 const APP_NAME = process.env.APP_NAME || 'doda';
 // Under udvikling star APP_VERSION stille (det bumpes foerst ved udgivelse),
 // men de statiske filer serveres "immutable" - sa browseren koerer glad den
