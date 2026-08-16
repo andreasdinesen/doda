@@ -59,12 +59,11 @@ def gem(img, sti):
 
 
 def main():
-    # KUN to ikoner. De ligger i runens install-script, som har et hardt loft,
-    # og PNG komprimeres ikke af brotli - fire ikoner kostede 19 % af budgettet.
-    # 192 daekker ogsaa apple-touch-icon, og 512 er baade "any" og "maskable",
-    # fordi maerket har 22 % margen hele vejen rundt.
-    for px in (192, 512):
-        gem(tegn(px), os.path.join(UD, f'icon-{px}.png'))
+    # KUN ÉN PNG. Den store er erstattet af app/public/icon.svg, som fylder
+    # ~300 b i stedet for 7,8 KB - og PNG komprimeres ikke af brotli, saa den
+    # kostede 9,7 K tegn af install-scriptets loft. PNG'en her er kun til
+    # iOS' apple-touch-icon, som ikke tager SVG.
+    gem(tegn(192), os.path.join(UD, 'icon-192.png'))
 
 
 if __name__ == '__main__':

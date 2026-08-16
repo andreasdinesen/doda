@@ -28,7 +28,7 @@ Mens du skriver, viser små chips under feltet, hvordan teksten er blevet forst�
 | `ring til lægen` | opgave i Inbox |
 | `* kontonummer 1234` | note |
 | `#telefon` | kontekst (nye skal bekræftes med et ekstra Enter) |
-| `@Sundhed` · `@"Sommerhus i Rørvig"` | projekt |
+| `@Sundhed` · `/Sundhed` · `/"Sommerhus i Rørvig"` | projekt — begge tegn virker, som legenden lover |
 | `!tomorrow` `!friday` `!3/9` `!in 2 weeks` `!sep 3 at 9` | deadline |
 | `~in 2 months` | skjul indtil den dato |
 | `køb dæk // se https://dæk.dk og husk rabatkoden` | alt efter ` // ` bliver beskrivelsen |
@@ -378,6 +378,7 @@ Se `PLAN.md` for faseoversigt og status, `DESIGN.md` for de trufne beslutninger 
 
 | Version | Ændringer |
 |---|---|
+| 4 | **Rettelse:** `/projekt` virkede kun som første tegn i paletten, ikke midt i en sætning — selv om legenden lover `/ projects`. Nu betyder `@` og `/` præcis det samme, og hverken URL'er, datoer eller `ja/nej` bliver ramt. |
 | 3 | **Rettelse: v2 kunne ikke nås i panelet.** Serveren bandt sig til den host-port, panelet havde allokeret, i stedet for container-porten 3000. Der er nu en regressionstest, der starter serveren med panelets præcise miljø. |
 | 2 | Genvejsoversigt med `?`, `c`/`p` til kontekst og projekt fra en liste, og bundnavigation på mobil — de tre punkter fra beskrivelsen, der manglede i v1. |
 | 1 | Første udgave. Fangst med genvejssyntaks, inbox med tastaturafklaring, næste handlinger efter kontekst, projekter og områder, markdown-noter, gentagelser med Todoist-syntaks, vedhæftninger, ugentlig gennemgang, logbog, fokustimer, kalenderfeed, eksport/import, Todoist-import, API til iOS Shortcuts, MCP-server til Claude, passkeys, PWA med offline-fangst. |

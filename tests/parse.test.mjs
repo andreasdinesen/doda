@@ -258,3 +258,45 @@ test('markører midt i et ord rører ikke titlen', () => {
   assert.equal(r.title, 'husk C#-kurset og a@b');
   assert.deepEqual(r.contexts, []);
 });
+
+/* ------------------------------------------- / som projekt (som @) */
+
+test('/ virker som projekt midt i en sætning — legenden lover det', () => {
+  const r = fangst('Mal alle lister /doda');
+  assert.equal(r.project, 'doda');
+  assert.equal(r.title, 'Mal alle lister');
+
+  const r2 = fangst('Test brug for /Doda #computer !i morgen');
+  assert.equal(r2.project, 'Doda');
+  assert.deepEqual(r2.contexts, ['computer']);
+  assert.equal(r2.title, 'Test brug for');
+  assert.deepEqual(r2.due, { dato: '2026-08-14', tid: null });
+
+  assert.equal(fangst('mal skuret /"Sommerhus i Rørvig"').project, 'Sommerhus i Rørvig');
+});
+
+test('/ må ALDRIG æde URL’er, datoer eller almindelige skråstreger', () => {
+  // Ingen af dem har mellemrum foer skraastregen.
+  const u = fangst('læs https://dr.dk/nyheder/politik i dag');
+  assert.equal(u.project, null);
+  assert.equal(u.title, 'læs https://dr.dk/nyheder/politik i dag');
+
+  assert.deepEqual(fangst('bestil dæk !3/9').due, { dato: '2026-09-03', tid: null });
+  assert.equal(fangst('bestil dæk !3/9').project, null);
+
+  assert.equal(fangst('skriv ja/nej på sedlen').project, null);
+  assert.equal(fangst('skriv ja/nej på sedlen').title, 'skriv ja/nej på sedlen');
+
+  assert.equal(fangst('bestil dæk ~1/10').defer, '2026-10-01');
+
+  // En skraastreg med mellemrum omkring er tekst, ikke en markoer.
+  assert.equal(fangst('vælg mellem A / B').project, null);
+});
+
+test('@ og / betyder præcis det samme', () => {
+  const a = fangst('køb maling @Sommerhus #ude');
+  const b = fangst('køb maling /Sommerhus #ude');
+  assert.equal(a.project, b.project);
+  assert.equal(a.title, b.title);
+  assert.deepEqual(a.contexts, b.contexts);
+});

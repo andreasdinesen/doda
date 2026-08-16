@@ -610,7 +610,7 @@ function sideSettings() {
         <tr><td><code>+ text</code></td><td>task (also the default)</td></tr>
         <tr><td><code>* text</code></td><td>note</td></tr>
         <tr><td><code>#context</code></td><td>add a context</td></tr>
-        <tr><td><code>@project</code></td><td>file under a project — <code>@"two words"</code></td></tr>
+        <tr><td><code>@project</code> · <code>/project</code></td><td>file under a project — <code>/"two words"</code></td></tr>
         <tr><td><code>!date</code></td><td><code>!tomorrow</code>, <code>!friday</code>, <code>!3/9</code>, <code>!in 2 weeks</code></td></tr>
         <tr><td><code>~date</code></td><td>hide until that date</td></tr>
         <tr><td><code>text // more</code></td><td>everything after <code>//</code> becomes the description</td></tr>

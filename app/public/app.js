@@ -437,7 +437,14 @@
 
   /* ------------------------------------------------------------ fangst */
 
-  const MARKOERER = '#@!~';
+  // BADE @ og / peger pa et projekt. Paletten laerer brugeren "/ projects" i
+  // legenden, og saa skal / ogsaa virke midt i en saetning - ellers lover
+  // interfacet noget, parseren ikke holder.
+  //
+  // Det er ufarligt, fordi en markoer SKAL have mellemrum eller start foran
+  // sig: "https://dr.dk/nyheder", "3/9" og "and/or" har alle et tegn foer
+  // skraastregen og roeres derfor ikke.
+  const MARKOERER = '#@!~/';
 
   /**
    * Tolker en fangst-tekst til felter.
@@ -495,7 +502,7 @@
       const slut = i + 1 < fundne.length ? fundne[i + 1].pos : tekst.length;
       const raat = tekst.slice(her.pos + 1, slut);
 
-      if (her.tegn === '#' || her.tegn === '@') {
+      if (her.tegn === '#' || her.tegn === '@' || her.tegn === '/') {
         // Kontekst og projekt er ÉT ord, og det skal klaebe DIREKTE til
         // markoeren - medmindre projektet er sat i anfoerselstegn:
         // @"Sommerhus i Rørvig".
@@ -514,7 +521,7 @@
         }
         if (!vaerdi) continue;
         if (her.tegn === '#') { if (!ud.contexts.includes(vaerdi)) ud.contexts.push(vaerdi); }
-        else ud.project = vaerdi;
+        else ud.project = vaerdi;      // bade @ og /
         spis.push([her.pos, her.pos + 1 + laengde]);
         continue;
       }
@@ -707,7 +714,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 3;
+const APP_VERSION = 4;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -2181,7 +2188,7 @@ function sideSettings() {
         <tr><td><code>+ text</code></td><td>task (also the default)</td></tr>
         <tr><td><code>* text</code></td><td>note</td></tr>
         <tr><td><code>#context</code></td><td>add a context</td></tr>
-        <tr><td><code>@project</code></td><td>file under a project — <code>@"two words"</code></td></tr>
+        <tr><td><code>@project</code> · <code>/project</code></td><td>file under a project — <code>/"two words"</code></td></tr>
         <tr><td><code>!date</code></td><td><code>!tomorrow</code>, <code>!friday</code>, <code>!3/9</code>, <code>!in 2 weeks</code></td></tr>
         <tr><td><code>~date</code></td><td>hide until that date</td></tr>
         <tr><td><code>text // more</code></td><td>everything after <code>//</code> becomes the description</td></tr>

@@ -6,7 +6,7 @@
  * browserens cache, og SW'en kan servere en gammel app.js i det uendelige
  * (RUNE-ERFARINGER §5). */
 
-const VERSION = 3;
+const VERSION = 4;
 const CACHE = `doda-v${VERSION}`;
 
 // Praecis de samme URL'er som index.html henter - ellers ligger der to
@@ -17,7 +17,7 @@ const SKAL = [
   `./app.js?v=${VERSION}`,
   './manifest.webmanifest',
   './icon-192.png',
-  './icon-512.png',
+  './icon.svg',
 ];
 
 self.addEventListener('install', (e) => {
