@@ -520,3 +520,63 @@ function visTodoistForhaandsvisning(laest) {
     toast(fejl ? `Imported ${n}, ${fejl} failed` : `Imported ${n} items from Todoist`);
   });
 }
+
+/* -------------------------------------------------- genvejsoversigten */
+
+/* Handover §7: "Vis en oversigt over genvejene med ?". Den skal kunne naas
+   overalt - ogsaa fra en liste, hvor bogstaverne ellers er optaget. */
+const GENVEJE = [
+  ['Anywhere', [
+    ['any key', 'Start capturing — the palette opens with what you typed'],
+    ['?', 'This list'],
+    ['esc', 'Close whatever is open'],
+  ]],
+  ['In the palette', [
+    ['+', 'New task'], ['*', 'New note'],
+    ['/', 'Jump to a project'], ['#', 'Jump to a context'], [':', 'Jump to an area'],
+    ['↑ ↓', 'Move between results'], ['enter', 'Create or open'],
+    ['backspace', 'Leave the mode when the field is empty'],
+  ]],
+  ['In a list', [
+    ['↑ ↓', 'Move between items (or j / k)'],
+    ['enter', 'Open the item'],
+    ['space', 'Mark it done'],
+    ['n', 'Next Actions'], ['w', 'Waiting For'], ['s', 'Someday'], ['q', 'Queued'],
+    ['c', 'Set a context'], ['p', 'Set a project'],
+    ['x', 'Delete'],
+  ]],
+];
+
+function visGenveje() {
+  if (document.getElementById('shortcutSheet')) return;
+  const host = document.createElement('div');
+  host.className = 'modal';
+  host.id = 'shortcutSheet';
+  host.innerHTML = `
+  <div class="modal-card" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
+    <h2>Keyboard shortcuts</h2>
+    <p class="lead" style="margin:6px 0 18px">Clarifying the inbox never needs the mouse.</p>
+    ${GENVEJE.map(([gruppe, liste]) => `
+      <div class="meta" style="margin:16px 0 8px">${esc(gruppe)}</div>
+      <table class="shortcuts">${liste.map(([tast, hvad]) =>
+    `<tr><td><kbd>${esc(tast)}</kbd></td><td>${esc(hvad)}</td></tr>`).join('')}</table>`).join('')}
+    <div class="modal-foot"><span style="flex:1"></span>
+      <button class="btn primary" id="scClose">Close</button></div>
+  </div>`;
+  document.body.appendChild(host);
+  const luk = () => host.remove();
+  host.querySelector('#scClose').addEventListener('click', luk);
+  host.addEventListener('click', (e) => { if (e.target === host) luk(); });
+  host.querySelector('#scClose').focus();
+}
+
+// ? skal virke OVERALT - ogsaa i en liste, hvor bogstaverne er optaget af
+// afklaringen. Derfor fanges den her, foer listens egne taster.
+document.addEventListener('keydown', (e) => {
+  if (!state.user || e.key !== '?') return;
+  const el = document.activeElement;
+  if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+  e.preventDefault();
+  e.stopPropagation();
+  visGenveje();
+}, true);

@@ -869,6 +869,11 @@ const VIEWS = [
 
 const viewById = (id) => VIEWS.find((v) => v.id === id) || VIEWS[0];
 
+// Handover §6: "Pa mobil: de fire-fem vigtigste i bunden, resten i en menu."
+// Fangst er ikke med her - den naas fra alle skaerme ved bare at skrive,
+// og har sin egen knap i baandet.
+const BUND = ['next', 'inbox', 'projects', 'repeat', 'review'];
+
 const BESKRIVELSER = {
   next: 'What you can actually do right now, grouped by context.',
   inbox: 'Unprocessed items waiting for clarification.',
@@ -1006,7 +1011,19 @@ function shellHtml() {
       <div id="pageHost"></div>
     </main>
   </div>
-  <div class="hint"><span class="key">A</span><span class="meta">type to capture</span></div>`;
+  <div class="hint"><span class="key">A</span><span class="meta">type to capture</span></div>
+  <nav class="bottomnav" id="bottomNav">
+    ${BUND.map((id) => {
+    const v = viewById(id);
+    const antal = v.tael ? (state.counts[v.tael] || 0) : 0;
+    return `<button class="bottomnav-item" data-view="${v.id}" ${v.id === state.view ? 'aria-current="page"' : ''}>
+        ${icon(v.icon, 21)}<span>${esc(v.label.split(' ')[0])}</span>
+        ${antal ? `<span class="bottomnav-count">${antal}</span>` : ''}
+      </button>`;
+  }).join('')}
+    <button class="bottomnav-item" id="bottomCapture" aria-label="Capture">
+      ${icon('plus', 21)}<span>Capture</span></button>
+  </nav>`;
 }
 
 function statsHtml() {
@@ -1043,6 +1060,17 @@ function tegnGennemgangsbaand() {
 function opdaterNav() {
   const host = document.getElementById('navHost');
   if (host) { host.innerHTML = navHtml(); bindNav(); }
+  // Bundlinjen har sin egen markering af den aktive side og sit eget tal.
+  document.querySelectorAll('.bottomnav-item[data-view]').forEach((el) => {
+    if (el.dataset.view === state.view) el.setAttribute('aria-current', 'page');
+    else el.removeAttribute('aria-current');
+    const t = el.querySelector('.bottomnav-count');
+    const v = viewById(el.dataset.view);
+    const antal = v.tael ? (state.counts[v.tael] || 0) : 0;
+    if (t && !antal) t.remove();
+    else if (t) t.textContent = antal;
+    else if (antal) el.insertAdjacentHTML('beforeend', `<span class="bottomnav-count">${antal}</span>`);
+  });
   const stats = document.getElementById('statsHost');
   if (stats) stats.innerHTML = statsHtml();
 }
@@ -1056,6 +1084,14 @@ function bindNav() {
 function bindShell() {
   bindNav();
   document.getElementById('userBtn').addEventListener('click', () => gaaTil('settings'));
+  document.querySelectorAll('.bottomnav-item[data-view]').forEach((el) => {
+    el.addEventListener('click', () => gaaTil(el.dataset.view));
+  });
+  // "Fangst skal kunne naas fra alle skaerme med ét tryk" (handover §6).
+  document.getElementById('bottomCapture').addEventListener('click', () => {
+    const o = omniEl();
+    if (o) { o.scrollIntoView({ block: 'start' }); o.focus(); }
+  });
   document.getElementById('navToggle').addEventListener('click', () => document.body.classList.toggle('navopen'));
   document.getElementById('backdrop').addEventListener('click', () => document.body.classList.remove('navopen'));
   bindOmni();
@@ -1756,7 +1792,61 @@ async function raekkeTaster(e) {
     e.preventDefault();
     husk();
     await slet(id);
+    return;
   }
+
+  // Kontekst og projekt skal ogsaa kunne saettes uden mus (handover §7).
+  // De aabner en lille vaelger i stedet for at gaette pa et navn.
+  if (e.key === 'c' || e.key === 'p') {
+    e.preventDefault();
+    const it = state.items.find((x) => x.id === id);
+    if (it) vaelgHurtigt(it, e.key === 'c' ? 'context' : 'project');
+  }
+}
+
+/**
+ * Lille vaelger til tastaturafklaringen. Piletaster og Enter - og den
+ * lukker sig selv, saa fokus kan gaa tilbage til raekken.
+ */
+function vaelgHurtigt(it, hvad) {
+  const kilde = hvad === 'context' ? state.contexts : state.projects;
+  const host = document.createElement('div');
+  host.className = 'modal';
+  host.innerHTML = `
+  <div class="modal-card" role="dialog" aria-modal="true" style="max-width:420px">
+    <h2>${hvad === 'context' ? 'Set a context' : 'Set a project'}</h2>
+    <p class="lead" style="margin:6px 0 14px">${esc(it.title)}</p>
+    ${kilde.length ? `<select class="input" id="qkSel" size="${Math.min(kilde.length + 1, 8)}">
+      <option value="">${hvad === 'context' ? '— remove all contexts —' : '— no project —'}</option>
+      ${kilde.map((x) => `<option value="${esc(x.id)}">${hvad === 'context' ? '#' : ''}${esc(x.name)}</option>`).join('')}
+    </select>` : `<p class="lead">No ${hvad === 'context' ? 'contexts' : 'projects'} yet — type
+      ${hvad === 'context' ? '<code>#name</code>' : '<code>@Name</code>'} when you capture.</p>`}
+    <div class="modal-foot"><span style="flex:1"></span>
+      <button class="btn" id="qkCancel">Cancel</button>
+      ${kilde.length ? '<button class="btn primary" id="qkOk">Set</button>' : ''}</div>
+  </div>`;
+  document.body.appendChild(host);
+  const luk = () => { host.remove(); const r = document.querySelector(`.item-row[data-id="${CSS.escape(it.id)}"]`); if (r) r.focus(); };
+  host.querySelector('#qkCancel').addEventListener('click', luk);
+  host.addEventListener('click', (e) => { if (e.target === host) luk(); });
+
+  const sel = host.querySelector('#qkSel');
+  if (!sel) return;
+  sel.focus();
+  const gem = async () => {
+    const v = sel.value;
+    try {
+      await api('POST', `/api/v1/items/${it.id}`,
+        hvad === 'context' ? { contexts: v ? [v] : [] } : { project_id: v || null });
+      luk();
+      await genindlaes();
+      tegnSide();
+      toast('Saved');
+    } catch (ex) { toast(ex.message); }
+  };
+  host.querySelector('#qkOk').addEventListener('click', gem);
+  sel.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); gem(); } });
+  sel.addEventListener('dblclick', gem);
 }
 
 async function fuldfoer(id) {
@@ -3810,3 +3900,63 @@ function visTodoistForhaandsvisning(laest) {
     toast(fejl ? `Imported ${n}, ${fejl} failed` : `Imported ${n} items from Todoist`);
   });
 }
+
+/* -------------------------------------------------- genvejsoversigten */
+
+/* Handover §7: "Vis en oversigt over genvejene med ?". Den skal kunne naas
+   overalt - ogsaa fra en liste, hvor bogstaverne ellers er optaget. */
+const GENVEJE = [
+  ['Anywhere', [
+    ['any key', 'Start capturing — the palette opens with what you typed'],
+    ['?', 'This list'],
+    ['esc', 'Close whatever is open'],
+  ]],
+  ['In the palette', [
+    ['+', 'New task'], ['*', 'New note'],
+    ['/', 'Jump to a project'], ['#', 'Jump to a context'], [':', 'Jump to an area'],
+    ['↑ ↓', 'Move between results'], ['enter', 'Create or open'],
+    ['backspace', 'Leave the mode when the field is empty'],
+  ]],
+  ['In a list', [
+    ['↑ ↓', 'Move between items (or j / k)'],
+    ['enter', 'Open the item'],
+    ['space', 'Mark it done'],
+    ['n', 'Next Actions'], ['w', 'Waiting For'], ['s', 'Someday'], ['q', 'Queued'],
+    ['c', 'Set a context'], ['p', 'Set a project'],
+    ['x', 'Delete'],
+  ]],
+];
+
+function visGenveje() {
+  if (document.getElementById('shortcutSheet')) return;
+  const host = document.createElement('div');
+  host.className = 'modal';
+  host.id = 'shortcutSheet';
+  host.innerHTML = `
+  <div class="modal-card" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
+    <h2>Keyboard shortcuts</h2>
+    <p class="lead" style="margin:6px 0 18px">Clarifying the inbox never needs the mouse.</p>
+    ${GENVEJE.map(([gruppe, liste]) => `
+      <div class="meta" style="margin:16px 0 8px">${esc(gruppe)}</div>
+      <table class="shortcuts">${liste.map(([tast, hvad]) =>
+    `<tr><td><kbd>${esc(tast)}</kbd></td><td>${esc(hvad)}</td></tr>`).join('')}</table>`).join('')}
+    <div class="modal-foot"><span style="flex:1"></span>
+      <button class="btn primary" id="scClose">Close</button></div>
+  </div>`;
+  document.body.appendChild(host);
+  const luk = () => host.remove();
+  host.querySelector('#scClose').addEventListener('click', luk);
+  host.addEventListener('click', (e) => { if (e.target === host) luk(); });
+  host.querySelector('#scClose').focus();
+}
+
+// ? skal virke OVERALT - ogsaa i en liste, hvor bogstaverne er optaget af
+// afklaringen. Derfor fanges den her, foer listens egne taster.
+document.addEventListener('keydown', (e) => {
+  if (!state.user || e.key !== '?') return;
+  const el = document.activeElement;
+  if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+  e.preventDefault();
+  e.stopPropagation();
+  visGenveje();
+}, true);

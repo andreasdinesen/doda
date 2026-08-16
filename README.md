@@ -171,7 +171,12 @@ I Inbox og Næste handlinger kan alt klares uden mus:
 | `mellemrum` | markér udført |
 | `n` `w` `s` `q` | Next · Waiting for · Someday · Queued |
 | `x` | slet |
-| `/` | tilbage til kommandobaren |
+| `c` `p` | sæt kontekst · sæt projekt |
+| `?` | vis hele oversigten over genveje |
+
+På mobil ligger de fem vigtigste skærme i et bånd i bunden — Next, Inbox,
+Projects, Recurring og Review — plus en Capture-knap, så fangst kan nås fra
+alle skærme med ét tryk.
 
 ---
 

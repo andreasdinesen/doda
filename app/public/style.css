@@ -1174,3 +1174,80 @@ button.chip:not(.flat):hover { text-decoration: line-through; }
   .review-nudge { flex-wrap: wrap; }
   .review-nudge span { flex: 1 1 100%; }
 }
+
+/* -------------------------------------------------- bundnavigation */
+
+/* Handover §6: de fem vigtigste i bunden pa mobil, resten i menuen.
+   Findes KUN under mobilgraensen - pa desktop er sidebaren vejen. */
+.bottomnav { display: none; }
+
+.shortcuts { width: 100%; border-collapse: collapse; font-size: 14px; }
+.shortcuts td { padding: 5px 0; }
+.shortcuts td:first-child { width: 120px; }
+
+.shortcuts kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 30px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+@media (max-width: 900px) {
+  .bottomnav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 44;
+    display: flex;
+    background: var(--sidebar);
+    border-top: 1px solid var(--border);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .bottomnav-item {
+    position: relative;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 9px 2px 8px;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font-size: 10.5px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .bottomnav-item[aria-current="page"] { color: var(--accent-text); }
+  .bottomnav-item svg { opacity: .85; }
+  .bottomnav-item[aria-current="page"] svg { opacity: 1; }
+
+  /* Antallet er et tal, ikke en alarm - samme dampede farve som i sidebaren. */
+  .bottomnav-count {
+    position: absolute;
+    top: 4px;
+    right: 50%;
+    transform: translateX(18px);
+    min-width: 16px;
+    padding: 0 4px;
+    border-radius: var(--pill);
+    background: var(--accent-soft);
+    color: var(--accent-text);
+    font-size: 10px;
+    line-height: 16px;
+  }
+
+  /* Plads til baandet, saa den sidste raekke ikke gemmer sig bag det. */
+  .main, body.navopen .main { padding-bottom: 96px; }
+  .focusbar { bottom: 74px; }
+  .toasts { bottom: 78px; }
+}

@@ -167,6 +167,11 @@ const VIEWS = [
 
 const viewById = (id) => VIEWS.find((v) => v.id === id) || VIEWS[0];
 
+// Handover §6: "Pa mobil: de fire-fem vigtigste i bunden, resten i en menu."
+// Fangst er ikke med her - den naas fra alle skaerme ved bare at skrive,
+// og har sin egen knap i baandet.
+const BUND = ['next', 'inbox', 'projects', 'repeat', 'review'];
+
 const BESKRIVELSER = {
   next: 'What you can actually do right now, grouped by context.',
   inbox: 'Unprocessed items waiting for clarification.',
@@ -304,7 +309,19 @@ function shellHtml() {
       <div id="pageHost"></div>
     </main>
   </div>
-  <div class="hint"><span class="key">A</span><span class="meta">type to capture</span></div>`;
+  <div class="hint"><span class="key">A</span><span class="meta">type to capture</span></div>
+  <nav class="bottomnav" id="bottomNav">
+    ${BUND.map((id) => {
+    const v = viewById(id);
+    const antal = v.tael ? (state.counts[v.tael] || 0) : 0;
+    return `<button class="bottomnav-item" data-view="${v.id}" ${v.id === state.view ? 'aria-current="page"' : ''}>
+        ${icon(v.icon, 21)}<span>${esc(v.label.split(' ')[0])}</span>
+        ${antal ? `<span class="bottomnav-count">${antal}</span>` : ''}
+      </button>`;
+  }).join('')}
+    <button class="bottomnav-item" id="bottomCapture" aria-label="Capture">
+      ${icon('plus', 21)}<span>Capture</span></button>
+  </nav>`;
 }
 
 function statsHtml() {
@@ -341,6 +358,17 @@ function tegnGennemgangsbaand() {
 function opdaterNav() {
   const host = document.getElementById('navHost');
   if (host) { host.innerHTML = navHtml(); bindNav(); }
+  // Bundlinjen har sin egen markering af den aktive side og sit eget tal.
+  document.querySelectorAll('.bottomnav-item[data-view]').forEach((el) => {
+    if (el.dataset.view === state.view) el.setAttribute('aria-current', 'page');
+    else el.removeAttribute('aria-current');
+    const t = el.querySelector('.bottomnav-count');
+    const v = viewById(el.dataset.view);
+    const antal = v.tael ? (state.counts[v.tael] || 0) : 0;
+    if (t && !antal) t.remove();
+    else if (t) t.textContent = antal;
+    else if (antal) el.insertAdjacentHTML('beforeend', `<span class="bottomnav-count">${antal}</span>`);
+  });
   const stats = document.getElementById('statsHost');
   if (stats) stats.innerHTML = statsHtml();
 }
@@ -354,6 +382,14 @@ function bindNav() {
 function bindShell() {
   bindNav();
   document.getElementById('userBtn').addEventListener('click', () => gaaTil('settings'));
+  document.querySelectorAll('.bottomnav-item[data-view]').forEach((el) => {
+    el.addEventListener('click', () => gaaTil(el.dataset.view));
+  });
+  // "Fangst skal kunne naas fra alle skaerme med ét tryk" (handover §6).
+  document.getElementById('bottomCapture').addEventListener('click', () => {
+    const o = omniEl();
+    if (o) { o.scrollIntoView({ block: 'start' }); o.focus(); }
+  });
   document.getElementById('navToggle').addEventListener('click', () => document.body.classList.toggle('navopen'));
   document.getElementById('backdrop').addEventListener('click', () => document.body.classList.remove('navopen'));
   bindOmni();

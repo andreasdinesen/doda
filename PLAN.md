@@ -13,7 +13,7 @@
 
 | | |
 |---|---|
-| **Fase** | F11 · Passkeys + sikkerhedsgennemgang — **klar til udgivelse** |
+| **Fase** | **v1 udgivet.** Efterslæb fra handoveren lukket. |
 | **Næste** | Udgivelse: commit, push, og installér i panelet |
 | **Tilstand** | F0–F9 pushet. |
 | **Udgivet version** | — (`APP_VERSION = 1` er stadig ubrugt; bumpes først ved reel udgivelse) |
@@ -156,6 +156,26 @@ sætte en egen header, og fetch med én udløser en preflight, vi aldrig svarer.
 API-nøgler er fritaget: der er ingen ambient legitimation at misbruge. Målt: **400**
 uden headeren, **200** med, **200** med nøgle.
 
+**Efterslæb fundet ved en gennemgang af handoveren efter v1** — tre punkter stod
+eksplicit i beskrivelsen og var ikke bygget:
+
+- [x] **§7: genvejsoversigt med `?`.** Fanges i capture-fasen, så den også virker,
+      når fokus står i en liste, hvor bogstaverne er optaget af afklaringen
+- [x] **§7: `c` sæt kontekst og `p` sæt projekt** direkte fra en liste. De var de to
+      eneste af §7's ni handlinger uden en genvej
+- [x] **§6: bundnavigation på mobil** — Next, Inbox, Projects, Recurring, Review plus
+      en Capture-knap, så fangst kan nås fra alle skærme med ét tryk. Findes kun under
+      mobilgrænsen; på desktop er sidebaren vejen
+
+**Bevidste afvigelser fra handoveren** (ikke mangler, men valg der bør stå skrevet):
+
+- **§5.14** siger, at områder, kontekster og projekter administreres i Indstillinger.
+  De har i stedet deres egne skærme (Contexts, og Projects → Manage areas), fordi de
+  er ting man arbejder i, ikke indstillinger man sætter én gang.
+- **§5.12** ønsker en påmindelse om gennemgangen. Den er et bånd i appen, ikke en
+  push-besked — se begrundelsen ovenfor.
+- **§5.13** ønsker tingdo-import. Formatet er ukendt; i stedet er der Todoist-import.
+
 **Pladsen løst:** ikonerne er skåret fra fire til to (192 dækker også apple-touch-icon,
 512 er både `any` og `maskable`). Install-scriptet gik fra 92 % tilbage til **83 %**.
 
@@ -174,7 +194,7 @@ uden headeren, **200** med, **200** med nøgle.
 | **F8** | Gennemgang, logbog, ventelister, fokus | Ugentlig gennemgang, Venter på, Engang måske, timer | ✅ Færdig |
 | **F9** | Kalenderfeed, eksport/import, backup | Data ind og ud, verificeret gendannelse | ✅ Færdig |
 | **F10** | Kommandopalet + Todoist-import | Paletten som Andreas' skitser, og data ind fra Todoist | ✅ Færdig |
-| **F11** | Passkeys, sikkerhedsgennemgang + udgivelse | Hærdning, README, v1 | 🔨 Næsten |
+| **F11** | Passkeys, sikkerhedsgennemgang + udgivelse | Hærdning, README, v1 | ✅ Færdig |
 
 Hver fase leveres som noget, der **virker og kan tages i brug**. Ingen fase efterlader
 appen i en tilstand, hvor den ikke kan startes.
