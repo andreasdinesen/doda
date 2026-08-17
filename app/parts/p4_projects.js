@@ -135,6 +135,9 @@ async function sideProjekt(id) {
       <p class="lead">${omr ? esc(omr) : 'No area'}${p.status !== 'active' ? ` · ${esc(p.status)}` : ''}</p>
       ${p.outcome ? `<div class="outcome">${markdown(p.outcome)}</div>`
     : '<p class="lead" style="margin-top:10px;opacity:.7">No description of what “done” looks like yet.</p>'}
+      ${p.link_url ? `<div class="chiprow" style="margin-top:14px">
+        <a class="chip link" href="${esc(p.link_url)}" target="_blank" rel="noopener noreferrer"
+           title="${esc(p.link_url)}">${icon('link', 13)} ${esc(linkNavn(p))}</a></div>` : ''}
       <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
         <button class="btn" id="editProject">Edit project</button>
         ${p.status === 'active' ? '<button class="btn ghost" data-pstatus="someday">Park as someday</button>' : ''}
@@ -285,6 +288,8 @@ function redigerProjekt(p) {
     `<option value="${esc(x.id)}"${!nyt && x.id === p.parent_id ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}
         </select></label>
     </div>
+    <div class="field"><span>Link</span>
+      <div class="chiprow" id="pLinkRow" style="margin-top:2px"></div></div>
     <div class="modal-foot">
       ${nyt ? '' : '<button class="btn ghost" id="pDelete">Delete</button>'}
       <span style="flex:1"></span>
@@ -297,12 +302,27 @@ function redigerProjekt(p) {
   host.addEventListener('click', (e) => { if (e.target === host) luk(); });
   host.querySelector('#pCancel').addEventListener('click', luk);
 
+  // Samme udkast-princip som detaljeruden: linket lever i `u`, indtil der
+  // trykkes Save. Cancel maa ikke efterlade noget.
+  const u = { link_url: nyt ? null : (p.link_url || null), link_title: nyt ? null : (p.link_title || null) };
+  const tegnLink = () => {
+    host.querySelector('#pLinkRow').innerHTML = u.link_url
+      ? `<a class="chip link" href="${esc(u.link_url)}" target="_blank" rel="noopener noreferrer"
+           title="${esc(u.link_url)}">${icon('link', 13)} ${esc(linkNavn(u))}</a>
+         <button class="chip flat" id="pLinkEdit" type="button">edit link</button>`
+      : '<button class="chip flat" id="pLinkEdit" type="button">+ link</button>';
+    host.querySelector('#pLinkEdit').addEventListener('click', () => spoergOmLink(u, tegnLink));
+  };
+  tegnLink();
+
   host.querySelector('#pSave').addEventListener('click', async () => {
     const felter = {
       name: host.querySelector('#pName').value,
       outcome: host.querySelector('#pOutcome').value,
       area_id: host.querySelector('#pArea').value || null,
       parent_id: host.querySelector('#pParent').value || null,
+      link_url: u.link_url,
+      link_title: u.link_title,
     };
     try {
       let id = nyt ? null : p.id;
