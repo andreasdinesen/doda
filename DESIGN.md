@@ -217,6 +217,28 @@ man kan **søge** efter siden uden at skifte vindue, og chippen får sidens
 både af `GET /api/v1/settings` og af eksporten. Ligger listen to steder,
 glemmer man den ene, næste gang der kommer en hemmelighed til.
 
+### Notion-sidens indhold vises i doda (v19)
+
+En note med et Notion-link kan folde sidens indhold ud i detaljeruden.
+
+- **Hentes på forlangende, ikke ved hver åbning.** En side kan være lang, og
+  Notion er kilden. Svaret ligger i hukommelsen et kvarter — ikke i databasen:
+  en kopi kunne blive forkert, uden at nogen opdagede det.
+- **Blokke → markdown → dodas egen renderer.** Der bygges aldrig HTML af
+  fremmed indhold. Renderen escaper først og laver kun de tags, den selv
+  kender, så der er ingen vej fra en fremmed side til et tag, doda ikke har
+  skrevet. Bevist i browseren: seks angreb fra et simuleret Notion-svar gav
+  nul `script`, nul `img`, nul `iframe`, nul `on*` — og `javascript:` blev
+  aldrig et link.
+- **Billeder bliver til links.** doda's CSP er `img-src 'self' data:`, så et
+  `<img>` mod Notions S3 ville være tomt. Et blokeret billede ligner en fejl;
+  et link er ærligt. Det står også skrevet i ruden.
+- **Loft på 300 blokke og ét niveau indlejring.** En fremmed side kan være hvor
+  stor som helst, og doda skal ikke kunne væltes af en, nogen har delt.
+- Det, doda ikke kan vise (tabeller, kolonner, synkroniserede blokke), siger
+  den ærligt frem for at lade som ingenting. En ukendt bloktype mister ikke sin
+  tekst — Notion tilføjer nye, og de skal ikke blive til tomhed.
+
 ### Tastaturet ind i listerne
 
 `↑`/`↓` går **ind** i listen uden at åbne noget. Før kunne fokus kun komme fra

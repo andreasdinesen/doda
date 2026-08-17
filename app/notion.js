@@ -20,6 +20,71 @@ const https = require('node:https');
 
 const VERSION = '2022-06-28';   // Notion kraever en eksplicit API-version
 
+/* --------------------------------------------------- sidens indhold */
+
+/** Rich text -> markdown. Annoteringerne er flag, ikke en traestruktur. */
+function tekst(dele) {
+  return (dele || []).map((d) => {
+    let s = d.plain_text || '';
+    if (!s) return '';
+    const a = d.annotations || {};
+    // Kode foerst: **fed** inde i `kode` ville vaere forkert.
+    if (a.code) s = `\`${s}\``;
+    else {
+      if (a.bold) s = `**${s}**`;
+      if (a.italic) s = `*${s}*`;
+    }
+    if (d.href) s = `[${s}](${d.href})`;
+    return s;
+  }).join('');
+}
+
+/**
+ * Én blok -> markdown, i det format dodas EGEN renderer forstaar.
+ *
+ * Der bygges aldrig HTML her. Resultatet gaar gennem markdown(), som
+ * escaper foerst og kun laver de tags, den selv kender - saa er der ingen
+ * vej fra en fremmed side til et tag, doda ikke har skrevet.
+ */
+function blokTilMd(b, dybde) {
+  const ind = '  '.repeat(Math.min(dybde, 2));
+  const v = b[b.type] || {};
+  const rt = () => tekst(v.rich_text);
+  switch (b.type) {
+    case 'paragraph': return rt();
+    case 'heading_1': return `# ${rt()}`;
+    case 'heading_2': return `## ${rt()}`;
+    case 'heading_3': return `### ${rt()}`;
+    case 'bulleted_list_item': return `${ind}- ${rt()}`;
+    case 'numbered_list_item': return `${ind}1. ${rt()}`;
+    case 'to_do': return `${ind}- ${v.checked ? '\u2611' : '\u2610'} ${rt()}`;
+    case 'quote': return `> ${rt()}`;
+    case 'callout': return `> ${v.icon && v.icon.emoji ? `${v.icon.emoji} ` : ''}${rt()}`;
+    case 'toggle': return `**${rt()}**`;
+    case 'divider': return '---';
+    case 'code':
+      // doda's markdown har ingen kodeblokke - hver linje som inline kode
+      // er ikke smukt, men det er laesbart og forbliver sikkert.
+      return tekst(v.rich_text).split('\n').map((l) => `\`${l}\``).join('\n');
+    case 'child_page': return `**${v.title || 'Untitled'}** (subpage)`;
+    case 'child_database': return `**${v.title || 'Untitled'}** (database)`;
+    // Billeder kan ikke vises: dodas CSP er img-src 'self', og Notions
+    // adresser er signerede og udloeber alligevel. Et link er aerligt.
+    case 'image': case 'file': case 'video': case 'pdf': {
+      const url = (v.file && v.file.url) || (v.external && v.external.url) || '';
+      const navn = tekst(v.caption) || b.type;
+      return url ? `[${navn}](${url})` : `(${b.type})`;
+    }
+    case 'bookmark': case 'embed': case 'link_preview':
+      return v.url ? `[${v.url}](${v.url})` : '';
+    case 'table': case 'column_list': case 'synced_block':
+      return `*(${b.type.replace(/_/g, ' ')} — open it in Notion)*`;
+    default: return rt();
+  }
+}
+
+
+
 function opret(srv) {
   /** Ét sted der taler med Notion. Returnerer {status, data}. */
   function kald(metode, sti, krop) {
@@ -115,6 +180,38 @@ function opret(srv) {
     return { pages: sider };
   }
 
+  /**
+   * Sidens indhold som markdown.
+   *
+   * Loftet er bevidst: en fremmed side kan vaere hvor stor som helst, og
+   * doda skal ikke kunne vaeltes af en, nogen har delt.
+   */
+  async function indhold(id, dybde = 0, budget = { blokke: 300 }) {
+    const ud = [];
+    let markoer = null;
+    do {
+      const q = `?page_size=100${markoer ? `&start_cursor=${encodeURIComponent(markoer)}` : ''}`;
+      const r = await kald('GET', `/blocks/${encodeURIComponent(id)}/children${q}`);
+      if (r.status !== 200 || !r.data) {
+        return { fejl: (r.data && r.data.message) || 'Could not read that page.' };
+      }
+      for (const b of r.data.results || []) {
+        if (budget.blokke-- <= 0) { ud.push('*(the rest is in Notion)*'); markoer = null; break; }
+        const md = blokTilMd(b, dybde);
+        if (md) ud.push(md);
+        // Ét niveau ned. Dybere ville koste et kald pr. blok, og dodas
+        // markdown kan alligevel ikke vise dyb indlejring.
+        if (b.has_children && dybde < 1 && b.type !== 'child_page' && b.type !== 'child_database') {
+          const boern = await indhold(b.id, dybde + 1, budget);
+          if (boern.markdown) ud.push(boern.markdown);
+        }
+      }
+      markoer = r.data.has_more ? r.data.next_cursor : null;
+    } while (markoer);
+
+    return { markdown: ud.join('\n\n') };
+  }
+
   /** Titlen paa én kendt side - til at genopfriske en chip. */
   async function side(id) {
     const r = await kald('GET', `/pages/${encodeURIComponent(id)}`);
@@ -122,7 +219,7 @@ function opret(srv) {
     return { id: r.data.id, url: r.data.url || '', title: titel(r.data) || 'Untitled' };
   }
 
-  return { proev, soeg, side };
+  return { proev, soeg, side, indhold };
 }
 
 /** Side-id'et ligger i enden af en Notion-adresse: 32 tegn hex. */
@@ -131,4 +228,4 @@ function idFraUrl(url) {
   return m ? m[1] : null;
 }
 
-module.exports = { opret, idFraUrl };
+module.exports = { opret, idFraUrl, blokTilMd, tekst };

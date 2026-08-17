@@ -736,7 +736,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 18;
+const APP_VERSION = 19;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -2477,6 +2477,7 @@ async function aabnElement(listeItem) {
     <textarea class="detail-note" id="dNote" rows="1"
       placeholder="Add details…" aria-label="Details">${esc(u.note)}</textarea>
     <div class="note-preview" id="dPreview" hidden></div>
+    <div id="dNotion"></div>
 
     <div class="chiprow" id="dChips"></div>
 
@@ -2644,6 +2645,7 @@ async function aabnElement(listeItem) {
   // én gang i doegnet pr. link, det klarer serveren. Fejler det, sker der
   // ingenting: en gammel titel er bedre end en fejlbesked om en titel.
   friskNotionTitel('item', it.id, u, () => tegnChipsRow());
+  notionRude(host.querySelector('#dNotion'), u);
 
   const titelEl = host.querySelector('#dTitle');
   const noteEl = host.querySelector('#dNote');
@@ -3669,6 +3671,44 @@ async function friskNotionTitel(kind, id, o, naar) {
     o.link_title = d.title;
     naar();
   } catch { /* titler er ikke noget at afbryde brugeren over */ }
+}
+
+/**
+ * Viser en Notion-sides indhold inde i doda.
+ *
+ * Hentes foerst naar man beder om det: en side kan vaere lang, og Notion er
+ * kilden - doda laver ikke en kopi, der kan blive forkert. Indholdet gaar
+ * gennem dodas EGEN markdown-renderer, som escaper foerst; der bygges aldrig
+ * HTML af fremmed indhold.
+ */
+function notionRude(host, o) {
+  if (!host) return;
+  const erNotion = /(^|\.)notion\.(so|site)\//.test(String(o.link_url || ''))
+    || /notion\.com\//.test(String(o.link_url || ''));
+  if (!o.link_url || !erNotion) { host.innerHTML = ''; return; }
+
+  host.innerHTML = `<button class="btn ghost" id="ntShow" style="margin-top:10px">
+    ${icon('note', 15)} Show the Notion page</button>`;
+
+  host.querySelector('#ntShow').addEventListener('click', async () => {
+    host.innerHTML = '<p class="lead" style="margin-top:12px">Loading the page…</p>';
+    try {
+      const d = await api('GET', `/api/v1/notion/page?url=${encodeURIComponent(o.link_url)}`);
+      host.innerHTML = `
+        <div class="notionpage">
+          <div class="meta" style="margin-bottom:8px">From Notion${d.cached ? ' · cached' : ''}</div>
+          ${d.markdown ? markdown(d.markdown) : '<p class="lead">That page is empty.</p>'}
+        </div>
+        <p class="gate-note" style="text-align:left">Read-only. Images stay in Notion —
+        doda only shows content from its own server, so they appear as links.</p>
+        <button class="btn ghost" id="ntHide">Hide</button>`;
+      host.querySelector('#ntHide').addEventListener('click', () => notionRude(host, o));
+    } catch (ex) {
+      host.innerHTML = `<p class="lead" style="margin-top:12px">${esc(ex.message)}</p>
+        <button class="btn ghost" id="ntAgain" style="margin-top:8px">Try again</button>`;
+      host.querySelector('#ntAgain').addEventListener('click', () => notionRude(host, o));
+    }
+  });
 }
 
 /* ---- p5_repeat.js ---- */

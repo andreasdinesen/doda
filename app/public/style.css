@@ -1567,3 +1567,20 @@ a.item-flag:hover { color: var(--accent); }
 }
 
 .notionhit:hover { background: var(--card-hover); border-color: var(--border); }
+
+/* Notion-sidens indhold i detaljeruden. Roligt afgraenset, saa man kan se
+   hvor dodas eget indhold slutter og den fremmede sides begynder. */
+.notionpage {
+  margin-top: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--bg);
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.notionpage > :first-child { margin-top: 0; }
+.notionpage h3, .notionpage h4, .notionpage h5 { margin: 14px 0 6px; font-size: 15px; }
+.notionpage p { margin: 8px 0; }
+.notionpage ul, .notionpage ol { margin: 8px 0; padding-left: 22px; }

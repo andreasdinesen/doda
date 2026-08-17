@@ -518,6 +518,7 @@ async function aabnElement(listeItem) {
     <textarea class="detail-note" id="dNote" rows="1"
       placeholder="Add details…" aria-label="Details">${esc(u.note)}</textarea>
     <div class="note-preview" id="dPreview" hidden></div>
+    <div id="dNotion"></div>
 
     <div class="chiprow" id="dChips"></div>
 
@@ -685,6 +686,7 @@ async function aabnElement(listeItem) {
   // én gang i doegnet pr. link, det klarer serveren. Fejler det, sker der
   // ingenting: en gammel titel er bedre end en fejlbesked om en titel.
   friskNotionTitel('item', it.id, u, () => tegnChipsRow());
+  notionRude(host.querySelector('#dNotion'), u);
 
   const titelEl = host.querySelector('#dTitle');
   const noteEl = host.querySelector('#dNote');

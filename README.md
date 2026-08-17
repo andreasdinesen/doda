@@ -387,6 +387,7 @@ Se `PLAN.md` for faseoversigt og status, `DESIGN.md` for de trufne beslutninger 
 
 | Version | Ændringer |
 |---|---|
+| 19 | **Se Notion-siden inde i doda.** Har en note eller opgave et Notion-link, kan indholdet foldes ud i detaljeruden — overskrifter, lister, afkrydsninger, citater og kode. Hentes først når du beder om det, og lever kun i hukommelsen: Notion er kilden, doda laver ingen kopi. Billeder vises som links, fordi doda kun viser indhold fra sin egen server. |
 | 18 | **Notion-titler holder sig selv friske.** Omdøber du siden i Notion, retter chippen sig, næste gang du åbner opgaven eller projektet — højst ét opslag i døgnet pr. link, så en åbning ikke er et kald til en fremmed tjeneste. Søgningen finder nu også **databaser**, ikke kun sider. |
 | 17 | **Link på projekter.** Databasen og API'et kunne det fra v14, men der var ingen knap. Nu kan et projekt pege på sin Notion-side ligesom en opgave: chippen står på projektsiden under beskrivelsen, og redigeres i »Edit project« — med samme Notion-søgning, hvis du har forbundet den. |
 | 16 | **Notion-integration.** Forbind Notion under Settings, og du kan **søge efter en side inde fra doda**, når du linker en til en opgave — chippen får sidens rigtige titel i stedet for en række hex. Tokenet bliver på serveren og sendes aldrig til browseren, og det prøves mod Notion før det gemmes. **Rettelse i samme omgang:** `GET /api/v1/settings` returnerede *alle* indstillinger til enhver `read`-nøgle, også kalenderfeedets token. Hemmelighederne filtreres nu fra ét sted, som eksporten også bruger. |

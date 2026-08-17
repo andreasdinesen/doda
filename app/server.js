@@ -2032,6 +2032,39 @@ const ROUTES = {
     sendJson(res, 200, { title: side.title });
   },
 
+  /**
+   * Sidens indhold, som markdown.
+   *
+   * Hentes PAA FORLANGENDE, ikke ved hver aabning: en side kan vaere lang, og
+   * Notion er kilden - doda skal ikke lave en kopi, der kan blive forkert.
+   * Svaret ligger i hukommelsen et kvarter, saa det ikke koster et kald at
+   * folde den ud og ind igen.
+   */
+  'GET /api/v1/notion/page': async (req, res, ctx) => {
+    const auth = godkend(req, res, 'read');
+    if (!auth) return;
+    if (!getSetting('notion_token', '')) {
+      apiFejl(res, 400, 'not_connected', 'Connect Notion under Settings first.');
+      return;
+    }
+    const sideId = notionModul.idFraUrl(ctx.query.get('url') || '');
+    if (!sideId) { apiFejl(res, 400, 'not_notion', 'That link is not a Notion page.'); return; }
+    if (!rateAllow(`notionpage:${clientIp(req)}`, 120, 3600)) {
+      apiFejl(res, 429, 'rate_limited', 'Too many page loads. Try again shortly.');
+      return;
+    }
+
+    const gemt = notionCache.get(sideId);
+    if (gemt && now() - gemt.t < 900) { sendJson(res, 200, { markdown: gemt.md, cached: true }); return; }
+
+    const r = await notion.indhold(sideId);
+    if (r.fejl) { apiFejl(res, 502, 'notion_failed', r.fejl); return; }
+    // Simpel udslusning: cachen er en bekvemmelighed, ikke et lager.
+    if (notionCache.size > 50) notionCache.clear();
+    notionCache.set(sideId, { md: r.markdown, t: now() });
+    sendJson(res, 200, { markdown: r.markdown, cached: false });
+  },
+
   /* --- push: abonnement, noegle og "hvad skulle jeg minde om" --------- */
 
   'GET /api/v1/push': (req, res) => {
@@ -2402,6 +2435,10 @@ const notionModul = require('./notion.js');
 const notion = notionModul.opret({
   hentToken: () => getSetting('notion_token', ''),
 });
+
+/* Sidens indhold i hukommelsen et kvarter. IKKE i databasen: Notion er
+   kilden, og en kopi ville kunne blive forkert uden at nogen opdagede det. */
+const notionCache = new Map();
 
 /* -------------------------------------------------------------- push */
 
