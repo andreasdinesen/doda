@@ -259,6 +259,23 @@ test('kalenderfeedet giver en påmindelse på opgaver MED klokkeslæt', async ()
   assert.ok(!slukket.includes('VALARM'), '-1 skal slå påmindelser helt fra');
 });
 
+test('kalenderfeedet peger tilbage til opgaven i doda', async () => {
+  // Kalenderen er der, hvor man SER deadlinen. Det skal også være der, man
+  // kan springe hen og gøre noget ved den.
+  const r = await J('/api/v1/capture', { text: 'ring til tandlægen igen !tomorrow at 11', createNew: true });
+  const token = (await J('/api/v1/calendar', {})).token;
+  const ics = await (await fetch(`${BASE}/ical/${token}.ics`)).text();
+  // Foldede linjer samles igen, som en kalender-app gør det (RFC 5545).
+  const helt = ics.replace(/\r\n[ \t]/g, '');
+  const blok = helt.split('BEGIN:VEVENT').find((b) => b.includes('tandlægen igen'));
+
+  assert.match(blok, new RegExp(`URL:${BASE}/\\?item=${r.item.id}`),
+    'URL: er den rigtige egenskab');
+  // ... og den står OGSÅ i beskrivelsen: flere klienter viser ikke URL:
+  // særlig tydeligt, men beskrivelsen viser alle.
+  assert.match(blok, new RegExp(`DESCRIPTION:.*${r.item.id}`));
+});
+
 test('push: nøglen er stabil, abonnementer tælles, og due-now viser kun det åbne', async () => {
   const d = await J('/api/v1/push');
   assert.match(d.publicKey, /^[A-Za-z0-9_-]{80,}$/, 'VAPID-nøglen er base64url');

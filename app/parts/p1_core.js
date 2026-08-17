@@ -5,7 +5,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 22;
+const APP_VERSION = 23;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -273,6 +273,9 @@ function bindGate() {
       if (fortsaetTilConnector()) return;
       await hentState();
       render();
+      // Kommer man fra kalenderen uden at vaere logget ind, skal elementet
+      // aabnes NAAR man er - ikke tabes undervejs.
+      aabnFraAdressen();
     } catch (ex) {
       err.textContent = ex.message;
       err.hidden = false;
@@ -289,6 +292,7 @@ function bindGate() {
         if (fortsaetTilConnector()) return;
         await hentState();
         render();
+        aabnFraAdressen();
       } catch (ex) {
         // Brugeren afbroed selv - det er ikke en fejl, der skal vises.
         if (ex.name === 'NotAllowedError') return;
@@ -736,6 +740,30 @@ function oauthNaeste() {
   } catch { return null; }
 }
 
+/**
+ * ?item=<id> aabner ét bestemt element.
+ *
+ * Kalenderfeedet peger herind, saa man kan springe fra en deadline i sin
+ * kalender til opgaven i doda. Adressen ryddes bagefter: en genindlaesning
+ * skal ikke aabne ruden igen, og id'et hoerer ikke hjemme i historikken.
+ */
+async function aabnFraAdressen() {
+  let id = null;
+  try { id = new URLSearchParams(location.search).get('item'); } catch { id = null; }
+  if (!id || !state.user) return;
+  try { history.replaceState(null, '', location.pathname); } catch { /* ligegyldigt */ }
+  try {
+    const d = await api('GET', `/api/v1/items/${encodeURIComponent(id)}`);
+    // state.items skal kende elementet: detaljeruden slaar op i den, naar
+    // den gemmer og gentegner.
+    if (!state.items.some((x) => x.id === d.item.id)) state.items = [d.item, ...state.items];
+    aabnElement(d.item);
+  } catch (ex) {
+    // Slettet, eller et id fra en gammel kalenderpost. Sig det roligt.
+    toast(ex.status === 404 ? 'That item is gone — it was deleted.' : ex.message);
+  }
+}
+
 /** Kaldes efter login. Returnerer true, hvis siden er paa vej et andet sted hen. */
 function fortsaetTilConnector() {
   const n = oauthNaeste();
@@ -767,4 +795,5 @@ function fortsaetTilConnector() {
   registrerSW();
   lytPaaForbindelse();
   gendanFokus();
+  aabnFraAdressen();
 })();

@@ -245,6 +245,24 @@ En note med et Notion-link kan folde sidens indhold ud i detaljeruden.
   den ærligt frem for at lade som ingenting. En ukendt bloktype mister ikke sin
   tekst — Notion tilføjer nye, og de skal ikke blive til tomhed.
 
+### Dyb-link: `?item=<id>` (v23)
+
+doda er en SPA uden ruter — der fandtes ingen adresse på ét element. Det gør
+der nu, fordi kalenderfeedet skal kunne pege tilbage: kalenderen er der, hvor
+man *ser* deadlinen, og det skal også være der, man kan springe hen og gøre
+noget ved den.
+
+- Adressen **ryddes** med `history.replaceState`, så snart ruden er åbnet. En
+  genindlæsning skal ikke åbne den igen, og et element-id hører ikke hjemme i
+  browserhistorikken.
+- Er man ikke logget ind, bliver parameteren stående og bruges **efter** login
+  — både ved kodeord og passkey. Ellers ville linket fra kalenderen tabes
+  præcis på den enhed, hvor man sjældnest er logget ind.
+- Et id fra en gammel kalenderpost peger på noget slettet. Det siges roligt
+  (»That item is gone«) frem for at vise en fejlside.
+- I feedet står linket **både** som `URL:` og i `DESCRIPTION`: `URL:` er den
+  rigtige egenskab, men flere klienter viser den ikke særlig tydeligt.
+
 ### Tastaturet ind i listerne
 
 `↑`/`↓` går **ind** i listen uden at åbne noget. Før kunne fokus kun komme fra

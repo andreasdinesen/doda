@@ -2269,7 +2269,12 @@ function foldLinje(l) {
   return dele.join('\r\n');
 }
 
-function byggIcal() {
+/**
+ * @param {string} base  Appens egen adresse - saa hver aftale kan pege
+ *   TILBAGE til opgaven i doda. Kalenderen er der, hvor man ser deadlinen;
+ *   det er ogsaa dér, man vil kunne springe hen og gore noget ved den.
+ */
+function byggIcal(base) {
   const raekker = db.prepare(`
     SELECT i.id, i.title, i.due_date, i.due_time, i.status, i.updated_at, p.name AS projekt
       FROM items i LEFT JOIN projects p ON p.id = i.project_id
@@ -2297,7 +2302,14 @@ function byggIcal() {
       ud.push(`DTSTART;VALUE=DATE:${d}`, `DTEND;VALUE=DATE:${parse.fmtDato(slut).replace(/-/g, '')}`);
     }
     ud.push(foldLinje(`SUMMARY:${icalEscape(r.title)}`));
-    if (r.projekt) ud.push(foldLinje(`DESCRIPTION:${icalEscape(r.projekt)}`));
+
+    // Tilbage til opgaven i doda. URL: er den rigtige egenskab, men flere
+    // klienter viser den ikke saerlig tydeligt - derfor staar adressen OGSAA
+    // i beskrivelsen, hvor alle viser den.
+    const linkTil = base ? `${base}/?item=${encodeURIComponent(r.id)}` : '';
+    const beskrivelse = [r.projekt || '', linkTil].filter(Boolean).join('\n');
+    if (beskrivelse) ud.push(foldLinje(`DESCRIPTION:${icalEscape(beskrivelse)}`));
+    if (linkTil) ud.push(foldLinje(`URL:${linkTil}`));
 
     // Paamindelsen. Uden en VALARM har kalender-appen ingenting at give
     // besked paa, og et abonnement er tavst - det var derfor doda foeltes
@@ -3479,7 +3491,7 @@ const server = http.createServer(async (req, res) => {
         res.end('Not found');
         return;
       }
-      const krop = byggIcal();
+      const krop = byggIcal(oauth.base(req));
       res.writeHead(200, {
         'Content-Type': 'text/calendar; charset=utf-8',
         'Content-Length': Buffer.byteLength(krop),
