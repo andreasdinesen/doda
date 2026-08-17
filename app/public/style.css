@@ -1490,3 +1490,7 @@ button.chip:not(.flat):hover { text-decoration: line-through; }
   color: var(--muted);
   cursor: default;
 }
+
+/* En raekke med en handling, der venter paa net. Daempet, men ikke skjult -
+   den ER stadig der, indtil koen er tom. */
+.item-row.venter { opacity: .62; }

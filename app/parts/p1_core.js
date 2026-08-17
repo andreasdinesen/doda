@@ -5,7 +5,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 10;
+const APP_VERSION = 11;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -81,7 +81,20 @@ async function api(method, path, body) {
     // (RUNE-ERFARINGER, Kokkeri v15).
     opts.headers = { 'Content-Type': 'application/json' };
   }
-  const res = await fetch(path, opts);
+  let res;
+  try {
+    res = await fetch(path, opts);
+  } catch {
+    // Browserens egen tekst er ubrugelig for et menneske: Safari siger
+    // "Load failed", Chrome "Failed to fetch". Femten steder i appen viser
+    // ex.message direkte i en toast, saa oversaettelsen hoerer hjemme HER -
+    // ét sted - og ikke i hvert kaldssted.
+    //
+    // Ingen `status`: erNetvaerksfejl() skelner netop paa den, og
+    // fangst-koen skal stadig kunne se, at det var nettet og ikke et afslag.
+    throw Object.assign(new Error('No connection — this needs the network. Try again when you are back.'),
+      { offline: true });
+  }
   let data = {};
   try { data = await res.json(); } catch { /* tomt svar er i orden */ }
   // API'et svarer {error: kode, message: laesbar tekst}. Mennesket skal se

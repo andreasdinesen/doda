@@ -13,10 +13,10 @@
 
 | | |
 |---|---|
-| **Fase** | **v10 udgivet.** Connector (v5–v6), skallen (v7–v8), syntaks ved redigering (v9), Notes (v10). |
+| **Fase** | **v11 udgivet.** Connector (v5–v6), skallen (v7–v8), syntaks (v9), Notes (v10), offline-handlinger (v11). |
 | **Næste** | Andreas bruger den. Pladsen i runen er løst — 33 K ledigt |
 | **Tilstand** | 142 tests grønne, install-script **93.308 / 126.000 (74 %)** · alt fra kravbeskrivelsen er bygget |
-| **Udgivet version** | **10** |
+| **Udgivet version** | **11** |
 | **Sidst opdateret** | 2026-08-17 |
 
 **Sprog:** interfacet er **engelsk** (Andreas' valg — æøå er besværligt at taste).

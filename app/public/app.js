@@ -736,7 +736,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 10;
+const APP_VERSION = 11;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -812,7 +812,20 @@ async function api(method, path, body) {
     // (RUNE-ERFARINGER, Kokkeri v15).
     opts.headers = { 'Content-Type': 'application/json' };
   }
-  const res = await fetch(path, opts);
+  let res;
+  try {
+    res = await fetch(path, opts);
+  } catch {
+    // Browserens egen tekst er ubrugelig for et menneske: Safari siger
+    // "Load failed", Chrome "Failed to fetch". Femten steder i appen viser
+    // ex.message direkte i en toast, saa oversaettelsen hoerer hjemme HER -
+    // ét sted - og ikke i hvert kaldssted.
+    //
+    // Ingen `status`: erNetvaerksfejl() skelner netop paa den, og
+    // fangst-koen skal stadig kunne se, at det var nettet og ikke et afslag.
+    throw Object.assign(new Error('No connection — this needs the network. Try again when you are back.'),
+      { offline: true });
+  }
   let data = {};
   try { data = await res.json(); } catch { /* tomt svar er i orden */ }
   // API'et svarer {error: kode, message: laesbar tekst}. Mennesket skal se
@@ -2087,18 +2100,26 @@ function sideNext() {
 
 function elementRaekke(it, i) {
   const projekt = it.project_id ? state.projects.find((p) => p.id === it.project_id) : null;
+  // Venter der en offline-handling paa den, skal raekken sige det. Ellers
+  // ser et tik ud til at blive glemt, indtil nettet kommer tilbage.
+  const venter = afventende().get(it.id);
   const meta = [];
+  if (venter) {
+    meta.push(venter.type === 'complete' ? 'done — waiting to send'
+      : venter.type === 'delete' ? 'deleted — waiting to send'
+        : `→ ${statusNavn(venter.status)} — waiting to send`);
+  }
   if (projekt) meta.push(esc(projekt.name));
   if (it.due_date) meta.push(`${visDato(it.due_date)}${it.due_time ? ` ${it.due_time}` : ''}`);
   if (it.contexts.length) meta.push(it.contexts.map((c) => `#${esc(c.name)}`).join(' '));
 
-  return `<div class="item-row" tabindex="0" data-id="${esc(it.id)}" data-i="${i}">
+  return `<div class="item-row${venter ? ' venter' : ''}" tabindex="0" data-id="${esc(it.id)}" data-i="${i}">
     ${it.kind === 'note'
     // En note er reference, ikke arbejde (DESIGN.md §3). Den skal derfor
     // heller ikke TILBYDE at blive markeret udfoert - samme valg som i
     // detaljeruden, hvor noten far sit ikon i stedet for afkrydsningsringen.
     ? `<span class="tick note-mark" aria-hidden="true">${icon('note', 14)}</span>`
-    : `<button class="tick${it.status === 'done' ? ' on' : ''}" data-done="${esc(it.id)}"
+    : `<button class="tick${it.status === 'done' || (venter && venter.type === 'complete') ? ' on' : ''}" data-done="${esc(it.id)}"
       aria-label="Mark done" title="Mark done"></button>`}
     <div class="item-main">
       <div class="item-title">${linkify(it.title)}</div>
@@ -2270,6 +2291,33 @@ function vaelgHurtigt(it, hvad) {
   sel.addEventListener('dblclick', gem);
 }
 
+/**
+ * Uden net laegges handlingen i koen i stedet for at fejle.
+ *
+ * Det er sikkert, fordi en opgave, man opretter offline, er USYNLIG indtil
+ * den er sendt - koen gemmer kun teksten. Man kan derfor aldrig komme til at
+ * koee en handling mod et id, serveren ikke kender.
+ */
+function offlineKoe(ex, post, besked) {
+  if (!erNetvaerksfejl(ex)) { toast(ex.message); return; }
+  laegIKoe(post);
+  // IKKE tegnSide(): den henter fra serveren, og uden net (eller uden en
+  // service worker-cache at falde tilbage paa) ville listen blive erstattet
+  // af en fejlside. Man ville tikke af og se skaermen forsvinde. Raekken
+  // afhaenger kun af elementet og koen, saa den kan gentegnes alene.
+  gentegnRaekke(post.item);
+  toast(`${besked} — waiting for a connection`);
+}
+
+/** Tegner én raekke om ud fra state - uden at spoerge serveren. */
+function gentegnRaekke(id) {
+  const el = document.querySelector(`.item-row[data-id="${CSS.escape(id)}"]`);
+  const it = state.items.find((x) => x.id === id);
+  if (!el || !it) return;
+  el.outerHTML = elementRaekke(it, Number(el.dataset.i) || 0);
+  bindListe();
+}
+
 async function fuldfoer(id) {
   const it = state.items.find((x) => x.id === id);
   try {
@@ -2279,23 +2327,33 @@ async function fuldfoer(id) {
       label: 'Undo',
       run: async () => { await api('POST', `/api/v1/items/${id}/uncomplete`, {}); await genindlaes(); },
     });
-  } catch (ex) { toast(ex.message); }
+  } catch (ex) {
+    offlineKoe(ex, { type: 'complete', item: id, titel: it ? it.title : '' },
+      `Done: ${it ? it.title : 'item'}`);
+  }
 }
 
 async function saetStatus(id, status) {
+  const it = state.items.find((x) => x.id === id);
   try {
     await api('POST', `/api/v1/items/${id}`, { status });
     await genindlaes();
     toast(`Moved to ${statusNavn(status)}`);
-  } catch (ex) { toast(ex.message); }
+  } catch (ex) {
+    offlineKoe(ex, { type: 'status', item: id, status, titel: it ? it.title : '' },
+      `Moved to ${statusNavn(status)}`);
+  }
 }
 
 async function slet(id) {
+  const it = state.items.find((x) => x.id === id);
   try {
     await api('DELETE', `/api/v1/items/${id}`, {});
     await genindlaes();
     toast('Deleted');
-  } catch (ex) { toast(ex.message); }
+  } catch (ex) {
+    offlineKoe(ex, { type: 'delete', item: id, titel: it ? it.title : '' }, 'Deleted');
+  }
 }
 
 /* --------------------------------------------- genvejssyntaks i titlen */
@@ -3655,13 +3713,55 @@ function laesOutbox() {
 
 function skrivOutbox(koe) {
   try { localStorage.setItem(OUTBOX_NOEGLE, JSON.stringify(koe.slice(0, 500))); } catch { /* fuldt lager */ }
+  afventendeCache = null;
 }
 
-function laegIKoe(tekst) {
+/**
+ * Laegger en handling i koen.
+ *
+ * En STRENG er en fangst - saadan sa koen ud foer v11, og der kan ligge
+ * saadanne poster paa telefonen lige nu. De skal stadig sendes, saa formen
+ * er bagudkompatibel og maa aldrig blive det modsatte.
+ */
+function laegIKoe(post) {
   const koe = laesOutbox();
-  koe.push({ id: nyId(), text: tekst, ts: Date.now() });
+  koe.push(Object.assign({ id: nyId(), ts: Date.now() },
+    typeof post === 'string' ? { type: 'capture', text: post } : post));
   skrivOutbox(koe);
   opdaterOfflineMaerke();
+}
+
+/**
+ * Hvilke elementer venter der en handling paa?
+ *
+ * Bruges til at vise raekken som afventende, saa et tik ikke ser ud til at
+ * blive glemt, mens man er offline. Cachet, fordi elementRaekke() spoerger
+ * én gang pr. raekke, og localStorage er ikke gratis.
+ */
+let afventendeCache = null;
+
+function afventende() {
+  if (!afventendeCache) {
+    afventendeCache = new Map();
+    for (const p of laesOutbox()) if (p.item) afventendeCache.set(p.item, p);
+  }
+  return afventendeCache;
+}
+
+/** Ét sted der ved, hvordan hver slags post sendes. */
+function sendPost(post) {
+  if (post.type === 'complete') return api('POST', `/api/v1/items/${post.item}/complete`, {});
+  if (post.type === 'status') return api('POST', `/api/v1/items/${post.item}`, { status: post.status });
+  if (post.type === 'delete') return api('DELETE', `/api/v1/items/${post.item}`, {});
+  // Uden type er det en fangst fra en tidligere udgave.
+  return api('POST', '/api/v1/capture', { text: post.text, createNew: true });
+}
+
+function beskrivPost(post) {
+  if (post.type === 'complete') return `completing “${(post.titel || '').slice(0, 30)}”`;
+  if (post.type === 'status') return `moving “${(post.titel || '').slice(0, 30)}”`;
+  if (post.type === 'delete') return `deleting “${(post.titel || '').slice(0, 30)}”`;
+  return `“${String(post.text || '').slice(0, 30)}…”`;
 }
 
 /** En fejl UDEN status er et netvaerksbrud; med status er det et rigtigt svar. */
@@ -3689,12 +3789,13 @@ async function tomOutbox() {
     while (koe.length) {
       const post = koe[0];
       try {
-        await api('POST', '/api/v1/capture', { text: post.text, createNew: true });
+        await sendPost(post);
         sendt++;
       } catch (ex) {
         if (erNetvaerksfejl(ex)) break;
-        // Et rigtigt afslag (fx tom tekst) ma ikke blokere koen for evigt.
-        toast(`Could not send “${post.text.slice(0, 30)}…”: ${ex.message}`);
+        // Et rigtigt afslag (fx en opgave, der er slettet i mellemtiden) ma
+        // ikke blokere koen for evigt.
+        toast(`Could not finish ${beskrivPost(post)}: ${ex.message}`);
       }
       koe = laesOutbox().slice(1);
       skrivOutbox(koe);
@@ -3704,7 +3805,7 @@ async function tomOutbox() {
   }
   opdaterOfflineMaerke();
   if (sendt) {
-    toast(`Sent ${sendt} thing${sendt === 1 ? '' : 's'} captured offline`);
+    toast(`Sent ${sendt} change${sendt === 1 ? '' : 's'} made offline`);
     await genindlaes();
   }
 }

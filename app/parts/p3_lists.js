@@ -145,18 +145,26 @@ function sideNext() {
 
 function elementRaekke(it, i) {
   const projekt = it.project_id ? state.projects.find((p) => p.id === it.project_id) : null;
+  // Venter der en offline-handling paa den, skal raekken sige det. Ellers
+  // ser et tik ud til at blive glemt, indtil nettet kommer tilbage.
+  const venter = afventende().get(it.id);
   const meta = [];
+  if (venter) {
+    meta.push(venter.type === 'complete' ? 'done — waiting to send'
+      : venter.type === 'delete' ? 'deleted — waiting to send'
+        : `→ ${statusNavn(venter.status)} — waiting to send`);
+  }
   if (projekt) meta.push(esc(projekt.name));
   if (it.due_date) meta.push(`${visDato(it.due_date)}${it.due_time ? ` ${it.due_time}` : ''}`);
   if (it.contexts.length) meta.push(it.contexts.map((c) => `#${esc(c.name)}`).join(' '));
 
-  return `<div class="item-row" tabindex="0" data-id="${esc(it.id)}" data-i="${i}">
+  return `<div class="item-row${venter ? ' venter' : ''}" tabindex="0" data-id="${esc(it.id)}" data-i="${i}">
     ${it.kind === 'note'
     // En note er reference, ikke arbejde (DESIGN.md §3). Den skal derfor
     // heller ikke TILBYDE at blive markeret udfoert - samme valg som i
     // detaljeruden, hvor noten far sit ikon i stedet for afkrydsningsringen.
     ? `<span class="tick note-mark" aria-hidden="true">${icon('note', 14)}</span>`
-    : `<button class="tick${it.status === 'done' ? ' on' : ''}" data-done="${esc(it.id)}"
+    : `<button class="tick${it.status === 'done' || (venter && venter.type === 'complete') ? ' on' : ''}" data-done="${esc(it.id)}"
       aria-label="Mark done" title="Mark done"></button>`}
     <div class="item-main">
       <div class="item-title">${linkify(it.title)}</div>
@@ -328,6 +336,33 @@ function vaelgHurtigt(it, hvad) {
   sel.addEventListener('dblclick', gem);
 }
 
+/**
+ * Uden net laegges handlingen i koen i stedet for at fejle.
+ *
+ * Det er sikkert, fordi en opgave, man opretter offline, er USYNLIG indtil
+ * den er sendt - koen gemmer kun teksten. Man kan derfor aldrig komme til at
+ * koee en handling mod et id, serveren ikke kender.
+ */
+function offlineKoe(ex, post, besked) {
+  if (!erNetvaerksfejl(ex)) { toast(ex.message); return; }
+  laegIKoe(post);
+  // IKKE tegnSide(): den henter fra serveren, og uden net (eller uden en
+  // service worker-cache at falde tilbage paa) ville listen blive erstattet
+  // af en fejlside. Man ville tikke af og se skaermen forsvinde. Raekken
+  // afhaenger kun af elementet og koen, saa den kan gentegnes alene.
+  gentegnRaekke(post.item);
+  toast(`${besked} — waiting for a connection`);
+}
+
+/** Tegner én raekke om ud fra state - uden at spoerge serveren. */
+function gentegnRaekke(id) {
+  const el = document.querySelector(`.item-row[data-id="${CSS.escape(id)}"]`);
+  const it = state.items.find((x) => x.id === id);
+  if (!el || !it) return;
+  el.outerHTML = elementRaekke(it, Number(el.dataset.i) || 0);
+  bindListe();
+}
+
 async function fuldfoer(id) {
   const it = state.items.find((x) => x.id === id);
   try {
@@ -337,23 +372,33 @@ async function fuldfoer(id) {
       label: 'Undo',
       run: async () => { await api('POST', `/api/v1/items/${id}/uncomplete`, {}); await genindlaes(); },
     });
-  } catch (ex) { toast(ex.message); }
+  } catch (ex) {
+    offlineKoe(ex, { type: 'complete', item: id, titel: it ? it.title : '' },
+      `Done: ${it ? it.title : 'item'}`);
+  }
 }
 
 async function saetStatus(id, status) {
+  const it = state.items.find((x) => x.id === id);
   try {
     await api('POST', `/api/v1/items/${id}`, { status });
     await genindlaes();
     toast(`Moved to ${statusNavn(status)}`);
-  } catch (ex) { toast(ex.message); }
+  } catch (ex) {
+    offlineKoe(ex, { type: 'status', item: id, status, titel: it ? it.title : '' },
+      `Moved to ${statusNavn(status)}`);
+  }
 }
 
 async function slet(id) {
+  const it = state.items.find((x) => x.id === id);
   try {
     await api('DELETE', `/api/v1/items/${id}`, {});
     await genindlaes();
     toast('Deleted');
-  } catch (ex) { toast(ex.message); }
+  } catch (ex) {
+    offlineKoe(ex, { type: 'delete', item: id, titel: it ? it.title : '' }, 'Deleted');
+  }
 }
 
 /* --------------------------------------------- genvejssyntaks i titlen */

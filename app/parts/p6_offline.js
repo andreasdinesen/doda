@@ -35,13 +35,55 @@ function laesOutbox() {
 
 function skrivOutbox(koe) {
   try { localStorage.setItem(OUTBOX_NOEGLE, JSON.stringify(koe.slice(0, 500))); } catch { /* fuldt lager */ }
+  afventendeCache = null;
 }
 
-function laegIKoe(tekst) {
+/**
+ * Laegger en handling i koen.
+ *
+ * En STRENG er en fangst - saadan sa koen ud foer v11, og der kan ligge
+ * saadanne poster paa telefonen lige nu. De skal stadig sendes, saa formen
+ * er bagudkompatibel og maa aldrig blive det modsatte.
+ */
+function laegIKoe(post) {
   const koe = laesOutbox();
-  koe.push({ id: nyId(), text: tekst, ts: Date.now() });
+  koe.push(Object.assign({ id: nyId(), ts: Date.now() },
+    typeof post === 'string' ? { type: 'capture', text: post } : post));
   skrivOutbox(koe);
   opdaterOfflineMaerke();
+}
+
+/**
+ * Hvilke elementer venter der en handling paa?
+ *
+ * Bruges til at vise raekken som afventende, saa et tik ikke ser ud til at
+ * blive glemt, mens man er offline. Cachet, fordi elementRaekke() spoerger
+ * én gang pr. raekke, og localStorage er ikke gratis.
+ */
+let afventendeCache = null;
+
+function afventende() {
+  if (!afventendeCache) {
+    afventendeCache = new Map();
+    for (const p of laesOutbox()) if (p.item) afventendeCache.set(p.item, p);
+  }
+  return afventendeCache;
+}
+
+/** Ét sted der ved, hvordan hver slags post sendes. */
+function sendPost(post) {
+  if (post.type === 'complete') return api('POST', `/api/v1/items/${post.item}/complete`, {});
+  if (post.type === 'status') return api('POST', `/api/v1/items/${post.item}`, { status: post.status });
+  if (post.type === 'delete') return api('DELETE', `/api/v1/items/${post.item}`, {});
+  // Uden type er det en fangst fra en tidligere udgave.
+  return api('POST', '/api/v1/capture', { text: post.text, createNew: true });
+}
+
+function beskrivPost(post) {
+  if (post.type === 'complete') return `completing “${(post.titel || '').slice(0, 30)}”`;
+  if (post.type === 'status') return `moving “${(post.titel || '').slice(0, 30)}”`;
+  if (post.type === 'delete') return `deleting “${(post.titel || '').slice(0, 30)}”`;
+  return `“${String(post.text || '').slice(0, 30)}…”`;
 }
 
 /** En fejl UDEN status er et netvaerksbrud; med status er det et rigtigt svar. */
@@ -69,12 +111,13 @@ async function tomOutbox() {
     while (koe.length) {
       const post = koe[0];
       try {
-        await api('POST', '/api/v1/capture', { text: post.text, createNew: true });
+        await sendPost(post);
         sendt++;
       } catch (ex) {
         if (erNetvaerksfejl(ex)) break;
-        // Et rigtigt afslag (fx tom tekst) ma ikke blokere koen for evigt.
-        toast(`Could not send “${post.text.slice(0, 30)}…”: ${ex.message}`);
+        // Et rigtigt afslag (fx en opgave, der er slettet i mellemtiden) ma
+        // ikke blokere koen for evigt.
+        toast(`Could not finish ${beskrivPost(post)}: ${ex.message}`);
       }
       koe = laesOutbox().slice(1);
       skrivOutbox(koe);
@@ -84,7 +127,7 @@ async function tomOutbox() {
   }
   opdaterOfflineMaerke();
   if (sendt) {
-    toast(`Sent ${sendt} thing${sendt === 1 ? '' : 's'} captured offline`);
+    toast(`Sent ${sendt} change${sendt === 1 ? '' : 's'} made offline`);
     await genindlaes();
   }
 }

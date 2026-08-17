@@ -95,6 +95,28 @@ En note får **ikke** en afkrydsningsring i listen, men sit notikon: en note er
 reference, ikke arbejde, og skal derfor ikke engang *tilbyde* at blive markeret
 udført. Mellemrumstasten gør heller ingenting på en note.
 
+### Offline dækker handlinger, ikke kun fangst (v11)
+
+F6 lagde fangst-køen i appen, ikke i service workeren. Den dækkede kun
+*oprettelse* — at tikke en opgave af uden net gav browserens egen fejltekst.
+Nu er køen **typet**: `capture`, `complete`, `status` og `delete` sendes ad
+samme vej, én ad gangen og i rækkefølge.
+
+To ting gør det sikkert:
+
+- **En opgave, du opretter offline, er usynlig indtil den er sendt** — køen
+  gemmer kun teksten. Du kan derfor aldrig komme til at køe en handling mod et
+  id, serveren ikke kender. Den værste fælde er lukket af arkitekturen, ikke af
+  en kontrol.
+- **Køen efter en handling må ikke gentegne siden fra serveren.** `tegnSide()`
+  henter, og uden net (eller uden noget i service workerens cache) ville listen
+  blive erstattet af en fejlside — man tikker af og ser skærmen forsvinde. Kun
+  den ramte række tegnes om, ud fra state og køen.
+
+Rækken viser hvad der venter (»done — waiting to send«) og er dæmpet. Formen på
+en kø-post er **bagudkompatibel**: en post uden `type` er en fangst, som køen så
+ud før v11, og der kan ligge sådanne på en telefon.
+
 ### Tastaturet ind i listerne
 
 `↑`/`↓` går **ind** i listen uden at åbne noget. Før kunne fokus kun komme fra
