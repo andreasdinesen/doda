@@ -21,6 +21,7 @@ import re
 import subprocess
 import sys
 import tarfile
+import tempfile
 import textwrap
 
 import yaml
@@ -158,12 +159,83 @@ def tjek_kilder(filer):
                  'den vaek i install-scriptet. Omskriv.')
 
 
+def tjek_syntaks(navn, kode):
+    """node --check paa indhold, ikke paa en sti."""
+    with tempfile.NamedTemporaryFile('w', suffix='.js', delete=False, encoding='utf8') as fh:
+        fh.write(kode)
+        midl = fh.name
+    try:
+        res = subprocess.run(['node', '--check', midl], capture_output=True)
+        if res.returncode != 0:
+            fejl(f'{navn} har en syntaksfejl EFTER kommentar-strip:\n'
+                 + res.stderr.decode('utf8', 'replace'))
+    finally:
+        os.unlink(midl)
+
+
+def strip_kommentarer(kode):
+    """
+    Fjerner kommentarer fra den UDGIVNE kopi. Kilderne roeres aldrig.
+
+    Maalt paa doda: 21.135 tegn = 17 % af install-scriptet. Erfaringsfilen
+    siger, at kommentar-strip gav Kokkeri 0,8 % og ikke er umagen vaerd - men
+    doda har vaesentligt taettere kommentarer, saa tallet skal maales, ikke
+    antages.
+
+    To regler goer den sikker:
+
+    1. Kun linjer, der er HELT kommentar eller tomme, fjernes. En linje med
+       kode paa roeres aldrig, og derfor kan hverken en streng eller en
+       regex-literal beskadiges. (Den ene farlige kant - `/* kort */ kode();`
+       paa samme linje - findes ikke i kilderne, og build'et tjekker for den.)
+    2. Hver fjernet linje efterlades TOM, saa linjetallet holder. En
+       stak-sporing fra containeren peger dermed paa samme linje i repoet.
+       Det koster 744 tegn af de 21.879 - 3 % af gevinsten for at kunne
+       fejlsoege overhovedet.
+
+    node --check koeres bagefter i tjek_bundt(); syntaks er ikke nok, saa
+    testpakken er ogsaa koert mod en strippet server (142 groenne).
+    """
+    ud, i_blok = [], False
+    for linje in kode.split('\n'):
+        s = linje.strip()
+        fjern = False
+        if i_blok:
+            if '*/' in s:
+                i_blok = False
+            fjern = True
+        elif s.startswith('/*'):
+            if '*/' not in s:
+                i_blok = True
+            elif s.split('*/', 1)[1].strip():
+                # Kode efter en kort blok-kommentar. Findes ikke i dag; sker
+                # det, beholdes linjen frem for at aede koden.
+                ud.append(linje)
+                continue
+            fjern = True
+        elif s.startswith('//') or not s:
+            fjern = True
+        ud.append('' if fjern else linje)
+    return '\n'.join(ud)
+
+
 def byg_tar(filer):
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode='w') as tar:
         for arkivnavn, sti in filer:
             info = tarfile.TarInfo(arkivnavn)
             data = open(sti, 'rb').read()
+            if arkivnavn.endswith('.js'):
+                tekst = data.decode('utf8')
+                renset = strip_kommentarer(tekst)
+                if renset.count('\n') != tekst.count('\n'):
+                    fejl(f'{arkivnavn}: strip aendrede linjetallet - stak-sporinger '
+                         'ville ikke laengere passe med kilden')
+                # Tjek DEN FIL, DER UDGIVES - ikke kilden den kom fra. Ellers
+                # kunne en fejl i strippen foerst vise sig inde i containeren,
+                # hvor ingen ser den (RUNE-ERFARINGER, F5).
+                tjek_syntaks(arkivnavn, renset)
+                data = renset.encode('utf8')
             info.size = len(data)
             info.mode = 0o644
             info.mtime = 0

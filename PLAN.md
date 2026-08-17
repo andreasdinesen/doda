@@ -14,8 +14,8 @@
 | | |
 |---|---|
 | **Fase** | **v10 udgivet.** Connector (v5–v6), skallen (v7–v8), syntaks ved redigering (v9), Notes (v10). |
-| **Næste** | Andreas bruger den — og **pladsen i runen** skal løses inden næste større funktion |
-| **Tilstand** | 142 tests grønne, install-script **122.869 / 126.000 (97 %)** · alt fra kravbeskrivelsen er bygget |
+| **Næste** | Andreas bruger den. Pladsen i runen er løst — 33 K ledigt |
+| **Tilstand** | 142 tests grønne, install-script **93.308 / 126.000 (74 %)** · alt fra kravbeskrivelsen er bygget |
 | **Udgivet version** | **10** |
 | **Sidst opdateret** | 2026-08-17 |
 
@@ -429,88 +429,36 @@ Andreas' ønsker efter at have brugt v6. Beslutningerne står i `DESIGN.md §2`.
 - [x] Paletten kan **oprette** i `/`, `#` og `:`, ikke kun søge
 - [x] **Sidebaren kan foldes væk** til en hamburger, som i tingdo
 - [x] `tests/version.test.mjs`: de fem steder, versionen står, skal stemme
-- [x] **Pladsen i runen** — loftet hævet til 126.000. Se nedenfor: det er en udsættelse
+- [x] **Pladsen i runen** — loftet hævet til 126.000, og i v10 blev kommentarerne
+      strippet ud af den udgivne kopi: 97 % → 74 %. Se nedenfor
 - [x] `APP_VERSION = 7` → build → push
 - [x] **v8:** sletning svarede 404 på noget, der lykkedes — `opdaterItem()`
       læser rækken frisk gennem `hentItem()`, som filtrerer `deleted = 0` fra.
       Fejlen havde ligget der hele tiden; den blev først synlig, da `x` kunne
       nås. Testen er bevist at kunne fejle på den gamle kode
 
-### Pladsen i runen — skal løses inden næste funktion
+### Pladsen i runen — løst
 
-Install-scriptet fylder **118.974 af 120.000 tegn**. Build'et fejler højt ved
-loftet, så den næste funktion af nogen størrelse kan ikke være der. Målte
-muligheder, dyreste først:
+Install-scriptet fylder **93.308 af 126.000 tegn (74 %)**. Det var 97 %, indtil
+build'et begyndte at strippe kommentarer ud af den **udgivne** kopi.
 
-| Greb | Frigør | Koster |
-|---|---|---|
-| Fjern `app/public/icon-192.png` | **2.815 tegn** | iOS' hjemmeskærms-ikon (PNG er det eneste binære, og brotli komprimerer det ikke) |
-| Lad serveren tegne ikonet ved opstart | ~1.900 netto | ~40 linjers PNG-encoder med `zlib` + CRC32 |
-| Hæv assert'en 120.000 → 126.000 | 6.000 | Margenen mod `MAX_ARG_STRLEN` (131.072 b) falder fra 9 % til 4 % |
-| Minificér `app.js` | ukendt | Egen minifier = risiko; erfaringerne måler kommentar-strip til 0,8 % |
+Målt undervejs, så det ikke skal gættes igen:
 
-## Mulige udvidelser — ikke besluttet
+| Greb | Gav |
+|---|---|
+| brotli-parametre (`MODE_TEXT`, `SIZE_HINT`, `LGWIN 24`) | **0 bytes** — q11 er allerede i bund |
+| Kommentar-strip i payloaden | **29.561 tegn (24 %)** |
+| Linjenumre bevaret i strippen | koster kun 744 af de 29.561 |
+| `icon-192.png` fjernet | 2.815 tegn — stadig i behold, iOS bruger den |
 
-Undersøgt, men **ikke bestilt**. Ligger her, så undersøgelsen ikke skal laves om.
+Hvad hver fil koster i payloaden (leave-one-out-måling):
+`app.js` 44.918 · `server.js` 35.643 · `style.css` 9.716 · `mcp.js` 4.647 ·
+`webauthn.js` 3.063 · `icon-192.png` 2.817 · `oauth.js` 2.135 · `sw.js` 1.413.
+`parse.js` koster kun **180**, fordi den også ligger inde i `app.js` og brotli
+genkender dubletten.
 
-### Flere brugere, tildeling og delte projekter
-
-*Undersøgt 2026-08-17 på Andreas' forespørgsel. Ingen beslutning truffet.*
-
-Det omvender en eksplicit beslutning i kravbeskrivelsen: `docs/HANDOVER.md` §1 siger
-»Én bruger (mig). Ingen deling, ingen teams«, og §10 lister »Flere brugere, deling,
-kommentarer, tildeling« som uden for scope. Det er fint at ombestemme sig — men det
-forklarer, hvorfor antagelsen sidder så dybt.
-
-**Sådan ser det ud i koden i dag (målt, ikke skønnet):**
-
-- **Ingen datatabel har en ejer.** Kun `sessions`, `credentials` og `oauth_refresh`
-  kender brugere. `items`, `projects`, `contexts`, `areas`, `recurrences`,
-  `attachments`, `item_contexts`, `settings` og `tokens` har ingen `user_id`.
-- Token-godkendelsen henter »brugeren« med
-  `SELECT id, username FROM users LIMIT 1` — en API-nøgle er ikke bundet til nogen.
-- `settings` er global og indeholder personlige ting: tema, gennemgangs-ugedag,
-  hvilket trin man er nået til, og iCal-tokenet.
-- **94 forespørgsler** rammer de ejerløse tabeller og bliver hver især en
-  autorisationsbeslutning.
-
-**Tre ting gør det større, end det lyder:**
-
-1. **Risikoprofilen skifter kategori.** I dag er modellen »logget ind = ser alt«.
-   Med to brugere er én glemt `WHERE user_id` et **datalæk mellem mennesker** — og
-   appen ser rigtig ud imens. Isolationen skal testes systematisk: en anden bruger,
-   der prøver hver eneste rute.
-2. **Kontekster er personlige af natur.** `#computer` betyder *min* computer. Deles
-   et projekt, skal modtageren se sine egne kontekster på opgaverne. `item_contexts`
-   bliver dermed en per-bruger-relation, ikke en simpel kobling. Det er den mest
-   oversete detalje i sådan en omlægning.
-3. **»Isoleret med undtagelser« er den sværeste model.** Ren isolation er let, ren
-   deling er let. Mit-er-mit-undtagen-det-jeg-deler betyder, at hver læsning bliver
-   »mine ELLER delt med mig«, og hver skrivning skal spørge »må jeg det her?«.
-
-**Pladsen blokerer det.** Skønnet +8–12 K tegn i payloaden; der er 4 K tilbage, og
-ikonet frigør kun 1.900. Den eneste rigtige løsning på loftet er at gøre repoet
-offentligt og lade install-scriptet hente payloaden med `wget` — koden har ingen
-hemmeligheder. Alt andet er udsættelser.
-
-**Foreslået rækkefølge**, så hver del kan tages i brug for sig:
-
-| | | |
-|---|---|---|
-| **M0** | Pladsen | Uden den kan resten ikke installeres |
-| **M1** | Ejerskab og isolation | `user_id` på syv tabeller, migration der giver alt til Andreas, filter på alle 94 steder, per-bruger settings og iCal-token, tokens bundet til en bruger, brugeradministration. **Ingen deling endnu.** Leverance: to brugere kan bruge samme installation uden at ane, at den anden findes — bevist af en test, der prøver hver rute som den forkerte bruger |
-| **M2** | Tildeling | En opgave sendes til en anden bruger: lander i *deres* Next Actions og i *din* Waiting For. Bygger på det `waiting_for`-felt, der allerede findes |
-| **M3** | Delte projekter | Opgaver og noter følger med, kontekster gør ikke. Læse- eller redigeringsadgang |
-
-M1 er langt det største og det eneste, der er farligt at gøre halvt.
-
-**Tre spørgsmål skal besvares, før noget bygges** — de ændrer designet:
-
-1. Hvem er de andre brugere? Familie på samme server, eller kolleger? Afgør, om der
-   skal være et invitations-flow eller bare »jeg opretter en konto til dig«.
-2. Når en opgave tildeles — hvem ejer den så? Flytter den helt, eller beholder
-   afsenderen den og ser blot, at der arbejdes på den?
-3. Er det vigtigere end pladsen og end nye funktioner?
+Bliver det trangt igen: `style.css` er det største, der ikke er kode, og
+serveren kan stadig tegne ikonet ved opstart (~1.900 netto).
 
 ## Efter hver fase
 
