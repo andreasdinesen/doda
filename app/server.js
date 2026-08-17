@@ -1599,8 +1599,29 @@ const ROUTES = {
     rulFrem();
     const uge = now() - 7 * 86400;
     const projekter = hentProjekter().filter((p) => p.status === 'active');
+    // Ugens tal. Det er FAKTA til gennemgangen, ikke en score: ingen streaks,
+    // ingen grafer, ingen sammenligning med sidste uge (DESIGN.md §7). Har man
+    // fanget tyve og afklaret to, er det den samtale, gennemgangen skal starte.
+    //
+    // "processed" er et skoen: fanget i denne uge og ikke laengere i inbox.
+    // Der findes ingen historik at spoerge, og et tal, der ser praecist ud,
+    // maa ikke vaere det uden at vaere det - derfor hedder det ogsaa
+    // "captured and clarified" i UI'et.
+    const uges = db.prepare(`
+      SELECT
+        (SELECT COUNT(*) FROM items WHERE deleted = 0 AND created_at >= ?) AS captured,
+        (SELECT COUNT(*) FROM items WHERE deleted = 0 AND completed_at >= ? AND status = 'done') AS completed,
+        (SELECT COUNT(*) FROM items WHERE deleted = 0 AND created_at >= ? AND status != 'inbox') AS processed`)
+      .get(uge, uge, uge);
+
+    let fokus = [];
+    try { fokus = JSON.parse(getSetting('review_focus', '[]')); } catch { fokus = []; }
+
     sendJson(res, 200, {
       step: Number(getSetting('review_step', '0')) || 0,
+      mode: getSetting('review_mode', 'simple'),
+      focus: Array.isArray(fokus) ? fokus : [],
+      week: uges,
       startedAt: Number(getSetting('review_started', '0')) || 0,
       lastDone: Number(getSetting('review_done', '0')) || 0,
       weekday: Number(getSetting('review_weekday', '0')) || 0,
@@ -1623,8 +1644,20 @@ const ROUTES = {
     if (!auth) return;
     const body = await readJsonBody(req, auth.viaToken);
     if (body.action === 'start') {
+      // Maaden ligger paa serveren ved siden af trinnet - ellers kunne man
+      // genoptage en gennemgang og pludselig gaa en anden vej igennem.
+      if (['speed', 'simple', 'focused'].includes(body.mode)) setSetting('review_mode', body.mode);
+      if (Array.isArray(body.focus)) {
+        const gyldige = body.focus.filter((id) => typeof id === 'string' && findProjektId(id)).slice(0, 50);
+        setSetting('review_focus', JSON.stringify(gyldige));
+      }
       setSetting('review_step', '1');
       setSetting('review_started', String(now()));
+    } else if (body.action === 'focus') {
+      // Valget af ugens projekter er sit eget trin i "focused".
+      const gyldige = Array.isArray(body.focus)
+        ? body.focus.filter((id) => typeof id === 'string' && findProjektId(id)).slice(0, 50) : [];
+      setSetting('review_focus', JSON.stringify(gyldige));
     } else if (body.action === 'finish') {
       setSetting('review_step', '0');
       setSetting('review_done', String(now()));
@@ -1635,10 +1668,15 @@ const ROUTES = {
     } else if (Number.isFinite(Number(body.step))) {
       // Gennemgangen skal kunne afbrydes og genoptages fra SAMME sted, ogsaa
       // hvis browseren lukkes - derfor ligger trinnet pa serveren.
-      setSetting('review_step', String(Math.max(0, Math.min(6, Number(body.step)))));
+      // Loftet foelger den laengste maade (focused: valg + seks trin).
+      setSetting('review_step', String(Math.max(0, Math.min(7, Number(body.step)))));
     }
+    let fokusEfter = [];
+    try { fokusEfter = JSON.parse(getSetting('review_focus', '[]')); } catch { fokusEfter = []; }
     sendJson(res, 200, {
       step: Number(getSetting('review_step', '0')) || 0,
+      mode: getSetting('review_mode', 'simple'),
+      focus: Array.isArray(fokusEfter) ? fokusEfter : [],
       lastDone: Number(getSetting('review_done', '0')) || 0,
     });
   },
@@ -2190,7 +2228,7 @@ function importer(data) {
       tal[tabel] = n;
     }
     if (data.settings && typeof data.settings === 'object') {
-      const OK = new Set(['theme', 'review_weekday', 'review_done', 'ical_alarm']);
+      const OK = new Set(['theme', 'review_weekday', 'review_done', 'ical_alarm', 'review_mode', 'review_focus']);
       for (const [k, v] of Object.entries(data.settings)) if (OK.has(k)) setSetting(k, String(v));
     }
     db.exec('COMMIT');

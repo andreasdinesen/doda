@@ -109,13 +109,40 @@ function bindLog() {
 /* ------------------------------------------------- ugentlig gennemgang */
 
 const TRIN = [
-  { t: 'Empty the inbox', n: 'Clarify everything that is still unprocessed.' },
-  { t: 'Review active projects', n: 'Does every project have a next action?' },
-  { t: 'Review Waiting For', n: 'Is there anything you should chase?' },
-  { t: 'Review Someday', n: 'Has anything become relevant?' },
-  { t: 'Review skipped repeats', n: 'A habit that keeps getting skipped is telling you something.' },
-  { t: 'Look at the week', n: 'What you got done.' },
+  { id: 'inbox', t: 'Empty the inbox', n: 'Clarify everything that is still unprocessed.' },
+  { id: 'projects', t: 'Review active projects', n: 'Does every project have a next action?' },
+  { id: 'waiting', t: 'Review Waiting For', n: 'Is there anything you should chase?' },
+  { id: 'someday', t: 'Review Someday', n: 'Has anything become relevant?' },
+  { id: 'skipped', t: 'Review skipped repeats', n: 'A habit that keeps getting skipped is telling you something.' },
+  { id: 'week', t: 'Look at the week', n: 'What you got done.' },
+  { id: 'focus', t: 'Pick this week\u2019s projects', n: 'The few you actually intend to move. The rest keep running without you.' },
 ];
+
+/*
+ * Tre maader at gaa igennem paa - efter tingdo.
+ *
+ * Forskellen er UDELUKKENDE hvilke trin man moeder, og i hvilken orden.
+ * Ét sted at aendre, og ingen "hvis speed"-forgreninger nede i trinnene.
+ */
+const MAADER = {
+  speed: {
+    navn: 'Speed Review',
+    om: 'Inbox and next actions. Nothing else.',
+    trin: ['inbox', 'projects'],
+  },
+  simple: {
+    navn: 'Simple Review',
+    om: 'Every list, one by one. Confirm a whole list at once when nothing has changed.',
+    trin: ['inbox', 'projects', 'waiting', 'someday', 'skipped', 'week'],
+  },
+  focused: {
+    navn: 'Focused Review',
+    om: 'Pick the projects you will focus on this week, then walk through every list.',
+    trin: ['focus', 'inbox', 'projects', 'waiting', 'someday', 'skipped', 'week'],
+  },
+};
+
+const trinListe = (mode) => (MAADER[mode] || MAADER.simple).trin.map((id) => TRIN.find((x) => x.id === id));
 
 async function sideReview() {
   const host = document.getElementById('pageHost');
@@ -124,15 +151,42 @@ async function sideReview() {
 
   if (!d.step) {
     const dage = ['Never', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const u = d.week || { captured: 0, completed: 0, processed: 0 };
     host.innerHTML = `<section class="page">
       <div class="page-head"><h1>Review</h1><p class="lead">${esc(BESKRIVELSER.review)}</p></div>
-      <div class="card">
-        <h2>Six steps, whenever it suits you</h2>
-        <ol class="reviewlist">${TRIN.map((t) => `<li><strong>${esc(t.t)}</strong> — ${esc(t.n)}</li>`).join('')}</ol>
-        <p class="gate-note" style="text-align:left">You can stop halfway and pick up
-        from the same step later — even on another device.</p>
-        <button class="btn primary" id="revStart" style="margin-top:6px">Start the review</button>
-        ${d.lastDone ? `<p class="lead" style="margin-top:14px">Last completed ${esc(visTid(d.lastDone))}.</p>` : ''}
+
+      <blockquote class="reviewintro">
+        <strong>The weekly review is how you stay on top of everything.</strong>
+        You clear the inbox, check in on your projects, revisit Someday, and confirm
+        nothing is slipping through the cracks. It usually takes 15 to 30 minutes.
+      </blockquote>
+
+      <div class="page-head" style="margin:32px 0 18px">
+        <h1>Hi ${esc(state.user.username)}.</h1>
+        <p class="lead">A quick look at your week before you start.</p>
+      </div>
+
+      <!-- Fakta til samtalen, ikke en score: ingen streaks, ingen grafer,
+           ingen sammenligning med sidste uge (DESIGN.md §7). -->
+      <div class="weekstats">
+        <div><span>Captured</span><b>${u.captured}</b></div>
+        <div><span>Completed</span><b>${u.completed}</b></div>
+        <div><span>Captured and clarified</span><b>${u.processed}</b></div>
+      </div>
+
+      <p class="lead" style="margin:30px 0 12px">How would you like to review?</p>
+      <div class="modelist">
+        ${Object.entries(MAADER).map(([id, m]) => `
+          <button class="modecard" data-mode="${id}">
+            <strong>${esc(m.navn)}</strong>
+            <span class="lead">${esc(m.om)}</span>
+            <span class="meta">${(MAADER[id].trin.length)} step${MAADER[id].trin.length === 1 ? '' : 's'}</span>
+          </button>`).join('')}
+      </div>
+      <div class="card" style="margin-top:18px">
+        <p class="gate-note" style="text-align:left;margin:0">You can stop halfway and pick
+        up from the same step later — even on another device.
+        ${d.lastDone ? `Last completed ${esc(visTid(d.lastDone))}.` : ''}</p>
       </div>
       <div class="card">
         <h2>Reminder</h2>
@@ -143,9 +197,11 @@ async function sideReview() {
         </select>
       </div>
     </section>`;
-    document.getElementById('revStart').addEventListener('click', async () => {
-      await api('POST', '/api/v1/review', { action: 'start' });
-      tegnSide();
+    document.querySelectorAll('[data-mode]').forEach((el) => {
+      el.addEventListener('click', async () => {
+        await api('POST', '/api/v1/review', { action: 'start', mode: el.dataset.mode });
+        tegnSide();
+      });
     });
     document.getElementById('revDay').addEventListener('change', async (e) => {
       await api('POST', '/api/v1/settings', { settings: { review_weekday: e.target.value } });
@@ -154,24 +210,39 @@ async function sideReview() {
     return;
   }
 
-  const i = d.step - 1;
+  // Trinnene kommer fra den valgte maade - ikke fra den faste liste.
+  const trin = trinListe(d.mode);
+  const i = Math.min(d.step, trin.length) - 1;
+  const nu = trin[i];
   host.innerHTML = `<section class="page">
     <div class="page-head">
-      <div class="meta">Step ${d.step} of ${TRIN.length}</div>
-      <h1>${esc(TRIN[i].t)}</h1>
-      <p class="lead">${esc(TRIN[i].n)}</p>
-      <div class="progress"><span style="width:${(d.step / TRIN.length) * 100}%"></span></div>
+      <div class="meta">${esc((MAADER[d.mode] || MAADER.simple).navn)} ·
+        Step ${d.step} of ${trin.length}</div>
+      <h1>${esc(nu.t)}</h1>
+      <p class="lead">${esc(nu.n)}</p>
+      <div class="progress"><span style="width:${(d.step / trin.length) * 100}%"></span></div>
     </div>
-    <div class="card">${reviewTrin(i, d)}</div>
+    <div class="card">${reviewTrin(nu.id, d)}</div>
     <div class="reviewnav">
       <button class="btn ghost" id="revQuit">Continue later</button>
       <span style="flex:1"></span>
       ${d.step > 1 ? '<button class="btn" id="revBack">Back</button>' : ''}
-      <button class="btn primary" id="revNext">${d.step === TRIN.length ? 'Finish' : 'Next step'}</button>
+      <button class="btn primary" id="revNext">${d.step === trin.length ? 'Finish' : 'Next step'}</button>
     </div>
   </section>`;
 
-  const gaa = async (trin) => { await api('POST', '/api/v1/review', { step: trin }); tegnSide(); };
+  const gaa = async (t) => { await api('POST', '/api/v1/review', { step: t }); tegnSide(); };
+
+  // Ugens projekter gemmes med det samme, ikke ved "Next" - saa er et
+  // "Continue later" midt i trinnet ikke spildt.
+  document.querySelectorAll('[data-focus]').forEach((el) => {
+    el.addEventListener('change', async () => {
+      const valgt = [...document.querySelectorAll('[data-focus]')]
+        .filter((x) => x.checked).map((x) => x.dataset.focus);
+      d.focus = valgt;
+      await api('POST', '/api/v1/review', { action: 'focus', focus: valgt });
+    });
+  });
   document.getElementById('revQuit').addEventListener('click', async () => {
     // "Fortsaet senere" beholder trinnet - kun "Finish" nulstiller det.
     gaaTil('next');
@@ -179,7 +250,7 @@ async function sideReview() {
   });
   if (d.step > 1) document.getElementById('revBack').addEventListener('click', () => gaa(d.step - 1));
   document.getElementById('revNext').addEventListener('click', async () => {
-    if (d.step < TRIN.length) { gaa(d.step + 1); return; }
+    if (d.step < trin.length) { gaa(d.step + 1); return; }
     await api('POST', '/api/v1/review', { action: 'finish' });
     await genindlaes();
     gaaTil('next');
@@ -191,7 +262,9 @@ async function sideReview() {
   });
 }
 
-function reviewTrin(i, d) {
+/** Indholdet af ét trin. Slaar op paa trinnets ID, ikke paa dets nummer -
+    ellers ville en ny maade flytte alle grenene. */
+function reviewTrin(id, d) {
   const tom = (t) => `<p class="lead">${t}</p>`;
   const liste = (items, hvad) => (items.length
     ? `<div class="list">${items.slice(0, 40).map((x) => `<div class="item-row">
@@ -200,14 +273,14 @@ function reviewTrin(i, d) {
         ${x.waiting_for ? `<div class="item-meta meta">waiting on ${esc(x.waiting_for)}</div>` : ''}</div></div>`).join('')}</div>`
     : tom(hvad));
 
-  if (i === 0) {
+  if (id === 'inbox') {
     return d.inbox.length
       ? `<p class="lead" style="margin-bottom:12px">${d.inbox.length} item${d.inbox.length === 1 ? '' : 's'} left.</p>
          ${liste(d.inbox, '')}
          <button class="btn" data-goto="inbox" style="margin-top:14px">Go to the inbox</button>`
       : tom('Inbox is empty. Nothing to clarify.');
   }
-  if (i === 1) {
+  if (id === 'projects') {
     return d.stalled.length
       ? `<p class="lead" style="margin-bottom:12px">${d.stalled.length} project${d.stalled.length === 1 ? ' has' : 's have'} open work but no next action:</p>
          <div class="list">${d.stalled.map((p) => `<div class="item-row">
@@ -216,9 +289,9 @@ function reviewTrin(i, d) {
          <button class="btn" data-goto="projects" style="margin-top:14px">Go to projects</button>`
       : tom(`All ${d.projects.length} active projects have a next action. That is the whole point.`);
   }
-  if (i === 2) return liste(d.waiting, 'You are not waiting on anyone.');
-  if (i === 3) return liste(d.someday, 'Nothing parked.');
-  if (i === 4) {
+  if (id === 'waiting') return liste(d.waiting, 'You are not waiting on anyone.');
+  if (id === 'someday') return liste(d.someday, 'Nothing parked.');
+  if (id === 'skipped') {
     return d.skipped.length
       ? `<div class="list">${d.skipped.map((r) => `<div class="item-row">
           <span class="rep-icon ${r.mode === 'completion' ? 'completion' : 'schedule'}">${icon('repeat', 16)}</span>
@@ -227,6 +300,21 @@ function reviewTrin(i, d) {
           <span class="skipcount">${r.skips} skipped</span></div>`).join('')}</div>
          <button class="btn" data-goto="repeat" style="margin-top:14px">Go to recurring</button>`
       : tom('Nothing has been skipped. Your habits are holding.');
+  }
+  if (id === 'focus') {
+    // Ugens projekter. Valget gemmes med det samme - trykker man "Continue
+    // later" midt i en gennemgang, skal det ikke vaere spildt.
+    const valgt = new Set(d.focus || []);
+    return d.projects.length
+      ? `<p class="lead" style="margin-bottom:12px">Tick the few you actually intend to
+           move this week. The rest keep running without you.</p>
+         <div class="list">${d.projects.map((p) => `
+           <label class="item-row focusrow">
+             <input type="checkbox" data-focus="${esc(p.id)}"${valgt.has(p.id) ? ' checked' : ''}>
+             <div class="item-main"><div class="item-title">${esc(p.name)}</div>
+             <div class="item-meta meta">${p.open_count} open${p.next_count ? '' : ' · no next action'}</div></div>
+           </label>`).join('')}</div>`
+      : tom('No active projects yet.');
   }
   return d.done.length
     ? `<p class="lead" style="margin-bottom:12px">${d.done.length} thing${d.done.length === 1 ? '' : 's'} finished this week.</p>

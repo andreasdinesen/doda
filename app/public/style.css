@@ -1500,3 +1500,54 @@ button.chip:not(.flat):hover { text-decoration: line-through; }
 .chip.link:hover { background: var(--card-hover); }
 .item-flag { color: var(--muted); display: inline-flex; }
 a.item-flag:hover { color: var(--accent); }
+
+/* ---------------------------------------------- gennemgangens startside */
+
+.reviewintro {
+  margin: 24px 0 0;
+  padding: 2px 0 2px 18px;
+  border-left: 3px solid var(--accent);
+  color: var(--text);
+}
+
+.reviewintro strong { font-weight: 650; }
+
+/* Ugens tal. Ingen farver, ingen pile, ingen sammenligning - fakta til
+   samtalen, ikke en score (DESIGN.md §7). */
+.weekstats { display: flex; flex-direction: column; }
+
+.weekstats div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 2px;
+  border-bottom: 1px solid var(--border);
+}
+
+.weekstats span { font-weight: 600; }
+.weekstats b { font-size: 26px; font-weight: 650; font-variant-numeric: tabular-nums; }
+
+.modelist { display: flex; flex-direction: column; gap: 10px; }
+
+.modecard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--card);
+  text-align: left;
+  cursor: pointer;
+}
+
+.modecard:hover { background: var(--card-hover); border-color: var(--accent); }
+.modecard strong { font-size: 16px; font-weight: 650; }
+.modecard .meta { margin-top: 2px; }
+
+/* Afkrydsning i fokus-trinnet. appearance:auto, ellers forsvinder fluebenet
+   i den fælles input-nulstilling (RUNE-ERFARINGER, Tilmeld). */
+.focusrow { cursor: pointer; }
+.focusrow input[type="checkbox"] { appearance: auto; -webkit-appearance: auto; flex: none; width: 17px; height: 17px; }

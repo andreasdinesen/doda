@@ -167,6 +167,34 @@ Dertil:
   eller på iOS at appen ligger på hjemmeskærmen. En knap, der bare ikke virker,
   er det værste svar.
 
+### Gennemgangen har tre måder — og et ugeoverblik (v15)
+
+Efter tingdo. Startsiden viser en kort forklaring, en hilsen og **ugens tal**,
+og lader dig vælge hvordan du vil igennem:
+
+| Måde | Trin |
+|---|---|
+| **Speed** | Inbox → projekter. Ikke andet. |
+| **Simple** | Alle seks lister, én ad gangen. |
+| **Focused** | Vælg ugens projekter først, gå så hele vejen igennem. |
+
+Måderne er **udelukkende** en liste af trin-id'er (`MAADER`). Der er ingen
+»hvis speed«-forgreninger nede i trinnene, og `reviewTrin()` slår op på trinnets
+**id**, ikke dets nummer — ellers ville en ny måde flytte alle grenene.
+
+Måden og ugens valgte projekter ligger på **serveren** ved siden af trinnet.
+Genoptager man en gennemgang, skal man ikke pludselig gå en anden vej igennem,
+og et afkrydset projekt skal ikke gå tabt ved »Continue later« — derfor gemmes
+valget straks, ikke ved »Next«.
+
+**Om ugens tal og §7.** `§7` siger »ingen statistik/streaks/gamification«, og
+logbogen har med vilje hverken tal eller grafer. Tallene her er en bevidst,
+snæver undtagelse: de er **fakta til samtalen**, som gennemgangen skal starte
+med (har jeg fanget tyve og afklaret to?), og de vises kun dér. Ingen streaks,
+ingen grafer, ingen sammenligning med sidste uge, ingen score. »Captured and
+clarified« hedder det, den er — et skøn, fordi der ikke findes historik at
+spørge, og et tal må ikke se præcist ud uden at være det.
+
 ### Tastaturet ind i listerne
 
 `↑`/`↓` går **ind** i listen uden at åbne noget. Før kunne fokus kun komme fra
