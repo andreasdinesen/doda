@@ -128,6 +128,11 @@ async function sideProjekt(id) {
   const omr = p.area_id ? (state.areas.find((a) => a.id === p.area_id) || {}).name : null;
   const manglerNaeste = p.status === 'active' && !p.next_count && p.open_count > 0;
 
+  friskNotionTitel('project', p.id, p, () => {
+    const chip = host.querySelector('.page-head .chip.link');
+    if (chip) chip.innerHTML = `${icon('link', 13)} ${esc(linkNavn(p))}`;
+  });
+
   host.innerHTML = `<section class="page">
     <button class="btn ghost" id="backToProjects" style="margin-bottom:14px">← Projects</button>
     <div class="page-head">
@@ -540,7 +545,8 @@ function spoergOmLink(o, naar) {
           if (mit !== token) return;
           traf.innerHTML = d.pages.length
             ? d.pages.map((s) => `<button class="notionhit" data-url="${esc(s.url)}"
-                 data-title="${esc(s.title)}">${s.icon ? `${esc(s.icon)} ` : ''}${esc(s.title)}</button>`).join('')
+                 data-title="${esc(s.title)}">${s.icon ? `${esc(s.icon)} ` : ''}${esc(s.title)}${
+  s.kind === 'database' ? '<span class="meta"> · database</span>' : ''}</button>`).join('')
             : `<p class="lead" style="margin:8px 0 0">Nothing found. Notion only shows
                pages you have <strong>shared with the integration</strong> — open the page
                in Notion, ⋯ → Connections, and add yours.</p>`;
@@ -577,4 +583,18 @@ function spoergOmLink(o, naar) {
     luk();
     naar();
   });
+}
+
+/**
+ * Henter en Notion-sides friske titel og opdaterer visningen, hvis den er
+ * aendret. Fejler det, sker der ingenting - en gammel titel er bedre end en
+ * fejlbesked om en titel.
+ */
+async function friskNotionTitel(kind, id, o, naar) {
+  try {
+    const d = await api('POST', '/api/v1/notion/refresh', { kind, id });
+    if (!d.title || d.title === o.link_title) return;
+    o.link_title = d.title;
+    naar();
+  } catch { /* titler er ikke noget at afbryde brugeren over */ }
 }

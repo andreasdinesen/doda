@@ -681,6 +681,11 @@ async function aabnElement(listeItem) {
 
   /* --- titel, beskrivelse, afkrydsning --------------------------- */
 
+  // Er linket en Notion-side, tjekkes titlen stille i baggrunden - hoejst
+  // én gang i doegnet pr. link, det klarer serveren. Fejler det, sker der
+  // ingenting: en gammel titel er bedre end en fejlbesked om en titel.
+  friskNotionTitel('item', it.id, u, () => tegnChipsRow());
+
   const titelEl = host.querySelector('#dTitle');
   const noteEl = host.querySelector('#dNote');
   const preview = host.querySelector('#dPreview');

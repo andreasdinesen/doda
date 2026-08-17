@@ -92,10 +92,13 @@ function opret(srv) {
   }
 
   async function soeg(q) {
+    // INTET object-filter: en database er lige saa gyldig at linke til som en
+    // side, og titlen paa begge kan laeses af titel() nedenfor. Med
+    // filter: {value:'page'} kunne man ikke finde et projekt, der ligger som
+    // en database - og det er ikke til at gennemskue for den, der soeger.
     const r = await kald('POST', '/search', {
       query: String(q || '').slice(0, 100),
-      filter: { property: 'object', value: 'page' },
-      page_size: 10,
+      page_size: 12,
     });
     if (r.status !== 200 || !r.data) {
       return { fejl: (r.data && r.data.message) || 'Could not reach Notion.' };
@@ -105,6 +108,9 @@ function opret(srv) {
       url: s.url || '',
       title: titel(s) || 'Untitled',
       icon: (s.icon && s.icon.type === 'emoji' && s.icon.emoji) || '',
+      // Sig hvad det ER. En database og en side ser ens ud i en liste, og
+      // man skal kunne se forskel, foer man vaelger.
+      kind: s.object === 'database' ? 'database' : 'page',
     })).filter((s) => s.url);
     return { pages: sider };
   }

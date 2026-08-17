@@ -293,6 +293,15 @@ const MIGRATIONS = [
       ALTER TABLE projects ADD COLUMN link_title TEXT;
     `);
   },
+
+  function m11(d) {
+    // Hvornaar titlen sidst blev hentet fra Notion. Uden stemplet ville
+    // hver aabning af en opgave vaere et kald til en fremmed tjeneste.
+    d.exec(`
+      ALTER TABLE items ADD COLUMN link_checked_at INTEGER;
+      ALTER TABLE projects ADD COLUMN link_checked_at INTEGER;
+    `);
+  },
 ];
 
 /*
@@ -1983,6 +1992,46 @@ const ROUTES = {
     sendJson(res, 200, { pages: r.pages });
   },
 
+  /**
+   * Henter en Notion-sides friske titel - hoejst én gang i doegnet pr. link.
+   *
+   * Omdoeber man siden i Notion, staar den gamle titel ellers i doda for
+   * evigt. Stemplet er hele pointen: uden det ville hver eneste aabning af
+   * en opgave vaere et kald til en fremmed tjeneste.
+   *
+   * Svarer {title: null}, naar der ikke var noget at lave - saa kan
+   * frontenden kalde den frit uden at skulle vide, hvornaar det giver mening.
+   */
+  'POST /api/v1/notion/refresh': async (req, res) => {
+    const auth = godkend(req, res, 'write');
+    if (!auth) return;
+    const body = await readJsonBody(req, auth.viaToken);
+    const erProjekt = body.kind === 'project';
+    const tabel = erProjekt ? 'projects' : 'items';
+    const id = str(body.id, 64);
+    if (!id) { apiFejl(res, 400, 'no_id', 'Which one?'); return; }
+
+    const r = db.prepare(`SELECT link_url, link_title, link_checked_at FROM ${tabel} WHERE id = ?`).get(id);
+    const sideId = r && notionModul.idFraUrl(r.link_url);
+    // Ikke et Notion-link, intet token, eller tjekket for nylig: gaa hjem.
+    if (!sideId || !getSetting('notion_token', '')
+        || (r.link_checked_at && now() - r.link_checked_at < 86400)) {
+      sendJson(res, 200, { title: null });
+      return;
+    }
+
+    // Stemples FOER opslaget. Er siden slettet eller delingen fjernet, skal
+    // doda ikke proeve igen ved hver eneste aabning.
+    db.prepare(`UPDATE ${tabel} SET link_checked_at = ? WHERE id = ?`).run(now(), id);
+    const side = await notion.side(sideId);
+    if (!side || !side.title || side.title === r.link_title) {
+      sendJson(res, 200, { title: null });
+      return;
+    }
+    db.prepare(`UPDATE ${tabel} SET link_title = ? WHERE id = ?`).run(side.title, id);
+    sendJson(res, 200, { title: side.title });
+  },
+
   /* --- push: abonnement, noegle og "hvad skulle jeg minde om" --------- */
 
   'GET /api/v1/push': (req, res) => {
@@ -2349,7 +2398,8 @@ function godkendMcp(req) {
 /* Tokenet bliver paa serveren og sendes ALDRIG til frontenden - kun et
    `connected: true` (RUNE-ERFARINGER §6b). Det er en hemmelighed, brugeren
    selv har indtastet, og den skal ikke kunne laeses ud af en browserfane. */
-const notion = require('./notion.js').opret({
+const notionModul = require('./notion.js');
+const notion = notionModul.opret({
   hentToken: () => getSetting('notion_token', ''),
 });
 
