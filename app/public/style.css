@@ -1494,3 +1494,9 @@ button.chip:not(.flat):hover { text-decoration: line-through; }
 /* En raekke med en handling, der venter paa net. Daempet, men ikke skjult -
    den ER stadig der, indtil koen er tom. */
 .item-row.venter { opacity: .62; }
+
+/* Chip med et link. Ser ud som de andre chips, men er et rigtigt <a>. */
+.chip.link { text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+.chip.link:hover { background: var(--card-hover); }
+.item-flag { color: var(--muted); display: inline-flex; }
+a.item-flag:hover { color: var(--accent); }

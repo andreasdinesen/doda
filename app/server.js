@@ -278,6 +278,21 @@ const MIGRATIONS = [
       ALTER TABLE items ADD COLUMN notified_at INTEGER;
     `);
   },
+
+  function m10(d) {
+    // Ét link pr. element og pr. projekt: den side, sagen egentlig lever paa.
+    //
+    // Feltet er BEVIDST generelt og hedder ikke notion_url. Et link til en
+    // Notion-side, et Google-dokument eller en GitHub-sag er lige nyttigt, og
+    // doda har ingen grund til at bage én leverandoer ind i skemaet. UI'et
+    // genkender kendte vaerter og viser et paent navn - det er hele forskellen.
+    d.exec(`
+      ALTER TABLE items ADD COLUMN link_url TEXT;
+      ALTER TABLE items ADD COLUMN link_title TEXT;
+      ALTER TABLE projects ADD COLUMN link_url TEXT;
+      ALTER TABLE projects ADD COLUMN link_title TEXT;
+    `);
+  },
 ];
 
 // Statusser. Raekkefoelgen er ogsaa den, lister sorteres efter.
@@ -755,6 +770,7 @@ function hentProjekter() {
   // items_projekt- og items_status-indekserne.
   return db.prepare(`
     SELECT p.id, p.name, p.outcome, p.area_id, p.parent_id, p.status, p.seq, p.reviewed_at,
+           p.link_url, p.link_title,
            (SELECT COUNT(*) FROM items i
              WHERE i.project_id = p.id AND i.deleted = 0 AND i.kind = 'task'
                AND i.status = 'next'
@@ -809,7 +825,8 @@ function opretProjekt(navn) {
 const ITEM_FELTER = `
   i.id, i.kind, i.status, i.title, i.note, i.project_id, i.area_id,
   i.due_date, i.due_time, i.defer_date, i.waiting_for, i.seq,
-  i.recurrence_id, i.skipped, i.created_at, i.updated_at, i.completed_at`;
+  i.recurrence_id, i.skipped, i.created_at, i.updated_at, i.completed_at,
+  i.link_url, i.link_title`;
 
 /** Haenger konteksterne pa en raekke elementer i ÉT opslag, ikke ét pr. element. */
 function medKontekster(raekker) {
@@ -912,7 +929,27 @@ function renseItem(raa) {
   else if (typeof raa.due_time === 'string' && /^\d{2}:\d{2}$/.test(raa.due_time)) ud.due_time = raa.due_time;
   if (raa.project_id === null) ud.project_id = null;
   else if (typeof raa.project_id === 'string' && findProjektId(raa.project_id)) ud.project_id = raa.project_id;
+  if (raa.link_url === null || raa.link_url === '') { ud.link_url = null; ud.link_title = null; }
+  else if (typeof raa.link_url === 'string') {
+    const rent = rentLink(raa.link_url);
+    // Kun http(s). Et javascript:-link i et felt, der bliver til et <a href>,
+    // er den samme vej ind som i linkify (DESIGN.md §3).
+    if (rent) {
+      ud.link_url = rent;
+      ud.link_title = typeof raa.link_title === 'string' ? str(raa.link_title, 200) : null;
+    }
+  }
   return ud;
+}
+
+/** Kun http(s), og hoejst 1000 tegn. Alt andet er ikke et link, vi vil have. */
+function rentLink(raa) {
+  const s = String(raa || '').trim().slice(0, 1000);
+  if (!s) return null;
+  try {
+    const u = new URL(s);
+    return (u.protocol === 'http:' || u.protocol === 'https:') ? s : null;
+  } catch { return null; }
 }
 
 function findProjektId(id) {
@@ -2955,6 +2992,16 @@ const MOENSTRE = [
           && db.prepare('SELECT 1 FROM projects WHERE id = ? AND deleted = 0').get(body.parent_id))) {
         saet.push('parent_id = ?');
         arg.push(body.parent_id || null);
+      }
+      if (body.link_url === null || body.link_url === '') {
+        saet.push('link_url = ?', 'link_title = ?');
+        arg.push(null, null);
+      } else if (typeof body.link_url === 'string') {
+        const rent = rentLink(body.link_url);
+        if (rent) {
+          saet.push('link_url = ?', 'link_title = ?');
+          arg.push(rent, typeof body.link_title === 'string' ? str(body.link_title, 200) : null);
+        }
       }
       if (PROJEKT_STATUSSER.includes(body.status)) { saet.push('status = ?'); arg.push(body.status); }
       if (body.reviewed === true) { saet.push('reviewed_at = ?'); arg.push(now()); }

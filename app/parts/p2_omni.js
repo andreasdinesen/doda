@@ -6,8 +6,12 @@
 /* Foerste tegn vaelger en TILSTAND. Pillen inde i feltet og legenden i bunden
    viser hvilken - sa man aldrig er i tvivl om, hvad Enter kommer til at gore. */
 const MODER = {
-  '+': { id: 'task', pil: '+ New Task', ph: 'Task title…', legend: ['/ project', '# context'], enter: 'Create' },
-  '*': { id: 'note', pil: '* New Note', ph: 'Note title…', legend: ['/ project'], enter: 'Create' },
+  // Legenden skal naevne ALT, parseren kan i den tilstand. Naevner den mindre,
+  // findes funktionen i praksis ikke - det var praecis derfor "/projekt" var
+  // ubrugt indtil v4, selv om paletten lovede det.
+  '+': { id: 'task', pil: '+ New Task', ph: 'Task title… try !tomorrow at 9',
+    legend: ['/ project', '# context', '! date', '~ hide until'], enter: 'Create' },
+  '*': { id: 'note', pil: '* New Note', ph: 'Note title…', legend: ['/ project', '# context'], enter: 'Create' },
   '/': { id: 'project', pil: '/ Projects', ph: 'Find or create a project…', legend: [], enter: 'Open' },
   '#': { id: 'context', pil: '# Contexts', ph: 'Find or create a context…', legend: [], enter: 'Open' },
   ':': { id: 'area', pil: ': Areas', ph: 'Find or create an area…', legend: [], enter: 'Open' },

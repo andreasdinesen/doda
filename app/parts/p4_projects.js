@@ -434,3 +434,71 @@ function bindContexts() {
     });
   });
 }
+
+/* ------------------------------------------------------- link til en side */
+
+/**
+ * Navnet paa et link. Er der ingen titel, bruges vaerten - en raa
+ * Notion-adresse er 40 tegn hex og siger ingenting.
+ */
+function linkNavn(o) {
+  if (o.link_title) return o.link_title;
+  try {
+    const v = new URL(o.link_url).hostname.replace(/^www\./, '');
+    return v === 'notion.so' || v.endsWith('.notion.site') ? 'Notion' : v;
+  } catch { return 'link'; }
+}
+
+/** Lille dialog: adressen og et valgfrit navn. Gemmes foerst med Save. */
+function spoergOmLink(o, naar) {
+  const host = document.createElement('div');
+  host.className = 'modal';
+  host.innerHTML = `
+  <div class="modal-card" role="dialog" aria-modal="true" style="max-width:520px">
+    <h2>Link to a page</h2>
+    <p class="lead" style="margin:6px 0 16px">Paste the address of the page where this
+      really lives — a Notion page, a document, an issue. It becomes a chip you can click.</p>
+    <label class="field"><span>Address</span>
+      <input class="input" id="lkUrl" placeholder="https://www.notion.so/…"
+        value="${esc(o.link_url || '')}" autocomplete="off" spellcheck="false"></label>
+    <label class="field"><span>Name (optional)</span>
+      <input class="input" id="lkName" placeholder="What to call it"
+        value="${esc(o.link_title || '')}" maxlength="200"></label>
+    <p class="gate-error" id="lkErr" hidden></p>
+    <div class="modal-foot">
+      ${o.link_url ? '<button class="btn ghost" id="lkDel">Remove link</button>' : ''}
+      <span style="flex:1"></span>
+      <button class="btn" id="lkCancel">Cancel</button>
+      <button class="btn primary" id="lkOk">Set</button>
+    </div>
+  </div>`;
+  document.body.appendChild(host);
+  const luk = () => host.remove();
+  host.querySelector('#lkCancel').addEventListener('click', luk);
+  host.addEventListener('click', (e) => { if (e.target === host) luk(); });
+  const slet = host.querySelector('#lkDel');
+  if (slet) slet.addEventListener('click', () => { o.link_url = null; o.link_title = null; luk(); naar(); });
+
+  const felt = host.querySelector('#lkUrl');
+  felt.focus();
+  felt.select();
+
+  host.querySelector('#lkOk').addEventListener('click', () => {
+    const v = felt.value.trim();
+    if (!v) { o.link_url = null; o.link_title = null; luk(); naar(); return; }
+    // Samme regel som serveren: kun http(s). Sig det HER, saa man ikke
+    // trykker Save og undrer sig over, at linket forsvandt.
+    let ok = false;
+    try { const u = new URL(v); ok = u.protocol === 'http:' || u.protocol === 'https:'; } catch { ok = false; }
+    if (!ok) {
+      const fejl = host.querySelector('#lkErr');
+      fejl.textContent = 'That is not a web address. It has to start with http:// or https://';
+      fejl.hidden = false;
+      return;
+    }
+    o.link_url = v;
+    o.link_title = host.querySelector('#lkName').value.trim() || null;
+    luk();
+    naar();
+  });
+}

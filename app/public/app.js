@@ -736,7 +736,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 13;
+const APP_VERSION = 14;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -1509,8 +1509,12 @@ function fortsaetTilConnector() {
 /* Foerste tegn vaelger en TILSTAND. Pillen inde i feltet og legenden i bunden
    viser hvilken - sa man aldrig er i tvivl om, hvad Enter kommer til at gore. */
 const MODER = {
-  '+': { id: 'task', pil: '+ New Task', ph: 'Task title…', legend: ['/ project', '# context'], enter: 'Create' },
-  '*': { id: 'note', pil: '* New Note', ph: 'Note title…', legend: ['/ project'], enter: 'Create' },
+  // Legenden skal naevne ALT, parseren kan i den tilstand. Naevner den mindre,
+  // findes funktionen i praksis ikke - det var praecis derfor "/projekt" var
+  // ubrugt indtil v4, selv om paletten lovede det.
+  '+': { id: 'task', pil: '+ New Task', ph: 'Task title… try !tomorrow at 9',
+    legend: ['/ project', '# context', '! date', '~ hide until'], enter: 'Create' },
+  '*': { id: 'note', pil: '* New Note', ph: 'Note title…', legend: ['/ project', '# context'], enter: 'Create' },
   '/': { id: 'project', pil: '/ Projects', ph: 'Find or create a project…', legend: [], enter: 'Open' },
   '#': { id: 'context', pil: '# Contexts', ph: 'Find or create a context…', legend: [], enter: 'Open' },
   ':': { id: 'area', pil: ': Areas', ph: 'Find or create an area…', legend: [], enter: 'Open' },
@@ -2125,6 +2129,8 @@ function elementRaekke(it, i) {
       <div class="item-title">${linkify(it.title)}</div>
       ${meta.length ? `<div class="item-meta meta">${meta.join(' · ')}</div>` : ''}
     </div>
+    ${it.link_url ? `<a class="item-flag" href="${esc(it.link_url)}" target="_blank" rel="noopener noreferrer"
+      title="${esc(it.link_url)}" data-stop>${icon('link', 15)}</a>` : ''}
     ${it.note ? `<span class="item-flag" title="Has a description">${icon('note', 15)}</span>` : ''}
     ${it.attachment_count ? `<span class="item-flag" title="${it.attachment_count} attachment(s)">${icon('link', 15)}</span>` : ''}
   </div>`;
@@ -2139,6 +2145,11 @@ function bindListe() {
 
   document.querySelectorAll('.tick[data-done]').forEach((el) => {
     el.addEventListener('click', (e) => { e.stopPropagation(); fuldfoer(el.dataset.done); });
+  });
+
+  // Et klik paa link-ikonet aabner linket - ikke elementet.
+  document.querySelectorAll('.item-row [data-stop]').forEach((el) => {
+    el.addEventListener('click', (e) => e.stopPropagation());
   });
 
   document.querySelectorAll('.item-row').forEach((el) => {
@@ -2447,6 +2458,9 @@ async function aabnElement(listeItem) {
     // ved Save - ruden ma ikke aendre noget bag om et Cancel.
     nytProjekt: null,
     nyeKontekster: [],
+    // Siden sagen egentlig lever paa - fx en Notion-side.
+    link_url: it.link_url || null,
+    link_title: it.link_title || null,
   };
 
   const host = document.createElement('div');
@@ -2534,6 +2548,11 @@ async function aabnElement(listeItem) {
     : '<button class="chip flat" data-edit="defer">no hide-until</button>'}
       ${kontekster.map((c) => `<button class="chip" data-ctx="${esc(c.id)}">#${esc(c.name)}</button>`).join('')}${nye}
       <button class="chip flat" data-edit="contexts">${kontekster.length ? '+' : '# context'}</button>
+      ${u.link_url
+    ? `<a class="chip link" href="${esc(u.link_url)}" target="_blank" rel="noopener noreferrer"
+         title="${esc(u.link_url)}">${icon('link', 13)} ${esc(linkNavn(u))}</a>
+       <button class="chip flat" data-edit="link">edit link</button>`
+    : '<button class="chip flat" data-edit="link">+ link</button>'}
       <span style="flex:1"></span>
       ${it.kind === 'task' && u.status !== 'done' ? `<button class="chip flat" id="dFocus">${icon('clock', 13)} Focus</button>` : ''}
       <button class="chip flat" id="dHelpBtn" aria-label="What is this?">?</button>`;
@@ -2579,6 +2598,10 @@ async function aabnElement(listeItem) {
             value: hvad === 'due' ? u.due_date : u.defer_date,
             onchange: (v) => { if (hvad === 'due') u.due_date = v || null; else u.defer_date = v || null; },
           });
+        } else if (hvad === 'link') {
+          // Et link skrives, ikke vaelges - derfor en lille dialog og ikke
+          // chip-vaelgeren.
+          spoergOmLink(u, tegnChipsRow);
         } else {
           redigerInline(knap, {
             tag: 'select',
@@ -2689,6 +2712,8 @@ async function aabnElement(listeItem) {
     due_time: u.due_time,
     defer_date: u.defer_date,
     contexts: u.contexts,
+    link_url: u.link_url,
+    link_title: u.link_title,
   }, ekstra || {}));
 
   host.querySelector('#edSave').addEventListener('click', async () => {
@@ -3461,6 +3486,74 @@ function bindContexts() {
       await genindlaes();
       toast('Context deleted — the tasks were kept');
     });
+  });
+}
+
+/* ------------------------------------------------------- link til en side */
+
+/**
+ * Navnet paa et link. Er der ingen titel, bruges vaerten - en raa
+ * Notion-adresse er 40 tegn hex og siger ingenting.
+ */
+function linkNavn(o) {
+  if (o.link_title) return o.link_title;
+  try {
+    const v = new URL(o.link_url).hostname.replace(/^www\./, '');
+    return v === 'notion.so' || v.endsWith('.notion.site') ? 'Notion' : v;
+  } catch { return 'link'; }
+}
+
+/** Lille dialog: adressen og et valgfrit navn. Gemmes foerst med Save. */
+function spoergOmLink(o, naar) {
+  const host = document.createElement('div');
+  host.className = 'modal';
+  host.innerHTML = `
+  <div class="modal-card" role="dialog" aria-modal="true" style="max-width:520px">
+    <h2>Link to a page</h2>
+    <p class="lead" style="margin:6px 0 16px">Paste the address of the page where this
+      really lives — a Notion page, a document, an issue. It becomes a chip you can click.</p>
+    <label class="field"><span>Address</span>
+      <input class="input" id="lkUrl" placeholder="https://www.notion.so/…"
+        value="${esc(o.link_url || '')}" autocomplete="off" spellcheck="false"></label>
+    <label class="field"><span>Name (optional)</span>
+      <input class="input" id="lkName" placeholder="What to call it"
+        value="${esc(o.link_title || '')}" maxlength="200"></label>
+    <p class="gate-error" id="lkErr" hidden></p>
+    <div class="modal-foot">
+      ${o.link_url ? '<button class="btn ghost" id="lkDel">Remove link</button>' : ''}
+      <span style="flex:1"></span>
+      <button class="btn" id="lkCancel">Cancel</button>
+      <button class="btn primary" id="lkOk">Set</button>
+    </div>
+  </div>`;
+  document.body.appendChild(host);
+  const luk = () => host.remove();
+  host.querySelector('#lkCancel').addEventListener('click', luk);
+  host.addEventListener('click', (e) => { if (e.target === host) luk(); });
+  const slet = host.querySelector('#lkDel');
+  if (slet) slet.addEventListener('click', () => { o.link_url = null; o.link_title = null; luk(); naar(); });
+
+  const felt = host.querySelector('#lkUrl');
+  felt.focus();
+  felt.select();
+
+  host.querySelector('#lkOk').addEventListener('click', () => {
+    const v = felt.value.trim();
+    if (!v) { o.link_url = null; o.link_title = null; luk(); naar(); return; }
+    // Samme regel som serveren: kun http(s). Sig det HER, saa man ikke
+    // trykker Save og undrer sig over, at linket forsvandt.
+    let ok = false;
+    try { const u = new URL(v); ok = u.protocol === 'http:' || u.protocol === 'https:'; } catch { ok = false; }
+    if (!ok) {
+      const fejl = host.querySelector('#lkErr');
+      fejl.textContent = 'That is not a web address. It has to start with http:// or https://';
+      fejl.hidden = false;
+      return;
+    }
+    o.link_url = v;
+    o.link_title = host.querySelector('#lkName').value.trim() || null;
+    luk();
+    naar();
   });
 }
 

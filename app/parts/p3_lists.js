@@ -170,6 +170,8 @@ function elementRaekke(it, i) {
       <div class="item-title">${linkify(it.title)}</div>
       ${meta.length ? `<div class="item-meta meta">${meta.join(' · ')}</div>` : ''}
     </div>
+    ${it.link_url ? `<a class="item-flag" href="${esc(it.link_url)}" target="_blank" rel="noopener noreferrer"
+      title="${esc(it.link_url)}" data-stop>${icon('link', 15)}</a>` : ''}
     ${it.note ? `<span class="item-flag" title="Has a description">${icon('note', 15)}</span>` : ''}
     ${it.attachment_count ? `<span class="item-flag" title="${it.attachment_count} attachment(s)">${icon('link', 15)}</span>` : ''}
   </div>`;
@@ -184,6 +186,11 @@ function bindListe() {
 
   document.querySelectorAll('.tick[data-done]').forEach((el) => {
     el.addEventListener('click', (e) => { e.stopPropagation(); fuldfoer(el.dataset.done); });
+  });
+
+  // Et klik paa link-ikonet aabner linket - ikke elementet.
+  document.querySelectorAll('.item-row [data-stop]').forEach((el) => {
+    el.addEventListener('click', (e) => e.stopPropagation());
   });
 
   document.querySelectorAll('.item-row').forEach((el) => {
@@ -492,6 +499,9 @@ async function aabnElement(listeItem) {
     // ved Save - ruden ma ikke aendre noget bag om et Cancel.
     nytProjekt: null,
     nyeKontekster: [],
+    // Siden sagen egentlig lever paa - fx en Notion-side.
+    link_url: it.link_url || null,
+    link_title: it.link_title || null,
   };
 
   const host = document.createElement('div');
@@ -579,6 +589,11 @@ async function aabnElement(listeItem) {
     : '<button class="chip flat" data-edit="defer">no hide-until</button>'}
       ${kontekster.map((c) => `<button class="chip" data-ctx="${esc(c.id)}">#${esc(c.name)}</button>`).join('')}${nye}
       <button class="chip flat" data-edit="contexts">${kontekster.length ? '+' : '# context'}</button>
+      ${u.link_url
+    ? `<a class="chip link" href="${esc(u.link_url)}" target="_blank" rel="noopener noreferrer"
+         title="${esc(u.link_url)}">${icon('link', 13)} ${esc(linkNavn(u))}</a>
+       <button class="chip flat" data-edit="link">edit link</button>`
+    : '<button class="chip flat" data-edit="link">+ link</button>'}
       <span style="flex:1"></span>
       ${it.kind === 'task' && u.status !== 'done' ? `<button class="chip flat" id="dFocus">${icon('clock', 13)} Focus</button>` : ''}
       <button class="chip flat" id="dHelpBtn" aria-label="What is this?">?</button>`;
@@ -624,6 +639,10 @@ async function aabnElement(listeItem) {
             value: hvad === 'due' ? u.due_date : u.defer_date,
             onchange: (v) => { if (hvad === 'due') u.due_date = v || null; else u.defer_date = v || null; },
           });
+        } else if (hvad === 'link') {
+          // Et link skrives, ikke vaelges - derfor en lille dialog og ikke
+          // chip-vaelgeren.
+          spoergOmLink(u, tegnChipsRow);
         } else {
           redigerInline(knap, {
             tag: 'select',
@@ -734,6 +753,8 @@ async function aabnElement(listeItem) {
     due_time: u.due_time,
     defer_date: u.defer_date,
     contexts: u.contexts,
+    link_url: u.link_url,
+    link_title: u.link_title,
   }, ekstra || {}));
 
   host.querySelector('#edSave').addEventListener('click', async () => {
