@@ -13,6 +13,7 @@ import { mkdtempSync, rmSync, readdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { DatabaseSync } from 'node:sqlite';
 import assert from 'node:assert/strict';
 import test, { before, after } from 'node:test';
 
@@ -256,4 +257,43 @@ test('kalenderfeedet giver en påmindelse på opgaver MED klokkeslæt', async ()
   await J('/api/v1/settings', { settings: { ical_alarm: '-1' } });
   const slukket = await (await fetch(`${BASE}/ical/${token}.ics`)).text();
   assert.ok(!slukket.includes('VALARM'), '-1 skal slå påmindelser helt fra');
+});
+
+test('push: nøglen er stabil, abonnementer tælles, og due-now viser kun det åbne', async () => {
+  const d = await J('/api/v1/push');
+  assert.match(d.publicKey, /^[A-Za-z0-9_-]{80,}$/, 'VAPID-nøglen er base64url');
+  // Den SKAL være den samme hver gang: skifter den, dør alle abonnementer.
+  assert.equal((await J('/api/v1/push')).publicKey, d.publicKey);
+  assert.equal(d.devices, 0);
+
+  // Kun https må tages imod.
+  const daarlig = await fetch(`${BASE}/api/v1/push`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', cookie },
+    body: JSON.stringify({ endpoint: 'http://usikker.example/x' }),
+  });
+  assert.equal(daarlig.status, 400);
+
+  const ep = 'https://push.example.com/abc123';
+  assert.equal((await J('/api/v1/push', { endpoint: ep, lead: 15 })).devices, 1);
+  // Samme enhed to gange er stadig én enhed.
+  assert.equal((await J('/api/v1/push', { endpoint: ep })).devices, 1);
+  assert.equal((await J('/api/v1/push')).lead, 15);
+
+  // due-now: kun det, der er stemplet for nylig OG stadig er åbent.
+  const r = await J('/api/v1/capture', { text: 'skal mindes om !today at 09:00', createNew: true });
+  // notified_at saettes af tickeren; her flyttes det direkte, praecis som
+  // uret flyttes i engine.test.mjs. WAL taaler to processer.
+  const d2 = new DatabaseSync(join(dataDir, 'doda.db'));
+  d2.prepare('UPDATE items SET notified_at = ? WHERE id = ?')
+    .run(Math.floor(Date.now() / 1000), r.item.id);
+  d2.close();
+  let nu = await J('/api/v1/due-now');
+  assert.ok(nu.items.some((x) => x.id === r.item.id), 'den stemplede skal med');
+
+  await J(`/api/v1/items/${r.item.id}/complete`, {});
+  nu = await J('/api/v1/due-now');
+  assert.ok(!nu.items.some((x) => x.id === r.item.id),
+    'lukkes opgaven inden pushen naar frem, skal der ikke vises noget');
+
+  assert.equal((await J('/api/v1/push', {}, 'DELETE')).devices, 0);
 });

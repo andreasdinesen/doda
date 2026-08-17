@@ -136,9 +136,36 @@ tavst: kalender-appen havde ingenting at give besked på. Nu er den der.
 - Det virker **med appen lukket**, uden tilladelser og uden nøgler — og det er
   telefonens egen notifikationsmekanisme, som brugeren allerede stoler på.
 
-Web Push er derfor stadig ikke bygget. Skal det nogensinde være, er det for
-folk uden kalenderabonnement — og på iOS kræver det, at appen ligger på
-hjemmeskærmen.
+### Web Push (v13) — for den, der ikke abonnerer med sin kalender
+
+Kalenderen er stadig den **primære** vej: den virker uden tilladelser, uden
+nøgler og uden at doda skal kunne nå ud til noget. Push er alternativet.
+
+To valg gør det lille nok til en rune uden pakker:
+
+- **VAPID med `node:crypto`.** Et P-256-nøglepar og et ES256-JWT er alt, en
+  push-tjeneste kræver. Den ene fælde: signaturen skal være **rå `r‖s`** (64 b)
+  — Node giver DER som standard, så `dsaEncoding: 'ieee-p1363'` er ikke
+  valgfri. Nøglen laves én gang og må aldrig skifte; gør den det, dør alle
+  abonnementer.
+- **Ingen nyttelast.** RFC 8291's kryptering (ECDH + HKDF + aes128gcm) er ~70
+  linjer fedtet kryptokode, man selv skal holde rigtig. En tom push vækker
+  service workeren, som selv henter fra serveren, hvad den skal vise. Gevinsten
+  er større end de sparede linjer: **push-tjenesten ser aldrig, hvad opgaverne
+  hedder.**
+
+Dertil:
+
+- En push **skal** ende i en synlig notifikation, ellers viser browseren sin
+  egen »dette websted er opdateret i baggrunden«. Hver gren i service workeren
+  slutter derfor med et `showNotification` — også når hentningen fejler.
+- `notified_at` stemples **før** afsendelsen. Fejler pushen, er en manglende
+  påmindelse bedre end en, der gentages hvert minut i en time.
+- Vinduet er ensidigt og højst en time bredt: har serveren været nede et døgn,
+  skal den ikke vække nogen med gårsdagens påmindelser, når den starter igen.
+- UI'et siger **hvilken** forudsætning der mangler — https, browserunderstøttelse,
+  eller på iOS at appen ligger på hjemmeskærmen. En knap, der bare ikke virker,
+  er det værste svar.
 
 ### Tastaturet ind i listerne
 

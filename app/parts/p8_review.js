@@ -663,3 +663,54 @@ async function sideNoter() {
   </section>`;
   bindListe();
 }
+
+
+/* Push-kortet i Settings. Siger hvad der mangler, frem for at vise en knap,
+   der ikke kan virke. */
+async function bindPush() {
+  const boks = document.getElementById('pushBox');
+  if (!boks) return;
+
+  const spaerre = pushMuligt();
+  if (spaerre) {
+    boks.innerHTML = `<p class="lead" style="margin:12px 0 0">${esc(spaerre)}</p>`;
+    return;
+  }
+
+  const tegn = (d, tilmeldt) => {
+    boks.innerHTML = `
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px">
+        <button class="btn ${tilmeldt ? '' : 'primary'}" id="pushBtn">
+          ${tilmeldt ? 'Turn off on this device' : 'Turn on for this device'}</button>
+        <span class="meta">${d.devices} device${d.devices === 1 ? '' : 's'} connected</span>
+      </div>
+      <label class="field" style="margin-top:14px"><span>Send it</span>
+        <select class="input" id="pushLead" style="max-width:260px">
+          ${[['0', 'At the time'], ['5', '5 minutes before'], ['15', '15 minutes before'],
+    ['30', '30 minutes before'], ['60', '1 hour before']]
+    .map(([v, n]) => `<option value="${v}"${Number(v) === d.lead ? ' selected' : ''}>${n}</option>`).join('')}
+        </select></label>`;
+
+    boks.querySelector('#pushBtn').addEventListener('click', async () => {
+      const knap = boks.querySelector('#pushBtn');
+      knap.disabled = true;
+      try {
+        if (tilmeldt) { await slaaPushFra(); toast('Notifications off for this device'); }
+        else { await slaaPushTil(); toast('Notifications on — this device will be reminded'); }
+        await bindPush();
+      } catch (ex) { toast(ex.message); knap.disabled = false; }
+    });
+    boks.querySelector('#pushLead').addEventListener('change', async (e) => {
+      await api('POST', '/api/v1/push', { lead: e.target.value });
+      toast('Saved');
+    });
+  };
+
+  try {
+    const d = await api('GET', '/api/v1/push');
+    const reg = await navigator.serviceWorker.ready;
+    tegn(d, !!(await reg.pushManager.getSubscription()));
+  } catch (ex) {
+    boks.innerHTML = `<p class="lead" style="margin:12px 0 0">${esc(ex.message)}</p>`;
+  }
+}

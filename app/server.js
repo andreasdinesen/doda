@@ -259,6 +259,25 @@ const MIGRATIONS = [
       ALTER TABLE tokens ADD COLUMN expires_at INTEGER;
     `);
   },
+
+  function m9(d) {
+    // Web Push. Kun endepunktet er noedvendigt, fordi doda sender uden
+    // nyttelast - noeglerne gemmes alligevel, sa en fremtidig krypteret
+    // push ikke kraever, at alle abonnementer laves forfra.
+    d.exec(`
+      CREATE TABLE push_subs (
+        id         TEXT PRIMARY KEY,
+        endpoint   TEXT NOT NULL UNIQUE,
+        p256dh     TEXT,
+        auth       TEXT,
+        created_at INTEGER NOT NULL,
+        last_ok    INTEGER,
+        fails      INTEGER NOT NULL DEFAULT 0
+      );
+      -- Stemplet, saa den samme opgave ikke kan minde om sig selv hvert minut.
+      ALTER TABLE items ADD COLUMN notified_at INTEGER;
+    `);
+  },
 ];
 
 // Statusser. Raekkefoelgen er ogsaa den, lister sorteres efter.
@@ -1817,6 +1836,79 @@ const ROUTES = {
   /* Connectorer, der har koblet sig pa gennem OAuth. Samme regel som for
      noeglerne: kun en rigtig session ma se og tilbagekalde dem - ellers
      kunne én laekket forbindelse rydde de andre af vejen. */
+  /* --- push: abonnement, noegle og "hvad skulle jeg minde om" --------- */
+
+  'GET /api/v1/push': (req, res) => {
+    const user = godkend(req, res, 'read');
+    if (!user) return;
+    sendJson(res, 200, {
+      publicKey: push.offentligNoegle(),
+      devices: db.prepare('SELECT COUNT(*) AS n FROM push_subs').get().n,
+      lead: Number(getSetting('push_lead', '0')),
+    });
+  },
+
+  'POST /api/v1/push': async (req, res) => {
+    const user = godkend(req, res, 'write');
+    if (!user) return;
+    const body = await readJsonBody(req, user.viaToken);
+    if (typeof body.lead === 'string' || typeof body.lead === 'number') {
+      setSetting('push_lead', String(Number(body.lead) || 0));
+    }
+    const endpoint = str(body.endpoint, 1000);
+    if (endpoint) {
+      if (!/^https:\/\//.test(endpoint)) {
+        apiFejl(res, 400, 'bad_endpoint', 'A push endpoint must be https.');
+        return;
+      }
+      // Id'et er hashen af endepunktet: samme enhed to gange bliver til én
+      // raekke, uden at endepunktet skal sammenlignes i fuld laengde.
+      // Gem appens egen adresse: den skal med i VAPID-JWT'ets `sub`, og
+      // tickeren har ingen forespoergsel at udlede den af.
+      setSetting('push_host', oauth.base(req));
+      db.prepare(`INSERT INTO push_subs (id, endpoint, p256dh, auth, created_at)
+                  VALUES (?,?,?,?,?)
+                  ON CONFLICT(endpoint) DO UPDATE SET p256dh = excluded.p256dh,
+                    auth = excluded.auth, fails = 0`)
+        .run(hashToken(endpoint), endpoint, str(body.p256dh, 200) || null,
+          str(body.auth, 200) || null, now());
+      audit('push-tilmeldt', null, clientIp(req));
+    }
+    sendJson(res, 200, {
+      devices: db.prepare('SELECT COUNT(*) AS n FROM push_subs').get().n,
+      lead: Number(getSetting('push_lead', '0')),
+    });
+  },
+
+  'DELETE /api/v1/push': async (req, res) => {
+    const user = godkend(req, res, 'write');
+    if (!user) return;
+    const body = await readJsonBody(req, user.viaToken);
+    const endpoint = str(body.endpoint, 1000);
+    if (endpoint) fjernAbonnement(hashToken(endpoint));
+    else db.prepare('DELETE FROM push_subs').run();
+    sendJson(res, 200, { devices: db.prepare('SELECT COUNT(*) AS n FROM push_subs').get().n });
+  },
+
+  /**
+   * Hvad pushen handlede om.
+   *
+   * Service workeren henter det her, fordi selve pushen er TOM - saa ved
+   * Apple og Google aldrig, hvad opgaverne hedder. Vinduet er de sidste fem
+   * minutters stemplinger; er opgaven lukket i mellemtiden, staar den her
+   * ikke laengere.
+   */
+  'GET /api/v1/due-now': (req, res) => {
+    const user = godkend(req, res, 'read');
+    if (!user) return;
+    const items = db.prepare(`
+      SELECT id, title, due_time FROM items
+       WHERE notified_at IS NOT NULL AND notified_at > ? AND deleted = 0
+         AND status NOT IN ('done','dropped')
+       ORDER BY due_time LIMIT 5`).all(now() - 300);
+    sendJson(res, 200, { items });
+  },
+
   'GET /api/v1/connections': (req, res) => {
     const user = requireUser(req, res);
     if (!user) return;
@@ -2099,6 +2191,90 @@ function godkendMcp(req) {
   if (!rateAllow(`api:${token.id}`, 600, 3600)) return null;
   stemplBrug(token);
   return { token, viaToken: true };
+}
+
+/* -------------------------------------------------------------- push */
+
+const push = require('./push.js').opret({
+  hentVapid() {
+    const o = getSetting('vapid_public');
+    const p = getSetting('vapid_private');
+    return o && p ? { offentlig: o, privat: p } : null;
+  },
+  gemVapid(offentlig, privat) {
+    setSetting('vapid_public', offentlig);
+    setSetting('vapid_private', privat);
+  },
+  // Push-tjenesterne vil have en kontakt i JWT'ets `sub`. En mailadresse,
+  // doda ikke ejer, ville vaere en loegn - saa vi bruger appens egen adresse,
+  // gemt da brugeren tilmeldte sig. Tickeren har ingen request at spoerge.
+  kontakt: () => getSetting('push_host') || 'https://localhost',
+});
+
+function hentAbonnementer() {
+  return db.prepare('SELECT id, endpoint FROM push_subs').all();
+}
+
+function fjernAbonnement(id) {
+  db.prepare('DELETE FROM push_subs WHERE id = ?').run(id);
+}
+
+/**
+ * Minder om opgaver, hvis klokkeslaet er naaet.
+ *
+ * Koerer hvert minut. Vinduet er bevidst lille og ensidigt: fra
+ * (tidspunkt - varsel) og hoejst en time frem. Har serveren vaeret nede en
+ * hel dag, skal den IKKE vaekke folk med gaarsdagens paamindelser, naar den
+ * starter igen - `notified_at` forhindrer gentagelser, men ikke en byge.
+ */
+async function tjekPaamindelser() {
+  try {
+    const abon = hentAbonnementer();
+    if (!abon.length) return;
+    const varsel = Number(getSetting('push_lead', '0'));
+    if (varsel < 0) return;
+
+    const nu = new Date();
+    const iDagStr = parse.fmtDato(nu);
+    const minutter = nu.getHours() * 60 + nu.getMinutes() + varsel;
+
+    const forfaldne = db.prepare(`
+      SELECT id, title, due_time FROM items
+       WHERE due_date = ? AND due_time IS NOT NULL AND deleted = 0
+         AND status NOT IN ('done','dropped') AND notified_at IS NULL`).all(iDagStr);
+
+    const skalMindes = forfaldne.filter((r) => {
+      const [t, m] = r.due_time.split(':').map(Number);
+      const paa = t * 60 + m;
+      return minutter >= paa && minutter - paa <= 60;
+    });
+    if (!skalMindes.length) return;
+
+    // Stemples FOER afsendelsen. Fejler pushen, er en manglende paamindelse
+    // bedre end en, der gentages hvert minut i en time.
+    const t = now();
+    for (const r of skalMindes) {
+      db.prepare('UPDATE items SET notified_at = ? WHERE id = ?').run(t, r.id);
+    }
+    log(`paaminder om ${skalMindes.length} opgave(r) til ${abon.length} enhed(er)`);
+
+    for (const a of abon) {
+      const svar = await push.sendTil(a.endpoint);
+      if (svar.borte) {
+        fjernAbonnement(a.id);
+        log('push-abonnement er borte - fjernet');
+      } else if (svar.ok) {
+        db.prepare('UPDATE push_subs SET last_ok = ?, fails = 0 WHERE id = ?').run(t, a.id);
+      } else {
+        db.prepare('UPDATE push_subs SET fails = fails + 1 WHERE id = ?').run(a.id);
+        // Ti fejl i traek: enheden svarer ikke, og en doed raekke skal ikke
+        // blive ved med at koste et kald i minuttet.
+        db.prepare('DELETE FROM push_subs WHERE id = ? AND fails >= 10').run(a.id);
+      }
+    }
+  } catch (err) {
+    logError(`paamindelser fejlede: ${err.message}`);
+  }
 }
 
 /* ------------------------------------------------------------- oauth */
@@ -3135,6 +3311,9 @@ sikreFilesDir();
 computeInlineHash();
 sweep();
 setInterval(sweep, 6 * 3600 * 1000).unref();
+// Ét minut er den groveste opdeling, der stadig foeles praecis - og den
+// koster ingenting, naar der ikke er abonnenter (tjekket returnerer straks).
+setInterval(tjekPaamindelser, 60 * 1000).unref();
 
 server.listen(BIND_PORT, () => {
   // Den port, der FAKTISK blev bundet - ikke variablen. At skrive sit eget

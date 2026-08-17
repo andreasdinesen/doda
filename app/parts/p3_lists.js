@@ -854,6 +854,16 @@ function sideSettings() {
       the rest by itself and sends you here to approve it.</p>
     </div>
 
+    <div class="card"><h2>Notifications</h2>
+      <p class="lead" style="margin:6px 0 0">A push notification when a task with a
+      <strong>time</strong> comes due — also when doda is closed. The push itself is
+      empty: your phone asks doda what to show, so the push service never learns what
+      your tasks are called.</p>
+      <div id="pushBox">Loading…</div>
+      <p class="gate-note" style="text-align:left">If you already subscribe with your
+      calendar, you do not need this — that reminder works without any permission at all.</p>
+    </div>
+
     <div class="card"><h2>Calendar subscription</h2>
       <p class="lead" style="margin:6px 0 12px">A feed your calendar app can follow.
       It contains <strong>only real deadlines</strong> — never your whole task list.
@@ -1031,6 +1041,7 @@ function bindNoegler() {
 function bindSettings() {
   bindNoegler();
   bindData();
+  bindPush();
   tegnPasskeys();
   tegnForbindelser();
   document.querySelectorAll('[data-tema]').forEach((el) => {

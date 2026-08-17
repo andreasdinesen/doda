@@ -234,3 +234,68 @@ async function tegnPasskeys() {
     });
   } catch (ex) { host.innerHTML = `<p class="lead">${esc(ex.message)}</p>`; }
 }
+
+
+/* ------------------------------------------------------------- push */
+
+/*
+ * Web Push. Kalenderfeedet er stadig den primaere vej (DESIGN.md) - den
+ * virker uden tilladelser og uden noegler. Det her er til den, der ikke
+ * abonnerer med sin kalender.
+ *
+ * Tre ting skal vaere sande, og appen skal sige HVILKEN der mangler:
+ * https, en service worker, og paa iOS at appen ligger paa hjemmeskaermen.
+ * En knap, der bare ikke virker, er det vaerste svar.
+ */
+function pushMuligt() {
+  if (!window.isSecureContext) return 'Push needs https. Over plain http the browser has no notifications at all.';
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    // iOS har kun PushManager i en app, der ER lagt paa hjemmeskaermen.
+    const ios = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    return ios
+      ? 'On iPhone this works only when doda is added to your home screen: Share → Add to Home Screen, then open it from there.'
+      : 'This browser has no push support.';
+  }
+  if (Notification.permission === 'denied') {
+    return 'Notifications are blocked for this site in your browser settings.';
+  }
+  return null;
+}
+
+async function slaaPushTil() {
+  const reg = await navigator.serviceWorker.ready;
+  // requestPermission SKAL komme fra et klik - derfor ligger den her og
+  // ikke i en opstartsrutine.
+  const svar = await Notification.requestPermission();
+  if (svar !== 'granted') throw new Error('Notifications were not allowed.');
+
+  const d = await api('GET', '/api/v1/push');
+  const abon = await reg.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: b64uTilBytes(d.publicKey),
+  });
+  const j = abon.toJSON();
+  return api('POST', '/api/v1/push', {
+    endpoint: j.endpoint,
+    p256dh: j.keys && j.keys.p256dh,
+    auth: j.keys && j.keys.auth,
+  });
+}
+
+async function slaaPushFra() {
+  const reg = await navigator.serviceWorker.ready;
+  const abon = await reg.pushManager.getSubscription();
+  if (abon) {
+    await api('DELETE', '/api/v1/push', { endpoint: abon.endpoint });
+    await abon.unsubscribe();
+  } else {
+    await api('DELETE', '/api/v1/push', {});
+  }
+}
+
+/** applicationServerKey vil have raa bytes, ikke base64url. */
+function b64uTilBytes(s) {
+  const b64 = s.replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4));
+  return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+}

@@ -6,7 +6,7 @@
  * browserens cache, og SW'en kan servere en gammel app.js i det uendelige
  * (RUNE-ERFARINGER §5). */
 
-const VERSION = 12;
+const VERSION = 13;
 const CACHE = `doda-v${VERSION}`;
 
 // Praecis de samme URL'er som index.html henter - ellers ligger der to
@@ -109,5 +109,58 @@ self.addEventListener('fetch', (e) => {
     } catch {
       return new Response('', { status: 504 });
     }
+  })());
+});
+
+/* --------------------------------------------------------------- push
+ *
+ * Pushen er TOM. Den vaekker kun denne worker, som selv henter fra serveren,
+ * hvad den skal vise - saa faar Apples og Googles push-tjenester aldrig at
+ * vide, hvad opgaverne hedder.
+ *
+ * En push SKAL ende i en synlig notifikation. Goer den ikke det, viser
+ * browseren sin egen "dette websted er opdateret i baggrunden", og den er
+ * baade forvirrende og umulig at slippe af med. Derfor har hver gren her et
+ * showNotification til sidst - ogsaa naar hentningen fejler. */
+self.addEventListener('push', (e) => {
+  e.waitUntil((async () => {
+    let items = [];
+    try {
+      // fetch i en service worker sender selv cookies til samme oprindelse.
+      const r = await fetch('./api/v1/due-now', { credentials: 'same-origin' });
+      if (r.ok) items = (await r.json()).items || [];
+    } catch { /* uden svar viser vi det generelle */ }
+
+    if (items.length === 1) {
+      const it = items[0];
+      return self.registration.showNotification(it.title, {
+        body: it.due_time ? `Due at ${it.due_time}` : 'Due now',
+        tag: `doda-${it.id}`, icon: './icon-192.png', badge: './icon-192.png',
+        data: { url: './' },
+      });
+    }
+    if (items.length > 1) {
+      return self.registration.showNotification(`${items.length} tasks are due`, {
+        body: items.map((i) => i.title).join(' · ').slice(0, 120),
+        tag: 'doda-many', icon: './icon-192.png', badge: './icon-192.png',
+        data: { url: './' },
+      });
+    }
+    return self.registration.showNotification('doda', {
+      body: 'Something is due — open doda to see it.',
+      tag: 'doda-generisk', icon: './icon-192.png', data: { url: './' },
+    });
+  })());
+});
+
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  e.waitUntil((async () => {
+    // Er doda allerede aaben et sted, skal den frem - ikke aabnes igen.
+    const vinduer = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const v of vinduer) {
+      if (v.url.includes(self.registration.scope) && 'focus' in v) return v.focus();
+    }
+    return clients.openWindow('./');
   })());
 });

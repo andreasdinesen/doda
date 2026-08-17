@@ -736,7 +736,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 12;
+const APP_VERSION = 13;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -2809,6 +2809,16 @@ function sideSettings() {
       the rest by itself and sends you here to approve it.</p>
     </div>
 
+    <div class="card"><h2>Notifications</h2>
+      <p class="lead" style="margin:6px 0 0">A push notification when a task with a
+      <strong>time</strong> comes due — also when doda is closed. The push itself is
+      empty: your phone asks doda what to show, so the push service never learns what
+      your tasks are called.</p>
+      <div id="pushBox">Loading…</div>
+      <p class="gate-note" style="text-align:left">If you already subscribe with your
+      calendar, you do not need this — that reminder works without any permission at all.</p>
+    </div>
+
     <div class="card"><h2>Calendar subscription</h2>
       <p class="lead" style="margin:6px 0 12px">A feed your calendar app can follow.
       It contains <strong>only real deadlines</strong> — never your whole task list.
@@ -2986,6 +2996,7 @@ function bindNoegler() {
 function bindSettings() {
   bindNoegler();
   bindData();
+  bindPush();
   tegnPasskeys();
   tegnForbindelser();
   document.querySelectorAll('[data-tema]').forEach((el) => {
@@ -3913,6 +3924,71 @@ async function tegnPasskeys() {
   } catch (ex) { host.innerHTML = `<p class="lead">${esc(ex.message)}</p>`; }
 }
 
+
+/* ------------------------------------------------------------- push */
+
+/*
+ * Web Push. Kalenderfeedet er stadig den primaere vej (DESIGN.md) - den
+ * virker uden tilladelser og uden noegler. Det her er til den, der ikke
+ * abonnerer med sin kalender.
+ *
+ * Tre ting skal vaere sande, og appen skal sige HVILKEN der mangler:
+ * https, en service worker, og paa iOS at appen ligger paa hjemmeskaermen.
+ * En knap, der bare ikke virker, er det vaerste svar.
+ */
+function pushMuligt() {
+  if (!window.isSecureContext) return 'Push needs https. Over plain http the browser has no notifications at all.';
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    // iOS har kun PushManager i en app, der ER lagt paa hjemmeskaermen.
+    const ios = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    return ios
+      ? 'On iPhone this works only when doda is added to your home screen: Share → Add to Home Screen, then open it from there.'
+      : 'This browser has no push support.';
+  }
+  if (Notification.permission === 'denied') {
+    return 'Notifications are blocked for this site in your browser settings.';
+  }
+  return null;
+}
+
+async function slaaPushTil() {
+  const reg = await navigator.serviceWorker.ready;
+  // requestPermission SKAL komme fra et klik - derfor ligger den her og
+  // ikke i en opstartsrutine.
+  const svar = await Notification.requestPermission();
+  if (svar !== 'granted') throw new Error('Notifications were not allowed.');
+
+  const d = await api('GET', '/api/v1/push');
+  const abon = await reg.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: b64uTilBytes(d.publicKey),
+  });
+  const j = abon.toJSON();
+  return api('POST', '/api/v1/push', {
+    endpoint: j.endpoint,
+    p256dh: j.keys && j.keys.p256dh,
+    auth: j.keys && j.keys.auth,
+  });
+}
+
+async function slaaPushFra() {
+  const reg = await navigator.serviceWorker.ready;
+  const abon = await reg.pushManager.getSubscription();
+  if (abon) {
+    await api('DELETE', '/api/v1/push', { endpoint: abon.endpoint });
+    await abon.unsubscribe();
+  } else {
+    await api('DELETE', '/api/v1/push', {});
+  }
+}
+
+/** applicationServerKey vil have raa bytes, ikke base64url. */
+function b64uTilBytes(s) {
+  const b64 = s.replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4));
+  return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+}
+
 /* ---- p7_files.js ---- */
 'use strict';
 /* doda - vedhaeftninger: billeder og filer pa opgaver og noter.
@@ -4748,4 +4824,55 @@ async function sideNoter() {
     <p class="hintline meta">↑↓ select · enter open · esc leave</p>
   </section>`;
   bindListe();
+}
+
+
+/* Push-kortet i Settings. Siger hvad der mangler, frem for at vise en knap,
+   der ikke kan virke. */
+async function bindPush() {
+  const boks = document.getElementById('pushBox');
+  if (!boks) return;
+
+  const spaerre = pushMuligt();
+  if (spaerre) {
+    boks.innerHTML = `<p class="lead" style="margin:12px 0 0">${esc(spaerre)}</p>`;
+    return;
+  }
+
+  const tegn = (d, tilmeldt) => {
+    boks.innerHTML = `
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px">
+        <button class="btn ${tilmeldt ? '' : 'primary'}" id="pushBtn">
+          ${tilmeldt ? 'Turn off on this device' : 'Turn on for this device'}</button>
+        <span class="meta">${d.devices} device${d.devices === 1 ? '' : 's'} connected</span>
+      </div>
+      <label class="field" style="margin-top:14px"><span>Send it</span>
+        <select class="input" id="pushLead" style="max-width:260px">
+          ${[['0', 'At the time'], ['5', '5 minutes before'], ['15', '15 minutes before'],
+    ['30', '30 minutes before'], ['60', '1 hour before']]
+    .map(([v, n]) => `<option value="${v}"${Number(v) === d.lead ? ' selected' : ''}>${n}</option>`).join('')}
+        </select></label>`;
+
+    boks.querySelector('#pushBtn').addEventListener('click', async () => {
+      const knap = boks.querySelector('#pushBtn');
+      knap.disabled = true;
+      try {
+        if (tilmeldt) { await slaaPushFra(); toast('Notifications off for this device'); }
+        else { await slaaPushTil(); toast('Notifications on — this device will be reminded'); }
+        await bindPush();
+      } catch (ex) { toast(ex.message); knap.disabled = false; }
+    });
+    boks.querySelector('#pushLead').addEventListener('change', async (e) => {
+      await api('POST', '/api/v1/push', { lead: e.target.value });
+      toast('Saved');
+    });
+  };
+
+  try {
+    const d = await api('GET', '/api/v1/push');
+    const reg = await navigator.serviceWorker.ready;
+    tegn(d, !!(await reg.pushManager.getSubscription()));
+  } catch (ex) {
+    boks.innerHTML = `<p class="lead" style="margin:12px 0 0">${esc(ex.message)}</p>`;
+  }
 }
