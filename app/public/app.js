@@ -736,7 +736,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 11;
+const APP_VERSION = 12;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -4414,8 +4414,26 @@ async function bindData() {
         <button class="btn ghost" id="calNew">Replace</button>
         <button class="btn ghost" id="calOff">Turn off</button>
       </div>
+      <label class="field" style="margin-top:16px"><span>Remind me</span>
+        <select class="input" id="calAlarm" style="max-width:280px">
+          ${[['-1', 'No reminder'], ['0', 'At the time'], ['5', '5 minutes before'],
+    ['15', '15 minutes before'], ['30', '30 minutes before'], ['60', '1 hour before']]
+    .map(([v, n]) => `<option value="${v}"${v === String(state.icalAlarm) ? ' selected' : ''}>${n}</option>`).join('')}
+        </select></label>
+      <p class="gate-note" style="text-align:left">Only tasks with a <strong>time</strong>
+      get a reminder — a whole-day task would ring at midnight. This is how doda
+      notifies you: your own calendar does it, so it works with the app closed and
+      without asking permission for anything.</p>
       <p class="gate-note" style="text-align:left">In Apple Calendar:
-      File → New Calendar Subscription, and paste this.</p>`;
+      File → New Calendar Subscription, and paste this. On iPhone the subscription
+      must have <strong>Remove Alarms</strong> switched off.</p>`;
+    boks.querySelector('#calAlarm').addEventListener('change', async (e) => {
+      state.icalAlarm = e.target.value;
+      await api('POST', '/api/v1/settings', { settings: { ical_alarm: e.target.value } });
+      // Kalender-apps henter feedet igen af sig selv - typisk hvert kvarter.
+      toast(e.target.value === '-1' ? 'Reminders off'
+        : 'Saved — your calendar picks it up at its next refresh');
+    });
     boks.querySelector('#calCopy').addEventListener('click', () => kopiér(url));
     boks.querySelector('#calNew').addEventListener('click', async () => {
       const d = await api('POST', '/api/v1/calendar', {});
@@ -4428,6 +4446,10 @@ async function bindData() {
       toast('Subscription turned off');
     });
   };
+  try {
+    const s = await api('GET', '/api/v1/settings');
+    state.icalAlarm = (s.settings && s.settings.ical_alarm) || '15';
+  } catch { state.icalAlarm = '15'; }
   try { tegnKalender((await api('GET', '/api/v1/calendar')).token); }
   catch (ex) { boks.innerHTML = `<p class="lead">${esc(ex.message)}</p>`; }
 

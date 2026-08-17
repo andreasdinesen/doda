@@ -1855,7 +1855,7 @@ const ROUTES = {
     if (!user) return;
     const body = await readJsonBody(req);
     // Whitelist - aldrig blind gennemskrivning af klientens noegler.
-    const ALLOWED = new Set(['theme', 'review_weekday', 'focus_item', 'focus_started']);
+    const ALLOWED = new Set(['theme', 'review_weekday', 'focus_item', 'focus_started', 'ical_alarm']);
     const written = {};
     for (const [key, value] of Object.entries(body.settings || {})) {
       if (!ALLOWED.has(key)) continue;
@@ -1952,6 +1952,8 @@ function byggIcal() {
        AND i.status NOT IN ('done','dropped')
      ORDER BY i.due_date LIMIT 2000`).all();
 
+  // -1 = ingen paamindelse. 0 = praecis paa tidspunktet.
+  const alarm = Number(getSetting('ical_alarm', '15'));
   const stempel = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
   const ud = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//doda//EN',
     'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', `X-WR-CALNAME:${icalEscape(APP_NAME)}`];
@@ -1971,6 +1973,21 @@ function byggIcal() {
     }
     ud.push(foldLinje(`SUMMARY:${icalEscape(r.title)}`));
     if (r.projekt) ud.push(foldLinje(`DESCRIPTION:${icalEscape(r.projekt)}`));
+
+    // Paamindelsen. Uden en VALARM har kalender-appen ingenting at give
+    // besked paa, og et abonnement er tavst - det var derfor doda foeltes
+    // som om den ikke kunne minde om noget.
+    //
+    // KUN paa opgaver med et klokkeslaet. En heldagsopgave ville ellers
+    // ringe ved midnat, og "ingen roede taellere, ingen alarmfarver"
+    // (DESIGN.md §2) gaelder ogsaa for stoej: en paamindelse man ikke bad
+    // om, er den hurtigste vej til at slaa hele feedet fra.
+    if (r.due_time && alarm >= 0) {
+      ud.push('BEGIN:VALARM', 'ACTION:DISPLAY',
+        foldLinje(`DESCRIPTION:${icalEscape(r.title)}`),
+        alarm === 0 ? 'TRIGGER:PT0S' : `TRIGGER:-PT${alarm}M`,
+        'END:VALARM');
+    }
     ud.push('END:VEVENT');
   }
   ud.push('END:VCALENDAR');
@@ -2044,7 +2061,7 @@ function importer(data) {
       tal[tabel] = n;
     }
     if (data.settings && typeof data.settings === 'object') {
-      const OK = new Set(['theme', 'review_weekday', 'review_done']);
+      const OK = new Set(['theme', 'review_weekday', 'review_done', 'ical_alarm']);
       for (const [k, v] of Object.entries(data.settings)) if (OK.has(k)) setSetting(k, String(v));
     }
     db.exec('COMMIT');

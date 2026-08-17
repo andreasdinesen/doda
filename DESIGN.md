@@ -117,6 +117,29 @@ Rækken viser hvad der venter (»done — waiting to send«) og er dæmpet. Form
 en kø-post er **bagudkompatibel**: en post uden `type` er en fangst, som køen så
 ud før v11, og der kan ligge sådanne på en telefon.
 
+### Påmindelser går gennem kalenderen, ikke gennem push (v12)
+
+F11 valgte at lade være med at bygge Web Push til den ugentlige gennemgang:
+VAPID-nøgler, en push-tjeneste, en SW-handler og et permission-prompt er en hel
+infrastruktur for at råbe én gang om ugen. Begrundelsen sagde, at **de rigtige
+deadlines allerede havde en vej ud — iCal-feedet**.
+
+Det var rigtigt tænkt, men feedet manglede en `VALARM`, så abonnementet var
+tavst: kalender-appen havde ingenting at give besked på. Nu er den der.
+
+- **Kun opgaver med et klokkeslæt** får en alarm. En heldagsopgave ville ringe
+  ved midnat, og »ingen røde tællere, ingen alarmfarver« (§2) gælder også for
+  støj: en påmindelse man ikke bad om, er den hurtigste vej til at slå hele
+  feedet fra.
+- Standard er **et kvarter før**; brugeren kan vælge fra »ingen« til »1 time
+  før«. Valget ligger i `ical_alarm`.
+- Det virker **med appen lukket**, uden tilladelser og uden nøgler — og det er
+  telefonens egen notifikationsmekanisme, som brugeren allerede stoler på.
+
+Web Push er derfor stadig ikke bygget. Skal det nogensinde være, er det for
+folk uden kalenderabonnement — og på iOS kræver det, at appen ligger på
+hjemmeskærmen.
+
 ### Tastaturet ind i listerne
 
 `↑`/`↓` går **ind** i listen uden at åbne noget. Før kunne fokus kun komme fra

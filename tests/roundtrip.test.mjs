@@ -230,3 +230,30 @@ test('eksport og import virker også via API-nøgle, ikke kun fra UI', async () 
   });
   assert.equal(afvist.status, 403);
 });
+
+test('kalenderfeedet giver en påmindelse på opgaver MED klokkeslæt', async () => {
+  // Uden VALARM er et abonnement tavst: kalender-appen har ingenting at give
+  // besked på. Det var derfor doda føltes som om den ikke kunne minde om noget.
+  await J('/api/v1/capture', { text: 'ring til tandlægen !tomorrow at 9', createNew: true });
+  await J('/api/v1/capture', { text: 'hele dagen !tomorrow', createNew: true });
+  const token = (await J('/api/v1/calendar', {})).token;
+
+  const ics = await (await fetch(`${BASE}/ical/${token}.ics`)).text();
+  const tandlaege = ics.split('BEGIN:VEVENT').find((b) => b.includes('tandlægen'));
+  const heldag = ics.split('BEGIN:VEVENT').find((b) => b.includes('hele dagen'));
+
+  assert.match(tandlaege, /BEGIN:VALARM/);
+  assert.match(tandlaege, /TRIGGER:-PT15M/, 'standard er et kvarter før');
+  assert.match(tandlaege, /ACTION:DISPLAY/);
+  // En heldagsopgave må ALDRIG få en alarm - den ville ringe ved midnat.
+  assert.ok(!heldag.includes('VALARM'), 'heldagsopgaver skal være tavse');
+
+  // Brugerens valg slår igennem.
+  await J('/api/v1/settings', { settings: { ical_alarm: '60' } });
+  const igen = await (await fetch(`${BASE}/ical/${token}.ics`)).text();
+  assert.match(igen.split('BEGIN:VEVENT').find((b) => b.includes('tandlægen')), /TRIGGER:-PT60M/);
+
+  await J('/api/v1/settings', { settings: { ical_alarm: '-1' } });
+  const slukket = await (await fetch(`${BASE}/ical/${token}.ics`)).text();
+  assert.ok(!slukket.includes('VALARM'), '-1 skal slå påmindelser helt fra');
+});
