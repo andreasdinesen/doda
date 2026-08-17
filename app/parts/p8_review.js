@@ -802,3 +802,53 @@ async function bindPush() {
     boks.innerHTML = `<p class="lead" style="margin:12px 0 0">${esc(ex.message)}</p>`;
   }
 }
+
+/* Notion-kortet i Settings. Tokenet sendes op, aldrig ned. */
+async function bindNotion() {
+  const boks = document.getElementById('notionBox');
+  if (!boks) return;
+
+  const tegn = (d) => {
+    boks.innerHTML = d.connected
+      ? `<div class="keyrow" style="margin-top:12px">
+           <div class="keyrow-main">
+             <div class="keyrow-name">Connected${d.workspace ? ` · ${esc(d.workspace)}` : ''}</div>
+             <div class="meta">doda can search the pages you have shared with the integration</div>
+           </div>
+           <button class="btn ghost" id="ntOff">Disconnect</button>
+         </div>`
+      : `<form id="ntForm" class="keyform" style="margin-top:12px">
+           <input class="input" id="ntToken" type="password" autocomplete="off"
+             placeholder="ntn_… (internal integration secret)" required>
+           <button class="btn primary" type="submit">Connect</button>
+         </form>
+         <p class="gate-error" id="ntErr" hidden></p>`;
+
+    const af = boks.querySelector('#ntOff');
+    if (af) {
+      af.addEventListener('click', async () => {
+        await api('DELETE', '/api/v1/notion', {});
+        tegn({ connected: false });
+        toast('Notion disconnected');
+      });
+    }
+    const form = boks.querySelector('#ntForm');
+    if (form) {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const fejl = boks.querySelector('#ntErr');
+        fejl.hidden = true;
+        try {
+          // Serveren proever tokenet mod Notion, FOER den siger ja. Et token,
+          // der ikke virker, maa ikke blive liggende og ligne en forbindelse.
+          const d2 = await api('POST', '/api/v1/notion', { token: boks.querySelector('#ntToken').value });
+          tegn(d2);
+          toast(`Connected to Notion${d2.workspace ? ` · ${d2.workspace}` : ''}`);
+        } catch (ex) { fejl.textContent = ex.message; fejl.hidden = false; }
+      });
+    }
+  };
+
+  try { tegn(await api('GET', '/api/v1/notion')); }
+  catch (ex) { boks.innerHTML = `<p class="lead">${esc(ex.message)}</p>`; }
+}

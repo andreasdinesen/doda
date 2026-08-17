@@ -195,6 +195,28 @@ ingen grafer, ingen sammenligning med sidste uge, ingen score. »Captured and
 clarified« hedder det, den er — et skøn, fordi der ikke findes historik at
 spørge, og et tal må ikke se præcist ud uden at være det.
 
+### Notion-integrationen (v16) — og hvad den IKKE er
+
+Linket i sig selv kræver ingen integration (v14). Tokenet giver to ting oveni:
+man kan **søge** efter siden uden at skifte vindue, og chippen får sidens
+**rigtige titel** i stedet for 40 tegn hex.
+
+- **Tokenet bliver på serveren.** `GET /api/v1/notion` svarer kun
+  `connected: true` — aldrig værdien. Søgningen proxies gennem doda, så
+  hemmeligheden aldrig er i en browserfane (RUNE-ERFARINGER §6b).
+- **Tokenet prøves mod Notion, før det gemmes.** Duer det ikke, ryddes det
+  igen — et token, der ikke virker, må ikke blive liggende og *ligne* en
+  forbindelse.
+- **Notion viser kun sider, integrationen er delt med.** Et gyldigt token er
+  ikke nok. Derfor siger en tom søgning ikke »ingen træffere«, men peger på
+  delingen — det er den fejl, alle laver første gang.
+- Titlen findes ved at lede efter egenskaben med **type `title`**, ikke efter
+  nøglen `"title"` eller `"Name"`: i en database kan den hedde hvad som helst.
+
+**Hemmeligheder i `settings` skal stå ét sted.** `HEMMELIGE_SETTINGS` bruges
+både af `GET /api/v1/settings` og af eksporten. Ligger listen to steder,
+glemmer man den ene, næste gang der kommer en hemmelighed til.
+
 ### Tastaturet ind i listerne
 
 `↑`/`↓` går **ind** i listen uden at åbne noget. Før kunne fokus kun komme fra

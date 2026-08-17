@@ -1551,3 +1551,19 @@ a.item-flag:hover { color: var(--accent); }
    i den fælles input-nulstilling (RUNE-ERFARINGER, Tilmeld). */
 .focusrow { cursor: pointer; }
 .focusrow input[type="checkbox"] { appearance: auto; -webkit-appearance: auto; flex: none; width: 17px; height: 17px; }
+
+/* Notion-traeffere i link-dialogen. */
+.notionhits { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; max-height: 220px; overflow-y: auto; }
+
+.notionhit {
+  padding: 9px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.notionhit:hover { background: var(--card-hover); border-color: var(--border); }

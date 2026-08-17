@@ -458,6 +458,13 @@ function spoergOmLink(o, naar) {
     <h2>Link to a page</h2>
     <p class="lead" style="margin:6px 0 16px">Paste the address of the page where this
       really lives — a Notion page, a document, an issue. It becomes a chip you can click.</p>
+    <div class="field" id="lkSearchBox" hidden>
+      <span>Search Notion</span>
+      <input class="input" id="lkQ" placeholder="Type part of a page name…"
+        autocomplete="off" spellcheck="false">
+      <div id="lkHits" class="notionhits"></div>
+    </div>
+
     <label class="field"><span>Address</span>
       <input class="input" id="lkUrl" placeholder="https://www.notion.so/…"
         value="${esc(o.link_url || '')}" autocomplete="off" spellcheck="false"></label>
@@ -480,8 +487,57 @@ function spoergOmLink(o, naar) {
   if (slet) slet.addEventListener('click', () => { o.link_url = null; o.link_title = null; luk(); naar(); });
 
   const felt = host.querySelector('#lkUrl');
-  felt.focus();
-  felt.select();
+
+  /* Er Notion forbundet, kan man soege efter siden i stedet for at skifte
+     vindue og kopiere en adresse. Er den ikke, er feltet der bare ikke -
+     resten af dialogen virker uaendret. */
+  (async () => {
+    let forbundet = false;
+    try { forbundet = (await api('GET', '/api/v1/notion')).connected; } catch { forbundet = false; }
+    if (!forbundet) { felt.focus(); felt.select(); return; }
+
+    const boks = host.querySelector('#lkSearchBox');
+    const q = host.querySelector('#lkQ');
+    const traf = host.querySelector('#lkHits');
+    boks.hidden = false;
+    q.focus();
+
+    let timer = null;
+    let token = 0;
+    q.addEventListener('input', () => {
+      clearTimeout(timer);
+      const mit = ++token;
+      const v = q.value.trim();
+      if (!v) { traf.innerHTML = ''; return; }
+      // Vent, til der er holdt op med at blive skrevet: hvert tastetryk er
+      // ellers et kald HELE vejen til Notion.
+      timer = setTimeout(async () => {
+        traf.innerHTML = '<p class="lead" style="margin:8px 0 0">Searching…</p>';
+        try {
+          const d = await api('GET', `/api/v1/notion/search?q=${encodeURIComponent(v)}`);
+          // Et svar, brugeren er holdt op med at vente paa, maa ikke
+          // overskrive et nyere (RUNE-ERFARINGER, paletten).
+          if (mit !== token) return;
+          traf.innerHTML = d.pages.length
+            ? d.pages.map((s) => `<button class="notionhit" data-url="${esc(s.url)}"
+                 data-title="${esc(s.title)}">${s.icon ? `${esc(s.icon)} ` : ''}${esc(s.title)}</button>`).join('')
+            : `<p class="lead" style="margin:8px 0 0">Nothing found. Notion only shows
+               pages you have <strong>shared with the integration</strong> — open the page
+               in Notion, ⋯ → Connections, and add yours.</p>`;
+          traf.querySelectorAll('[data-url]').forEach((el) => {
+            el.addEventListener('click', () => {
+              felt.value = el.dataset.url;
+              host.querySelector('#lkName').value = el.dataset.title;
+              host.querySelector('#lkOk').focus();
+            });
+          });
+        } catch (ex) {
+          if (mit !== token) return;
+          traf.innerHTML = `<p class="lead" style="margin:8px 0 0">${esc(ex.message)}</p>`;
+        }
+      }, 300);
+    });
+  })();
 
   host.querySelector('#lkOk').addEventListener('click', () => {
     const v = felt.value.trim();

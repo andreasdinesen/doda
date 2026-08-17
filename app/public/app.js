@@ -736,7 +736,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 15;
+const APP_VERSION = 16;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -2834,6 +2834,18 @@ function sideSettings() {
       the rest by itself and sends you here to approve it.</p>
     </div>
 
+    <div class="card"><h2>Notion</h2>
+      <p class="lead" style="margin:6px 0 0">Connect Notion, and you can search your
+      pages from inside doda when you link one to a task — and the chip gets the page's
+      real title instead of a row of hex.</p>
+      <div id="notionBox">Loading…</div>
+      <p class="gate-note" style="text-align:left">Create an <strong>internal
+      integration</strong> at notion.so/my-integrations, copy its secret, and paste it
+      here. <strong>Notion only lets an integration see pages you share with it</strong> —
+      open a page, ⋯ → Connections → add yours. Sharing a parent page covers everything
+      under it. The token stays on the server and is never sent back to this browser.</p>
+    </div>
+
     <div class="card"><h2>Notifications</h2>
       <p class="lead" style="margin:6px 0 0">A push notification when a task with a
       <strong>time</strong> comes due — also when doda is closed. The push itself is
@@ -3022,6 +3034,7 @@ function bindSettings() {
   bindNoegler();
   bindData();
   bindPush();
+  bindNotion();
   tegnPasskeys();
   tegnForbindelser();
   document.querySelectorAll('[data-tema]').forEach((el) => {
@@ -3512,6 +3525,13 @@ function spoergOmLink(o, naar) {
     <h2>Link to a page</h2>
     <p class="lead" style="margin:6px 0 16px">Paste the address of the page where this
       really lives — a Notion page, a document, an issue. It becomes a chip you can click.</p>
+    <div class="field" id="lkSearchBox" hidden>
+      <span>Search Notion</span>
+      <input class="input" id="lkQ" placeholder="Type part of a page name…"
+        autocomplete="off" spellcheck="false">
+      <div id="lkHits" class="notionhits"></div>
+    </div>
+
     <label class="field"><span>Address</span>
       <input class="input" id="lkUrl" placeholder="https://www.notion.so/…"
         value="${esc(o.link_url || '')}" autocomplete="off" spellcheck="false"></label>
@@ -3534,8 +3554,57 @@ function spoergOmLink(o, naar) {
   if (slet) slet.addEventListener('click', () => { o.link_url = null; o.link_title = null; luk(); naar(); });
 
   const felt = host.querySelector('#lkUrl');
-  felt.focus();
-  felt.select();
+
+  /* Er Notion forbundet, kan man soege efter siden i stedet for at skifte
+     vindue og kopiere en adresse. Er den ikke, er feltet der bare ikke -
+     resten af dialogen virker uaendret. */
+  (async () => {
+    let forbundet = false;
+    try { forbundet = (await api('GET', '/api/v1/notion')).connected; } catch { forbundet = false; }
+    if (!forbundet) { felt.focus(); felt.select(); return; }
+
+    const boks = host.querySelector('#lkSearchBox');
+    const q = host.querySelector('#lkQ');
+    const traf = host.querySelector('#lkHits');
+    boks.hidden = false;
+    q.focus();
+
+    let timer = null;
+    let token = 0;
+    q.addEventListener('input', () => {
+      clearTimeout(timer);
+      const mit = ++token;
+      const v = q.value.trim();
+      if (!v) { traf.innerHTML = ''; return; }
+      // Vent, til der er holdt op med at blive skrevet: hvert tastetryk er
+      // ellers et kald HELE vejen til Notion.
+      timer = setTimeout(async () => {
+        traf.innerHTML = '<p class="lead" style="margin:8px 0 0">Searching…</p>';
+        try {
+          const d = await api('GET', `/api/v1/notion/search?q=${encodeURIComponent(v)}`);
+          // Et svar, brugeren er holdt op med at vente paa, maa ikke
+          // overskrive et nyere (RUNE-ERFARINGER, paletten).
+          if (mit !== token) return;
+          traf.innerHTML = d.pages.length
+            ? d.pages.map((s) => `<button class="notionhit" data-url="${esc(s.url)}"
+                 data-title="${esc(s.title)}">${s.icon ? `${esc(s.icon)} ` : ''}${esc(s.title)}</button>`).join('')
+            : `<p class="lead" style="margin:8px 0 0">Nothing found. Notion only shows
+               pages you have <strong>shared with the integration</strong> — open the page
+               in Notion, ⋯ → Connections, and add yours.</p>`;
+          traf.querySelectorAll('[data-url]').forEach((el) => {
+            el.addEventListener('click', () => {
+              felt.value = el.dataset.url;
+              host.querySelector('#lkName').value = el.dataset.title;
+              host.querySelector('#lkOk').focus();
+            });
+          });
+        } catch (ex) {
+          if (mit !== token) return;
+          traf.innerHTML = `<p class="lead" style="margin:8px 0 0">${esc(ex.message)}</p>`;
+        }
+      }, 300);
+    });
+  })();
 
   host.querySelector('#lkOk').addEventListener('click', () => {
     const v = felt.value.trim();
@@ -5056,4 +5125,54 @@ async function bindPush() {
   } catch (ex) {
     boks.innerHTML = `<p class="lead" style="margin:12px 0 0">${esc(ex.message)}</p>`;
   }
+}
+
+/* Notion-kortet i Settings. Tokenet sendes op, aldrig ned. */
+async function bindNotion() {
+  const boks = document.getElementById('notionBox');
+  if (!boks) return;
+
+  const tegn = (d) => {
+    boks.innerHTML = d.connected
+      ? `<div class="keyrow" style="margin-top:12px">
+           <div class="keyrow-main">
+             <div class="keyrow-name">Connected${d.workspace ? ` · ${esc(d.workspace)}` : ''}</div>
+             <div class="meta">doda can search the pages you have shared with the integration</div>
+           </div>
+           <button class="btn ghost" id="ntOff">Disconnect</button>
+         </div>`
+      : `<form id="ntForm" class="keyform" style="margin-top:12px">
+           <input class="input" id="ntToken" type="password" autocomplete="off"
+             placeholder="ntn_… (internal integration secret)" required>
+           <button class="btn primary" type="submit">Connect</button>
+         </form>
+         <p class="gate-error" id="ntErr" hidden></p>`;
+
+    const af = boks.querySelector('#ntOff');
+    if (af) {
+      af.addEventListener('click', async () => {
+        await api('DELETE', '/api/v1/notion', {});
+        tegn({ connected: false });
+        toast('Notion disconnected');
+      });
+    }
+    const form = boks.querySelector('#ntForm');
+    if (form) {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const fejl = boks.querySelector('#ntErr');
+        fejl.hidden = true;
+        try {
+          // Serveren proever tokenet mod Notion, FOER den siger ja. Et token,
+          // der ikke virker, maa ikke blive liggende og ligne en forbindelse.
+          const d2 = await api('POST', '/api/v1/notion', { token: boks.querySelector('#ntToken').value });
+          tegn(d2);
+          toast(`Connected to Notion${d2.workspace ? ` · ${d2.workspace}` : ''}`);
+        } catch (ex) { fejl.textContent = ex.message; fejl.hidden = false; }
+      });
+    }
+  };
+
+  try { tegn(await api('GET', '/api/v1/notion')); }
+  catch (ex) { boks.innerHTML = `<p class="lead">${esc(ex.message)}</p>`; }
 }

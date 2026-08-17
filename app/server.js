@@ -295,6 +295,15 @@ const MIGRATIONS = [
   },
 ];
 
+/*
+ * Indstillinger, der ALDRIG maa forlade serveren.
+ *
+ * Ét sted, brugt baade af GET /api/v1/settings og af eksporten. Ligger
+ * listen to steder, glemmer man den ene, naeste gang der kommer en
+ * hemmelighed til - og det opdages ikke, for alt ser ud til at virke.
+ */
+const HEMMELIGE_SETTINGS = new Set(['ical_token', 'notion_token', 'vapid_private']);
+
 // Statusser. Raekkefoelgen er ogsaa den, lister sorteres efter.
 const STATUSSER = ['inbox', 'next', 'queued', 'waiting', 'someday', 'done', 'dropped'];
 
@@ -1911,6 +1920,69 @@ const ROUTES = {
   /* Connectorer, der har koblet sig pa gennem OAuth. Samme regel som for
      noeglerne: kun en rigtig session ma se og tilbagekalde dem - ellers
      kunne én laekket forbindelse rydde de andre af vejen. */
+  /* --- notion ---------------------------------------------------- */
+
+  'GET /api/v1/notion': (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    // Kun OM der er et token, aldrig hvad det er.
+    sendJson(res, 200, {
+      connected: !!getSetting('notion_token', ''),
+      workspace: getSetting('notion_workspace', ''),
+    });
+  },
+
+  'POST /api/v1/notion': async (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    const body = await readJsonBody(req);
+    const token = str(body.token, 200);
+    if (!token) { apiFejl(res, 400, 'no_token', 'Paste the integration token from Notion.'); return; }
+
+    // Gem foerst, saa proev - modulet laeser tokenet gennem getSetting.
+    // Duer det ikke, ryddes det igen, saa en fejlindtastning ikke bliver
+    // liggende og ligne en virkende forbindelse.
+    const gammelt = getSetting('notion_token', '');
+    setSetting('notion_token', token);
+    const svar = await notion.proev();
+    if (!svar.ok) {
+      if (gammelt) setSetting('notion_token', gammelt);
+      else db.prepare("DELETE FROM settings WHERE key = 'notion_token'").run();
+      apiFejl(res, 400, 'bad_token', svar.fejl);
+      return;
+    }
+    setSetting('notion_workspace', svar.workspace || '');
+    audit('notion-forbundet', svar.workspace || null, clientIp(req));
+    sendJson(res, 200, { connected: true, workspace: svar.workspace || '' });
+  },
+
+  'DELETE /api/v1/notion': async (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    await readJsonBody(req);
+    db.prepare("DELETE FROM settings WHERE key IN ('notion_token','notion_workspace')").run();
+    audit('notion-frakoblet', null, clientIp(req));
+    sendJson(res, 200, { connected: false });
+  },
+
+  /* Serveren proxier soegningen. Tokenet forlader aldrig maskinen mod
+     browseren, og Notion ser kun ét kald fra doda - ikke fra en fane. */
+  'GET /api/v1/notion/search': async (req, res, ctx) => {
+    const auth = godkend(req, res, 'read');
+    if (!auth) return;
+    if (!getSetting('notion_token', '')) {
+      apiFejl(res, 400, 'not_connected', 'Connect Notion under Settings first.');
+      return;
+    }
+    if (!rateAllow(`notion:${clientIp(req)}`, 120, 3600)) {
+      apiFejl(res, 429, 'rate_limited', 'Too many searches. Try again shortly.');
+      return;
+    }
+    const r = await notion.soeg(ctx.query.get('q') || '');
+    if (r.fejl) { apiFejl(res, 502, 'notion_failed', r.fejl); return; }
+    sendJson(res, 200, { pages: r.pages });
+  },
+
   /* --- push: abonnement, noegle og "hvad skulle jeg minde om" --------- */
 
   'GET /api/v1/push': (req, res) => {
@@ -2013,7 +2085,11 @@ const ROUTES = {
     if (!user) return;
     const rows = db.prepare('SELECT key, value FROM settings').all();
     const out = {};
-    for (const row of rows) out[row.key] = row.value;
+    // Hemmelighederne ud. Ruten kraever kun scope "read", saa uden det her
+    // kunne en noegle paa en telefon laese kalenderfeedets token, Notion-
+    // tokenet og VAPID's private noegle - og saa er de ikke hemmelige
+    // laengere (RUNE-ERFARINGER §6b).
+    for (const row of rows) if (!HEMMELIGE_SETTINGS.has(row.key)) out[row.key] = row.value;
     sendJson(res, 200, { settings: out });
   },
 
@@ -2171,7 +2247,7 @@ function byggEksport(medFiler) {
     exportedAt: new Date().toISOString(),
     settings: Object.fromEntries(raa('SELECT key, value FROM settings')
       // Hemmeligheder hoerer ikke i en eksportfil, brugeren maaske deler.
-      .filter((r) => !['ical_token'].includes(r.key)).map((r) => [r.key, r.value])),
+      .filter((r) => !HEMMELIGE_SETTINGS.has(r.key)).map((r) => [r.key, r.value])),
     areas: raa('SELECT * FROM areas'),
     contexts: raa('SELECT * FROM contexts'),
     projects: raa('SELECT * FROM projects WHERE deleted = 0'),
@@ -2267,6 +2343,15 @@ function godkendMcp(req) {
   stemplBrug(token);
   return { token, viaToken: true };
 }
+
+/* ------------------------------------------------------------ notion */
+
+/* Tokenet bliver paa serveren og sendes ALDRIG til frontenden - kun et
+   `connected: true` (RUNE-ERFARINGER §6b). Det er en hemmelighed, brugeren
+   selv har indtastet, og den skal ikke kunne laeses ud af en browserfane. */
+const notion = require('./notion.js').opret({
+  hentToken: () => getSetting('notion_token', ''),
+});
 
 /* -------------------------------------------------------------- push */
 

@@ -875,6 +875,18 @@ function sideSettings() {
       the rest by itself and sends you here to approve it.</p>
     </div>
 
+    <div class="card"><h2>Notion</h2>
+      <p class="lead" style="margin:6px 0 0">Connect Notion, and you can search your
+      pages from inside doda when you link one to a task — and the chip gets the page's
+      real title instead of a row of hex.</p>
+      <div id="notionBox">Loading…</div>
+      <p class="gate-note" style="text-align:left">Create an <strong>internal
+      integration</strong> at notion.so/my-integrations, copy its secret, and paste it
+      here. <strong>Notion only lets an integration see pages you share with it</strong> —
+      open a page, ⋯ → Connections → add yours. Sharing a parent page covers everything
+      under it. The token stays on the server and is never sent back to this browser.</p>
+    </div>
+
     <div class="card"><h2>Notifications</h2>
       <p class="lead" style="margin:6px 0 0">A push notification when a task with a
       <strong>time</strong> comes due — also when doda is closed. The push itself is
@@ -1063,6 +1075,7 @@ function bindSettings() {
   bindNoegler();
   bindData();
   bindPush();
+  bindNotion();
   tegnPasskeys();
   tegnForbindelser();
   document.querySelectorAll('[data-tema]').forEach((el) => {

@@ -297,3 +297,31 @@ test('push: nøglen er stabil, abonnementer tælles, og due-now viser kun det å
 
   assert.equal((await J('/api/v1/push', {}, 'DELETE')).devices, 0);
 });
+
+test('hemmeligheder forlader ALDRIG serveren — heller ikke med en read-nøgle', async () => {
+  // Ruten kræver kun scope "read". Uden filteret kunne en nøgle på en telefon
+  // læse kalenderfeedets token, Notion-tokenet og VAPID's private nøgle.
+  const d2 = new DatabaseSync(join(dataDir, 'doda.db'));
+  for (const [k, v] of [['ical_token', 'HEMMELIG-ICAL'], ['notion_token', 'secret_HEMMELIG'],
+    ['vapid_private', 'HEMMELIG-VAPID'], ['theme', 'dark']]) {
+    d2.prepare('INSERT INTO settings (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(k, v);
+  }
+  d2.close();
+
+  const s = (await J('/api/v1/settings')).settings;
+  assert.equal(s.theme, 'dark', 'almindelige indstillinger skal stadig komme med');
+  for (const n of ['ical_token', 'notion_token', 'vapid_private']) {
+    assert.equal(s[n], undefined, `${n} må ikke sendes ud`);
+  }
+
+  // Samme liste skal gælde eksporten - en fil man måske deler videre.
+  const eks = await J('/api/v1/export');
+  for (const n of ['ical_token', 'notion_token', 'vapid_private']) {
+    assert.equal(eks.settings[n], undefined, `${n} må ikke stå i en eksport`);
+  }
+
+  // Og Notion-ruten fortæller kun OM der er et token.
+  const n = await J('/api/v1/notion');
+  assert.equal(n.connected, true);
+  assert.ok(!JSON.stringify(n).includes('HEMMELIG'), 'tokenet må ikke lækkes gennem status-ruten');
+});
