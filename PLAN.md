@@ -13,9 +13,9 @@
 
 | | |
 |---|---|
-| **Fase** | **v8 udgivet.** Connector (v5–v6), skallen (v7), slette-rettelsen (v8). |
+| **Fase** | **v9 udgivet.** Connector (v5–v6), skallen (v7), slette-rettelsen (v8), genvejssyntaks ved redigering (v9). |
 | **Næste** | Andreas bruger den — og **pladsen i runen** skal løses inden næste større funktion |
-| **Tilstand** | 142 tests grønne, install-script **122.057 / 126.000 (96 %)** |
+| **Tilstand** | 142 tests grønne, install-script **121.947 / 126.000 (96 %)** · alt fra kravbeskrivelsen er bygget |
 | **Udgivet version** | **9** |
 | **Sidst opdateret** | 2026-08-17 |
 
@@ -263,7 +263,7 @@ det færdige tingdo-design. Ingen opgavefunktioner endnu.
 - [x] Auth: samme adgangsnøgler som F2, `Authorization: Bearer` + scope-tjek pr. værktøj
 - [x] Værktøjer: fang opgave, næste handlinger, fuldfør, søg, opret/læs note, projekter, gentagelser
 - [x] `docs/MCP.md` — opsætning i Claude Code og Claude Desktop
-- [ ] Valgfrit senere: OAuth 2.1 + dynamisk klientregistrering, så claude.ai-webconnector virker
+- [x] OAuth 2.1 + dynamisk klientregistrering, så claude.ai-webconnectoren virker — **bygget i v5**, rettet i v6 (`app/oauth.js`)
 
 ## F6 · PWA + offline
 
@@ -291,7 +291,7 @@ billeder inde i de items, listen henter, gav et login-svar på 247,9 MB.
 - [x] Billeder skaleres i **browseren** før upload (Node kan ikke skalere uden pakker)
 - [x] Miniature i detaljeruden, klik åbner fuld visning; filer vises som en liste
 - [x] Kamera/foto-valg på iPhone (`accept="image/*"`, `capture`), træk-og-slip på desktop
-- [ ] Vedhæftninger med i eksport/import (F9) og verificeret i backup-rundturen
+- [x] Vedhæftninger med i eksport/import og verificeret i rundturen — `?files=1` lægger indholdet med, og testen henter filen igen og sammenligner **byte for byte**
 - [x] MCP: `list_attachments` — men **aldrig** filindhold gennem MCP
 
 ## F8 · Gennemgang, logbog, ventelister, fokus
@@ -448,6 +448,69 @@ muligheder, dyreste først:
 | Lad serveren tegne ikonet ved opstart | ~1.900 netto | ~40 linjers PNG-encoder med `zlib` + CRC32 |
 | Hæv assert'en 120.000 → 126.000 | 6.000 | Margenen mod `MAX_ARG_STRLEN` (131.072 b) falder fra 9 % til 4 % |
 | Minificér `app.js` | ukendt | Egen minifier = risiko; erfaringerne måler kommentar-strip til 0,8 % |
+
+## Mulige udvidelser — ikke besluttet
+
+Undersøgt, men **ikke bestilt**. Ligger her, så undersøgelsen ikke skal laves om.
+
+### Flere brugere, tildeling og delte projekter
+
+*Undersøgt 2026-08-17 på Andreas' forespørgsel. Ingen beslutning truffet.*
+
+Det omvender en eksplicit beslutning i kravbeskrivelsen: `docs/HANDOVER.md` §1 siger
+»Én bruger (mig). Ingen deling, ingen teams«, og §10 lister »Flere brugere, deling,
+kommentarer, tildeling« som uden for scope. Det er fint at ombestemme sig — men det
+forklarer, hvorfor antagelsen sidder så dybt.
+
+**Sådan ser det ud i koden i dag (målt, ikke skønnet):**
+
+- **Ingen datatabel har en ejer.** Kun `sessions`, `credentials` og `oauth_refresh`
+  kender brugere. `items`, `projects`, `contexts`, `areas`, `recurrences`,
+  `attachments`, `item_contexts`, `settings` og `tokens` har ingen `user_id`.
+- Token-godkendelsen henter »brugeren« med
+  `SELECT id, username FROM users LIMIT 1` — en API-nøgle er ikke bundet til nogen.
+- `settings` er global og indeholder personlige ting: tema, gennemgangs-ugedag,
+  hvilket trin man er nået til, og iCal-tokenet.
+- **94 forespørgsler** rammer de ejerløse tabeller og bliver hver især en
+  autorisationsbeslutning.
+
+**Tre ting gør det større, end det lyder:**
+
+1. **Risikoprofilen skifter kategori.** I dag er modellen »logget ind = ser alt«.
+   Med to brugere er én glemt `WHERE user_id` et **datalæk mellem mennesker** — og
+   appen ser rigtig ud imens. Isolationen skal testes systematisk: en anden bruger,
+   der prøver hver eneste rute.
+2. **Kontekster er personlige af natur.** `#computer` betyder *min* computer. Deles
+   et projekt, skal modtageren se sine egne kontekster på opgaverne. `item_contexts`
+   bliver dermed en per-bruger-relation, ikke en simpel kobling. Det er den mest
+   oversete detalje i sådan en omlægning.
+3. **»Isoleret med undtagelser« er den sværeste model.** Ren isolation er let, ren
+   deling er let. Mit-er-mit-undtagen-det-jeg-deler betyder, at hver læsning bliver
+   »mine ELLER delt med mig«, og hver skrivning skal spørge »må jeg det her?«.
+
+**Pladsen blokerer det.** Skønnet +8–12 K tegn i payloaden; der er 4 K tilbage, og
+ikonet frigør kun 1.900. Den eneste rigtige løsning på loftet er at gøre repoet
+offentligt og lade install-scriptet hente payloaden med `wget` — koden har ingen
+hemmeligheder. Alt andet er udsættelser.
+
+**Foreslået rækkefølge**, så hver del kan tages i brug for sig:
+
+| | | |
+|---|---|---|
+| **M0** | Pladsen | Uden den kan resten ikke installeres |
+| **M1** | Ejerskab og isolation | `user_id` på syv tabeller, migration der giver alt til Andreas, filter på alle 94 steder, per-bruger settings og iCal-token, tokens bundet til en bruger, brugeradministration. **Ingen deling endnu.** Leverance: to brugere kan bruge samme installation uden at ane, at den anden findes — bevist af en test, der prøver hver rute som den forkerte bruger |
+| **M2** | Tildeling | En opgave sendes til en anden bruger: lander i *deres* Next Actions og i *din* Waiting For. Bygger på det `waiting_for`-felt, der allerede findes |
+| **M3** | Delte projekter | Opgaver og noter følger med, kontekster gør ikke. Læse- eller redigeringsadgang |
+
+M1 er langt det største og det eneste, der er farligt at gøre halvt.
+
+**Tre spørgsmål skal besvares, før noget bygges** — de ændrer designet:
+
+1. Hvem er de andre brugere? Familie på samme server, eller kolleger? Afgør, om der
+   skal være et invitations-flow eller bare »jeg opretter en konto til dig«.
+2. Når en opgave tildeles — hvem ejer den så? Flytter den helt, eller beholder
+   afsenderen den og ser blot, at der arbejdes på den?
+3. Er det vigtigere end pladsen og end nye funktioner?
 
 ## Efter hver fase
 

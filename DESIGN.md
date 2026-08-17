@@ -257,3 +257,10 @@ ikke forpligtelse.
 Handover §10 gælder uændret: ingen flere brugere, ingen prioritetsniveauer, ingen
 statistik/streaks/gamification, ingen tovejs-sync, ingen notifikationer ud over
 deadlines og gennemgangspåmindelsen.
+
+**Enkeltbruger er en beslutning, ikke en forglemmelse.** Den er grunden til, at ingen
+datatabel har en `user_id`, at `settings` er global, og at token-godkendelsen henter
+brugeren med `LIMIT 1`. Andreas spurgte 2026-08-17, hvad flere brugere ville koste;
+undersøgelsen ligger i `PLAN.md` under »Mulige udvidelser«. **Der er ikke truffet
+nogen beslutning** — men rører du de tabeller, så læs den først, så antagelsen ikke
+bliver brudt halvt.
