@@ -235,8 +235,10 @@ En note med et Notion-link kan folde sidens indhold ud i detaljeruden.
   vigtigere grund er, at Notions filadresser er **signerede**: de udløber efter
   en time, og de er ~1500 tegn. Et link til en af dem er dødt i morgen, og det
   sprænger `linkify`s 500-tegns grænse, så halen løber ud som rå tekst midt i
-  ruden. `https://www.notion.so/<blok-id>` er 66 tegn, holder evigt og åbner
-  det rigtige sted.
+  ruden. Adressen er derfor **sidens id med blokken som anker** —
+  `https://www.notion.so/<side-id>#<blok-id>`, 87 tegn, som holder evigt.
+  Blok-id'et **alene** duer ikke: Notion prøver da at åbne blokken som en
+  side, og en billedblok er ikke en side — man får en tom »Untitled«.
 - **Loft på 300 blokke og ét niveau indlejring.** En fremmed side kan være hvor
   stor som helst, og doda skal ikke kunne væltes af en, nogen har delt.
 - Det, doda ikke kan vise (tabeller, kolonner, synkroniserede blokke), siger

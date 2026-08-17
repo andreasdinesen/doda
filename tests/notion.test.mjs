@@ -44,18 +44,26 @@ test('billeder peger på BLOKKEN i Notion — aldrig på filens egen adresse', (
   // Og Notions fil-adresser er signerede: de udløber efter en time og er
   // ~1500 tegn, så linket både dør og fylder hele ruden.
   const signeret = `https://prod-files-secure.s3.us-west-2.amazonaws.com/x?${'X'.repeat(1400)}`;
-  const b1 = { type: 'image', id: '3bf981dd-94e6-802d-9dda-ee087333dc17', image: { file: { url: signeret } } };
-  const ud = N.blokTilMd(b1, 0);
-  assert.equal(ud, '[🖼 image](https://www.notion.so/3bf981dd94e6802d9ddaee087333dc17)');
+  const SIDE = '3bf981dd-94e6-802d-9dda-ee087333dc17';
+  const BLOK = 'aaaabbbb-cccc-dddd-eeee-ffff00001111';
+  const b1 = { type: 'image', id: BLOK, image: { file: { url: signeret } } };
+  const ud = N.blokTilMd(b1, 0, SIDE);
+
+  // SIDENS id med blokken som ANKER. Kun blok-id'et duer ikke: Notion
+  // prøver da at åbne blokken som en side og viser en tom "Untitled".
+  // Det var præcis den fejl, v21 havde.
+  assert.equal(ud, '[🖼 image](https://www.notion.so/3bf981dd94e6802d9ddaee087333dc17'
+    + '#aaaabbbbccccddddeeeeffff00001111)');
+  assert.match(ud, /#/, 'uden anker aabner Notion en tom side');
   assert.ok(!ud.includes('amazonaws'), 'den signerede adresse må ikke stå der');
-  assert.ok(ud.length < 100, `skal være kort, var ${ud.length} tegn`);
+  assert.ok(ud.length < 130, `skal være kort, var ${ud.length} tegn`);
 
   // Billedteksten bruges som navn, når der er en.
   b1.image.caption = rt('Grønne hatte');
-  assert.match(N.blokTilMd(b1, 0), /^\[Grønne hatte\]/);
+  assert.match(N.blokTilMd(b1, 0, SIDE), /^\[Grønne hatte\]/);
 
-  // Uden id er der ikke noget at pege på - så siges det bare.
-  assert.equal(md('image', {}), '*(🖼 image)*');
+  // Uden noget at pege ind i er et link værre end ingenting.
+  assert.equal(N.blokTilMd({ type: 'image', image: {} }, 0, null), '*(🖼 image)*');
 });
 
 test('lange bogmærke-adresser vises kort og peger på blokken', () => {
@@ -65,9 +73,15 @@ test('lange bogmærke-adresser vises kort og peger på blokken', () => {
   assert.equal(N.blokTilMd(kort, 0), '[dr.dk/nyheder](https://dr.dk/nyheder)');
 
   const lang = { type: 'bookmark', id: 'aaaabbbbccccddddeeeeffff00001111', bookmark: { url: `https://e.dk/${'y'.repeat(400)}` } };
-  const ud = N.blokTilMd(lang, 0);
-  assert.match(ud, /…\]\(https:\/\/www\.notion\.so\//);
-  assert.ok(ud.length < 140, `skal være kort, var ${ud.length} tegn`);
+  const ud = N.blokTilMd(lang, 0, '3bf981dd94e6802d9ddaee087333dc17');
+  // Det, der tæller, er HREF'en: visningsteksten må gerne vise starten af
+  // adressen (den er jo forkortet), men selve linket skal pege på Notion.
+  const href = ud.slice(ud.lastIndexOf('](') + 2, -1);
+  assert.match(href, /^https:\/\/www\.notion\.so\/[0-9a-f]{32}#[0-9a-f]{32}$/);
+  // 22 tegn vaert + 32 side + 1 anker + 32 blok = 87. Det er hele prisen,
+  // og den er fast - modsat de 400+, den erstatter.
+  assert.equal(href.length, 87);
+  assert.ok(ud.length < 180, `hele linjen skal være kort, var ${ud.length} tegn`);
 });
 
 test('det doda ikke kan vise, siger den ærligt — den lader ikke som ingenting', () => {

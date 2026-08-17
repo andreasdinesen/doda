@@ -27,9 +27,18 @@ const NAVNE = {
   pdf: '\u{1F4C4} pdf', audio: '\u{1F50A} audio',
 };
 
-/** Enhver Notion-blok kan aabnes paa sit id. Kort, og den udloeber ikke. */
-function blokUrl(id) {
-  return `https://www.notion.so/${String(id || '').replace(/-/g, '')}`;
+/**
+ * Adressen paa en blok INDE i sin side.
+ *
+ * `notion.so/<blok-id>` alene duer IKKE: Notion proever da at aabne blokken
+ * som en side, og en billedblok er ikke en side - man faar en tom "Untitled".
+ * Det rigtige er sidens id med blokken som anker, praecis som Notions egen
+ * "Copy link to block" laver den.
+ */
+function blokUrl(sideId, blokId) {
+  const rens = (s) => String(s || '').replace(/-/g, '');
+  if (!sideId) return blokId ? `https://www.notion.so/${rens(blokId)}` : '';
+  return `https://www.notion.so/${rens(sideId)}${blokId ? `#${rens(blokId)}` : ''}`;
 }
 
 /** En adresse, der kan STAA der - ikke en, der fylder en hel rude. */
@@ -62,7 +71,7 @@ function tekst(dele) {
  * escaper foerst og kun laver de tags, den selv kender - saa er der ingen
  * vej fra en fremmed side til et tag, doda ikke har skrevet.
  */
-function blokTilMd(b, dybde) {
+function blokTilMd(b, dybde, sideId) {
   const ind = '  '.repeat(Math.min(dybde, 2));
   const v = b[b.type] || {};
   const rt = () => tekst(v.rich_text);
@@ -93,26 +102,29 @@ function blokTilMd(b, dybde) {
      *     til en af dem er doedt i morgen - og de er ~1500 tegn, hvilket baade
      *     fylder hele ruden og spraenger dodas link-genkendelse (som stopper
      *     ved 500), saa halen loeber ud som raa tekst.
-     * Blok-adressen er kort, holder evigt og aabner det rigtige sted.
+     * Adressen er sidens id MED blokken som anker. Kun blok-id'et alene duer
+     * ikke: Notion proever da at aabne blokken som en side og viser en tom
+     * "Untitled" - se blokUrl().
      */
     case 'image': case 'file': case 'video': case 'pdf': case 'audio': {
       const navn = tekst(v.caption) || NAVNE[b.type] || b.type;
-      return b.id ? `[${navn}](${blokUrl(b.id)})` : `*(${navn})*`;
+      const url = blokUrl(sideId, b.id);
+      // Uden en side at pege ind i er et link vaerre end ingenting: det
+      // ville aabne en tom side og ligne en fejl i Notion.
+      return url ? `[${navn}](${url})` : `*(${navn})*`;
     }
     case 'bookmark': case 'embed': case 'link_preview':
       if (!v.url) return '';
       // En lang adresse vises kort OG peger paa blokken - ellers er linket
       // baade ulaeseligt og for langt til at blive genkendt.
       return v.url.length > 300
-        ? `[${kortUrl(v.url)}](${blokUrl(b.id)})`
+        ? `[${kortUrl(v.url)}](${blokUrl(sideId, b.id) || v.url})`
         : `[${kortUrl(v.url)}](${v.url})`;
     case 'table': case 'column_list': case 'synced_block':
       return `*(${b.type.replace(/_/g, ' ')} — open it in Notion)*`;
     default: return rt();
   }
 }
-
-
 
 function opret(srv) {
   /** Ét sted der taler med Notion. Returnerer {status, data}. */
@@ -215,7 +227,7 @@ function opret(srv) {
    * Loftet er bevidst: en fremmed side kan vaere hvor stor som helst, og
    * doda skal ikke kunne vaeltes af en, nogen har delt.
    */
-  async function indhold(id, dybde = 0, budget = { blokke: 300 }) {
+  async function indhold(id, dybde = 0, budget = { blokke: 300 }, sideId = id) {
     const ud = [];
     let markoer = null;
     do {
@@ -226,12 +238,14 @@ function opret(srv) {
       }
       for (const b of r.data.results || []) {
         if (budget.blokke-- <= 0) { ud.push('*(the rest is in Notion)*'); markoer = null; break; }
-        const md = blokTilMd(b, dybde);
+        // sideId er ROD-siden hele vejen ned: et billede i en indlejret
+        // blok skal stadig aabne den side, det staar paa.
+        const md = blokTilMd(b, dybde, sideId);
         if (md) ud.push(md);
         // Ét niveau ned. Dybere ville koste et kald pr. blok, og dodas
         // markdown kan alligevel ikke vise dyb indlejring.
         if (b.has_children && dybde < 1 && b.type !== 'child_page' && b.type !== 'child_database') {
-          const boern = await indhold(b.id, dybde + 1, budget);
+          const boern = await indhold(b.id, dybde + 1, budget, sideId);
           if (boern.markdown) ud.push(boern.markdown);
         }
       }
