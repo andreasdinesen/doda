@@ -813,7 +813,7 @@ async function bindNotion() {
       ? `<div class="keyrow" style="margin-top:12px">
            <div class="keyrow-main">
              <div class="keyrow-name">Connected${d.workspace ? ` · ${esc(d.workspace)}` : ''}</div>
-             <div class="meta">doda can search the pages you have shared with the integration</div>
+             <div class="meta" id="ntSeen">checking what doda can see…</div>
            </div>
            <button class="btn ghost" id="ntOff">Disconnect</button>
          </div>`
@@ -823,6 +823,20 @@ async function bindNotion() {
            <button class="btn primary" type="submit">Connect</button>
          </form>
          <p class="gate-error" id="ntErr" hidden></p>`;
+
+    /* Det vigtigste svar paa "hvorfor kan doda ikke finde min side?" er,
+       hvor mange sider den overhovedet kan se. En tom soegning giver alt,
+       integrationen har adgang til - saa staar tallet der, og man behoever
+       ikke gaette paa, om delingen er gaaet igennem. */
+    const set = boks.querySelector('#ntSeen');
+    if (set) {
+      api('GET', '/api/v1/notion/search?q=').then((s) => {
+        const n = s.pages.length;
+        set.innerHTML = n
+          ? `can see ${n}${n >= 12 ? '+' : ''} page${n === 1 ? '' : 's'} · e.g. ${esc(s.pages[0].title)}`
+          : 'can see <strong>no pages yet</strong> — share one with the integration in Notion';
+      }).catch(() => { set.textContent = 'could not ask Notion right now'; });
+    }
 
     const af = boks.querySelector('#ntOff');
     if (af) {

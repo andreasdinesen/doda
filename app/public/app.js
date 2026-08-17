@@ -736,7 +736,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 19;
+const APP_VERSION = 20;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -3603,15 +3603,16 @@ function spoergOmLink(o, naar) {
 
     let timer = null;
     let token = 0;
-    q.addEventListener('input', () => {
-      clearTimeout(timer);
-      const mit = ++token;
-      const v = q.value.trim();
-      if (!v) { traf.innerHTML = ''; return; }
-      // Vent, til der er holdt op med at blive skrevet: hvert tastetryk er
-      // ellers et kald HELE vejen til Notion.
+
+    /* En TOM soegning returnerer alt, integrationen kan se, sorteret efter
+       sidst aendret. Det er ikke bare bekvemt - det er svaret paa "hvorfor
+       kan doda ikke finde min side?": staar listen tom, er der ikke delt
+       noget med DENNE integration. Uden den maa man gaette. */
+    // Ventetiden er kun for tastede soegninger: hvert tastetryk er ellers et
+    // kald HELE vejen til Notion. Den foerste visning skal vaere oejeblikkelig.
+    const soeg = (v, mit) => {
       timer = setTimeout(async () => {
-        traf.innerHTML = '<p class="lead" style="margin:8px 0 0">Searching…</p>';
+        traf.innerHTML = `<p class="lead" style="margin:8px 0 0">${v ? 'Searching…' : 'Looking at what doda can see…'}</p>`;
         try {
           const d = await api('GET', `/api/v1/notion/search?q=${encodeURIComponent(v)}`);
           // Et svar, brugeren er holdt op med at vente paa, maa ikke
@@ -3621,9 +3622,12 @@ function spoergOmLink(o, naar) {
             ? d.pages.map((s) => `<button class="notionhit" data-url="${esc(s.url)}"
                  data-title="${esc(s.title)}">${s.icon ? `${esc(s.icon)} ` : ''}${esc(s.title)}${
   s.kind === 'database' ? '<span class="meta"> · database</span>' : ''}</button>`).join('')
-            : `<p class="lead" style="margin:8px 0 0">Nothing found. Notion only shows
-               pages you have <strong>shared with the integration</strong> — open the page
-               in Notion, ⋯ → Connections, and add yours.</p>`;
+            : `<p class="lead" style="margin:8px 0 0">${v
+  ? 'Nothing matches that.'
+  : '<strong>doda cannot see any Notion pages.</strong>'} Notion only shows pages
+               <strong>shared with this integration</strong> — open the page in Notion,
+               ⋯ → Connections, and add the one you pasted the token from. Sharing a
+               parent page covers everything under it.</p>`;
           traf.querySelectorAll('[data-url]').forEach((el) => {
             el.addEventListener('click', () => {
               felt.value = el.dataset.url;
@@ -3635,8 +3639,15 @@ function spoergOmLink(o, naar) {
           if (mit !== token) return;
           traf.innerHTML = `<p class="lead" style="margin:8px 0 0">${esc(ex.message)}</p>`;
         }
-      }, 300);
+      }, v ? 300 : 0);
+    };
+
+    q.addEventListener('input', () => {
+      clearTimeout(timer);
+      soeg(q.value.trim(), ++token);
     });
+    // Vis med det samme, hvad der er adgang til - foer der er skrevet noget.
+    soeg('', ++token);
   })();
 
   host.querySelector('#lkOk').addEventListener('click', () => {
@@ -5222,7 +5233,7 @@ async function bindNotion() {
       ? `<div class="keyrow" style="margin-top:12px">
            <div class="keyrow-main">
              <div class="keyrow-name">Connected${d.workspace ? ` · ${esc(d.workspace)}` : ''}</div>
-             <div class="meta">doda can search the pages you have shared with the integration</div>
+             <div class="meta" id="ntSeen">checking what doda can see…</div>
            </div>
            <button class="btn ghost" id="ntOff">Disconnect</button>
          </div>`
@@ -5232,6 +5243,20 @@ async function bindNotion() {
            <button class="btn primary" type="submit">Connect</button>
          </form>
          <p class="gate-error" id="ntErr" hidden></p>`;
+
+    /* Det vigtigste svar paa "hvorfor kan doda ikke finde min side?" er,
+       hvor mange sider den overhovedet kan se. En tom soegning giver alt,
+       integrationen har adgang til - saa staar tallet der, og man behoever
+       ikke gaette paa, om delingen er gaaet igennem. */
+    const set = boks.querySelector('#ntSeen');
+    if (set) {
+      api('GET', '/api/v1/notion/search?q=').then((s) => {
+        const n = s.pages.length;
+        set.innerHTML = n
+          ? `can see ${n}${n >= 12 ? '+' : ''} page${n === 1 ? '' : 's'} · e.g. ${esc(s.pages[0].title)}`
+          : 'can see <strong>no pages yet</strong> — share one with the integration in Notion';
+      }).catch(() => { set.textContent = 'could not ask Notion right now'; });
+    }
 
     const af = boks.querySelector('#ntOff');
     if (af) {

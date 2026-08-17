@@ -529,15 +529,16 @@ function spoergOmLink(o, naar) {
 
     let timer = null;
     let token = 0;
-    q.addEventListener('input', () => {
-      clearTimeout(timer);
-      const mit = ++token;
-      const v = q.value.trim();
-      if (!v) { traf.innerHTML = ''; return; }
-      // Vent, til der er holdt op med at blive skrevet: hvert tastetryk er
-      // ellers et kald HELE vejen til Notion.
+
+    /* En TOM soegning returnerer alt, integrationen kan se, sorteret efter
+       sidst aendret. Det er ikke bare bekvemt - det er svaret paa "hvorfor
+       kan doda ikke finde min side?": staar listen tom, er der ikke delt
+       noget med DENNE integration. Uden den maa man gaette. */
+    // Ventetiden er kun for tastede soegninger: hvert tastetryk er ellers et
+    // kald HELE vejen til Notion. Den foerste visning skal vaere oejeblikkelig.
+    const soeg = (v, mit) => {
       timer = setTimeout(async () => {
-        traf.innerHTML = '<p class="lead" style="margin:8px 0 0">Searching…</p>';
+        traf.innerHTML = `<p class="lead" style="margin:8px 0 0">${v ? 'Searching…' : 'Looking at what doda can see…'}</p>`;
         try {
           const d = await api('GET', `/api/v1/notion/search?q=${encodeURIComponent(v)}`);
           // Et svar, brugeren er holdt op med at vente paa, maa ikke
@@ -547,9 +548,12 @@ function spoergOmLink(o, naar) {
             ? d.pages.map((s) => `<button class="notionhit" data-url="${esc(s.url)}"
                  data-title="${esc(s.title)}">${s.icon ? `${esc(s.icon)} ` : ''}${esc(s.title)}${
   s.kind === 'database' ? '<span class="meta"> · database</span>' : ''}</button>`).join('')
-            : `<p class="lead" style="margin:8px 0 0">Nothing found. Notion only shows
-               pages you have <strong>shared with the integration</strong> — open the page
-               in Notion, ⋯ → Connections, and add yours.</p>`;
+            : `<p class="lead" style="margin:8px 0 0">${v
+  ? 'Nothing matches that.'
+  : '<strong>doda cannot see any Notion pages.</strong>'} Notion only shows pages
+               <strong>shared with this integration</strong> — open the page in Notion,
+               ⋯ → Connections, and add the one you pasted the token from. Sharing a
+               parent page covers everything under it.</p>`;
           traf.querySelectorAll('[data-url]').forEach((el) => {
             el.addEventListener('click', () => {
               felt.value = el.dataset.url;
@@ -561,8 +565,15 @@ function spoergOmLink(o, naar) {
           if (mit !== token) return;
           traf.innerHTML = `<p class="lead" style="margin:8px 0 0">${esc(ex.message)}</p>`;
         }
-      }, 300);
+      }, v ? 300 : 0);
+    };
+
+    q.addEventListener('input', () => {
+      clearTimeout(timer);
+      soeg(q.value.trim(), ++token);
     });
+    // Vis med det samme, hvad der er adgang til - foer der er skrevet noget.
+    soeg('', ++token);
   })();
 
   host.querySelector('#lkOk').addEventListener('click', () => {
