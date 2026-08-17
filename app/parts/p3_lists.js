@@ -23,6 +23,7 @@ async function tegnSideIndhold() {
   if (view.id === 'repeat') { await sideRepeat(); return; }
   if (view.id === 'waiting') { await sideStatusliste('waiting', 'Waiting For'); return; }
   if (view.id === 'someday') { await sideStatusliste('someday', 'Someday'); return; }
+  if (view.id === 'notes') { await sideNoter(); return; }
   if (view.id === 'log') { await sideLog(); return; }
   if (view.id === 'review') { await sideReview(); return; }
   if (view.id === 'projects') {
@@ -150,8 +151,13 @@ function elementRaekke(it, i) {
   if (it.contexts.length) meta.push(it.contexts.map((c) => `#${esc(c.name)}`).join(' '));
 
   return `<div class="item-row" tabindex="0" data-id="${esc(it.id)}" data-i="${i}">
-    <button class="tick${it.status === 'done' ? ' on' : ''}" data-done="${esc(it.id)}"
-      aria-label="Mark done" title="Mark done"></button>
+    ${it.kind === 'note'
+    // En note er reference, ikke arbejde (DESIGN.md §3). Den skal derfor
+    // heller ikke TILBYDE at blive markeret udfoert - samme valg som i
+    // detaljeruden, hvor noten far sit ikon i stedet for afkrydsningsringen.
+    ? `<span class="tick note-mark" aria-hidden="true">${icon('note', 14)}</span>`
+    : `<button class="tick${it.status === 'done' ? ' on' : ''}" data-done="${esc(it.id)}"
+      aria-label="Mark done" title="Mark done"></button>`}
     <div class="item-main">
       <div class="item-title">${linkify(it.title)}</div>
       ${meta.length ? `<div class="item-meta meta">${meta.join(' · ')}</div>` : ''}
@@ -246,7 +252,14 @@ async function raekkeTaster(e) {
   const naeste = naboRaekke(el, 1);
   const husk = () => { sideState.fokusId = naeste && naeste.dataset.id !== id ? naeste.dataset.id : null; };
 
-  if (e.key === ' ') { e.preventDefault(); husk(); await fuldfoer(id); return; }
+  if (e.key === ' ') {
+    e.preventDefault();
+    const emne = state.items.find((x) => x.id === id);
+    if (emne && emne.kind === 'note') return;   // en note kan ikke udfoeres
+    husk();
+    await fuldfoer(id);
+    return;
+  }
   const statusTaster = { n: 'next', w: 'waiting', s: 'someday', q: 'queued' };
   if (statusTaster[e.key]) {
     e.preventDefault();

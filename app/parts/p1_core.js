@@ -5,7 +5,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 9;
+const APP_VERSION = 10;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -173,6 +173,9 @@ const VIEWS = [
   { id: 'repeat', label: 'Recurring', icon: 'repeat', group: 2 },
   { id: 'projects', label: 'Projects', icon: 'projects', group: 3 },
   { id: 'contexts', label: 'Contexts', icon: 'contexts', group: 3 },
+  // Noter er reference, ikke arbejde - derfor her ved siden af projekter og
+  // kontekster, og ikke oppe blandt handlingslisterne.
+  { id: 'notes', label: 'Notes', icon: 'note', group: 3 },
   { id: 'log', label: 'Logbook', icon: 'log', group: 4 },
   { id: 'review', label: 'Review', icon: 'review', group: 4 },
   // group: 0 = staar IKKE i navigationen. Settings naas fra menuen paa
@@ -196,6 +199,7 @@ const BESKRIVELSER = {
   repeat: 'Your recurring tasks, and when each one is next due.',
   projects: 'Anything that takes more than one step, grouped by area.',
   contexts: 'Where and how a task can be done.',
+  notes: 'Everything you keep for reference. Never work you owe anyone.',
   log: 'What you have finished, in chronological order.',
   review: 'The weekly review, step by step.',
   settings: 'Appearance, account and access.',

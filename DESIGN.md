@@ -79,6 +79,22 @@ Bemærk: RUNE-ERFARINGER §4 siger »design efter Yggdrasil Panel« (mørk, køl
   man skifter *til*. Alle tre valg (inkl. »Follow system«) bliver i Settings.
 - **Log ud hører hjemme i en menu på brugerknappen**, ikke kun i Settings.
 
+### Noter har deres egen skærm — og den hedder »Notes«
+
+GTD kalder ikke-handlingsbart materiale for **reference**, og tingdo har en
+skærm af det navn. doda kalder det **Notes**, fordi appen allerede har valgt
+ordet: `*` opretter en *note*, detaljeruden siger *Make it a note*, ikonet er en
+note, og datamodellen hedder `kind = 'note'`. To ord for det samme er ét for
+meget.
+
+Uden skærmen kunne en note **uden projekt** kun findes ved at søge — den stod
+bogstaveligt talt ingen steder i menuen. Noterne grupperes efter projekt med
+»No project« sidst, præcis som Next Actions grupperer efter kontekst.
+
+En note får **ikke** en afkrydsningsring i listen, men sit notikon: en note er
+reference, ikke arbejde, og skal derfor ikke engang *tilbyde* at blive markeret
+udført. Mellemrumstasten gør heller ingenting på en note.
+
 ### Tastaturet ind i listerne
 
 `↑`/`↓` går **ind** i listen uden at åbne noget. Før kunne fokus kun komme fra

@@ -582,3 +582,62 @@ document.addEventListener('keydown', (e) => {
   e.stopPropagation();
   visGenveje();
 }, true);
+
+/* ------------------------------------------------------------- noter */
+
+/**
+ * Alle noter, grupperet efter projekt.
+ *
+ * Noter er reference og dukker aldrig op i handlingslisterne (DESIGN.md §3).
+ * Uden denne skaerm kunne en note UDEN projekt kun findes ved at soege efter
+ * den - den stod bogstaveligt talt ingen steder i menuen.
+ *
+ * Den hedder "Notes" og ikke GTD's "Reference", fordi appen allerede kalder
+ * dem noter overalt: `*` opretter en note, detaljeruden siger "Make it a
+ * note", ikonet er en note. To ord for det samme er ét for meget.
+ */
+async function sideNoter() {
+  const host = document.getElementById('pageHost');
+  const d = await api('GET', '/api/v1/items?kind=note');
+  state.items = d.items;
+
+  const hoved = `<div class="page-head"><h1>Notes</h1>
+    <p class="lead">${esc(BESKRIVELSER.notes)}</p></div>`;
+
+  if (!d.items.length) {
+    host.innerHTML = `<section class="page">${hoved}
+      <div class="empty">${icon('note', 34)}
+        <p class="empty-title">No notes yet</p>
+        <p>Start a capture with <strong>*</strong> — <code>* wifi password 1234</code> —
+        or open a task and press <strong>Make it a note</strong>.</p></div>
+    </section>`;
+    return;
+  }
+
+  // Samme gruppering som Next Actions, bare efter projekt. "No project" er
+  // sidst: en note uden projekt er ikke en fejl, bare uplaceret.
+  const grupper = new Map();
+  for (const it of d.items) {
+    const p = it.project_id ? (state.projects.find((x) => x.id === it.project_id) || {}).name : null;
+    const noegle = p || 'No project';
+    if (!grupper.has(noegle)) grupper.set(noegle, []);
+    grupper.get(noegle).push(it);
+  }
+  const sorteret = [...grupper.entries()].sort((a, b) => {
+    if (a[0] === 'No project') return 1;
+    if (b[0] === 'No project') return -1;
+    return a[0].localeCompare(b[0]);
+  });
+
+  let n = 0;
+  host.innerHTML = `<section class="page">${hoved}
+    <p class="meta" style="margin-bottom:12px">${d.items.length} note${d.items.length === 1 ? '' : 's'}</p>
+    <div data-keynav>
+      ${sorteret.map(([navn, liste]) => `
+        <h2 class="group meta">${esc(navn)} <span class="group-count">${liste.length}</span></h2>
+        <div class="list">${liste.map((it) => elementRaekke(it, n++)).join('')}</div>`).join('')}
+    </div>
+    <p class="hintline meta">↑↓ select · enter open · esc leave</p>
+  </section>`;
+  bindListe();
+}

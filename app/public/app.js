@@ -736,7 +736,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 9;
+const APP_VERSION = 10;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -904,6 +904,9 @@ const VIEWS = [
   { id: 'repeat', label: 'Recurring', icon: 'repeat', group: 2 },
   { id: 'projects', label: 'Projects', icon: 'projects', group: 3 },
   { id: 'contexts', label: 'Contexts', icon: 'contexts', group: 3 },
+  // Noter er reference, ikke arbejde - derfor her ved siden af projekter og
+  // kontekster, og ikke oppe blandt handlingslisterne.
+  { id: 'notes', label: 'Notes', icon: 'note', group: 3 },
   { id: 'log', label: 'Logbook', icon: 'log', group: 4 },
   { id: 'review', label: 'Review', icon: 'review', group: 4 },
   // group: 0 = staar IKKE i navigationen. Settings naas fra menuen paa
@@ -927,6 +930,7 @@ const BESKRIVELSER = {
   repeat: 'Your recurring tasks, and when each one is next due.',
   projects: 'Anything that takes more than one step, grouped by area.',
   contexts: 'Where and how a task can be done.',
+  notes: 'Everything you keep for reference. Never work you owe anyone.',
   log: 'What you have finished, in chronological order.',
   review: 'The weekly review, step by step.',
   settings: 'Appearance, account and access.',
@@ -1961,6 +1965,7 @@ async function tegnSideIndhold() {
   if (view.id === 'repeat') { await sideRepeat(); return; }
   if (view.id === 'waiting') { await sideStatusliste('waiting', 'Waiting For'); return; }
   if (view.id === 'someday') { await sideStatusliste('someday', 'Someday'); return; }
+  if (view.id === 'notes') { await sideNoter(); return; }
   if (view.id === 'log') { await sideLog(); return; }
   if (view.id === 'review') { await sideReview(); return; }
   if (view.id === 'projects') {
@@ -2088,8 +2093,13 @@ function elementRaekke(it, i) {
   if (it.contexts.length) meta.push(it.contexts.map((c) => `#${esc(c.name)}`).join(' '));
 
   return `<div class="item-row" tabindex="0" data-id="${esc(it.id)}" data-i="${i}">
-    <button class="tick${it.status === 'done' ? ' on' : ''}" data-done="${esc(it.id)}"
-      aria-label="Mark done" title="Mark done"></button>
+    ${it.kind === 'note'
+    // En note er reference, ikke arbejde (DESIGN.md §3). Den skal derfor
+    // heller ikke TILBYDE at blive markeret udfoert - samme valg som i
+    // detaljeruden, hvor noten far sit ikon i stedet for afkrydsningsringen.
+    ? `<span class="tick note-mark" aria-hidden="true">${icon('note', 14)}</span>`
+    : `<button class="tick${it.status === 'done' ? ' on' : ''}" data-done="${esc(it.id)}"
+      aria-label="Mark done" title="Mark done"></button>`}
     <div class="item-main">
       <div class="item-title">${linkify(it.title)}</div>
       ${meta.length ? `<div class="item-meta meta">${meta.join(' · ')}</div>` : ''}
@@ -2184,7 +2194,14 @@ async function raekkeTaster(e) {
   const naeste = naboRaekke(el, 1);
   const husk = () => { sideState.fokusId = naeste && naeste.dataset.id !== id ? naeste.dataset.id : null; };
 
-  if (e.key === ' ') { e.preventDefault(); husk(); await fuldfoer(id); return; }
+  if (e.key === ' ') {
+    e.preventDefault();
+    const emne = state.items.find((x) => x.id === id);
+    if (emne && emne.kind === 'note') return;   // en note kan ikke udfoeres
+    husk();
+    await fuldfoer(id);
+    return;
+  }
   const statusTaster = { n: 'next', w: 'waiting', s: 'someday', q: 'queued' };
   if (statusTaster[e.key]) {
     e.preventDefault();
@@ -4550,3 +4567,62 @@ document.addEventListener('keydown', (e) => {
   e.stopPropagation();
   visGenveje();
 }, true);
+
+/* ------------------------------------------------------------- noter */
+
+/**
+ * Alle noter, grupperet efter projekt.
+ *
+ * Noter er reference og dukker aldrig op i handlingslisterne (DESIGN.md §3).
+ * Uden denne skaerm kunne en note UDEN projekt kun findes ved at soege efter
+ * den - den stod bogstaveligt talt ingen steder i menuen.
+ *
+ * Den hedder "Notes" og ikke GTD's "Reference", fordi appen allerede kalder
+ * dem noter overalt: `*` opretter en note, detaljeruden siger "Make it a
+ * note", ikonet er en note. To ord for det samme er ét for meget.
+ */
+async function sideNoter() {
+  const host = document.getElementById('pageHost');
+  const d = await api('GET', '/api/v1/items?kind=note');
+  state.items = d.items;
+
+  const hoved = `<div class="page-head"><h1>Notes</h1>
+    <p class="lead">${esc(BESKRIVELSER.notes)}</p></div>`;
+
+  if (!d.items.length) {
+    host.innerHTML = `<section class="page">${hoved}
+      <div class="empty">${icon('note', 34)}
+        <p class="empty-title">No notes yet</p>
+        <p>Start a capture with <strong>*</strong> — <code>* wifi password 1234</code> —
+        or open a task and press <strong>Make it a note</strong>.</p></div>
+    </section>`;
+    return;
+  }
+
+  // Samme gruppering som Next Actions, bare efter projekt. "No project" er
+  // sidst: en note uden projekt er ikke en fejl, bare uplaceret.
+  const grupper = new Map();
+  for (const it of d.items) {
+    const p = it.project_id ? (state.projects.find((x) => x.id === it.project_id) || {}).name : null;
+    const noegle = p || 'No project';
+    if (!grupper.has(noegle)) grupper.set(noegle, []);
+    grupper.get(noegle).push(it);
+  }
+  const sorteret = [...grupper.entries()].sort((a, b) => {
+    if (a[0] === 'No project') return 1;
+    if (b[0] === 'No project') return -1;
+    return a[0].localeCompare(b[0]);
+  });
+
+  let n = 0;
+  host.innerHTML = `<section class="page">${hoved}
+    <p class="meta" style="margin-bottom:12px">${d.items.length} note${d.items.length === 1 ? '' : 's'}</p>
+    <div data-keynav>
+      ${sorteret.map(([navn, liste]) => `
+        <h2 class="group meta">${esc(navn)} <span class="group-count">${liste.length}</span></h2>
+        <div class="list">${liste.map((it) => elementRaekke(it, n++)).join('')}</div>`).join('')}
+    </div>
+    <p class="hintline meta">↑↓ select · enter open · esc leave</p>
+  </section>`;
+  bindListe();
+}
