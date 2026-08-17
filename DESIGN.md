@@ -230,9 +230,13 @@ En note med et Notion-link kan folde sidens indhold ud i detaljeruden.
   skrevet. Bevist i browseren: seks angreb fra et simuleret Notion-svar gav
   nul `script`, nul `img`, nul `iframe`, nul `on*` — og `javascript:` blev
   aldrig et link.
-- **Billeder bliver til links.** doda's CSP er `img-src 'self' data:`, så et
-  `<img>` mod Notions S3 ville være tomt. Et blokeret billede ligner en fejl;
-  et link er ærligt. Det står også skrevet i ruden.
+- **Billeder bliver til links — på BLOKKEN, ikke på filen.** doda's CSP er
+  `img-src 'self' data:`, så et `<img>` mod Notions S3 ville være tomt. Men den
+  vigtigere grund er, at Notions filadresser er **signerede**: de udløber efter
+  en time, og de er ~1500 tegn. Et link til en af dem er dødt i morgen, og det
+  sprænger `linkify`s 500-tegns grænse, så halen løber ud som rå tekst midt i
+  ruden. `https://www.notion.so/<blok-id>` er 66 tegn, holder evigt og åbner
+  det rigtige sted.
 - **Loft på 300 blokke og ét niveau indlejring.** En fremmed side kan være hvor
   stor som helst, og doda skal ikke kunne væltes af en, nogen har delt.
 - Det, doda ikke kan vise (tabeller, kolonner, synkroniserede blokke), siger

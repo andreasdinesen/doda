@@ -387,6 +387,7 @@ Se `PLAN.md` for faseoversigt og status, `DESIGN.md` for de trufne beslutninger 
 
 | Version | Ændringer |
 |---|---|
+| 21 | **Rettelse: billeder fra Notion fyldte hele ruden.** En signeret S3-adresse er ~1500 tegn, og dodas link-genkendelse stopper ved 500 — så halen løb ud som rå tekst. Værre: de adresser udløber efter en time, så linket var dødt dagen efter. Nu peger billeder, filer og pdf'er på **blokken i Notion**: 66 tegn i stedet for 1500, og det holder. |
 | 20 | **doda siger nu, hvad den kan se i Notion.** Settings → Notion viser »can see 12 pages« eller »can see no pages yet«, og søgefeltet lister de tilgængelige sider, før du skriver noget. Det gør »hvorfor finder den ikke min side?« til noget, man kan aflæse i stedet for at gætte om. |
 | 19 | **Se Notion-siden inde i doda.** Har en note eller opgave et Notion-link, kan indholdet foldes ud i detaljeruden — overskrifter, lister, afkrydsninger, citater og kode. Hentes først når du beder om det, og lever kun i hukommelsen: Notion er kilden, doda laver ingen kopi. Billeder vises som links, fordi doda kun viser indhold fra sin egen server. |
 | 18 | **Notion-titler holder sig selv friske.** Omdøber du siden i Notion, retter chippen sig, næste gang du åbner opgaven eller projektet — højst ét opslag i døgnet pr. link, så en åbning ikke er et kald til en fremmed tjeneste. Søgningen finder nu også **databaser**, ikke kun sider. |

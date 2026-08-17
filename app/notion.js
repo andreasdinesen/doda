@@ -22,6 +22,22 @@ const VERSION = '2022-06-28';   // Notion kraever en eksplicit API-version
 
 /* --------------------------------------------------- sidens indhold */
 
+const NAVNE = {
+  image: '\u{1F5BC} image', file: '\u{1F4CE} file', video: '\u{1F3AC} video',
+  pdf: '\u{1F4C4} pdf', audio: '\u{1F50A} audio',
+};
+
+/** Enhver Notion-blok kan aabnes paa sit id. Kort, og den udloeber ikke. */
+function blokUrl(id) {
+  return `https://www.notion.so/${String(id || '').replace(/-/g, '')}`;
+}
+
+/** En adresse, der kan STAA der - ikke en, der fylder en hel rude. */
+function kortUrl(url) {
+  const s = String(url || '').replace(/^https?:\/\//, '');
+  return s.length <= 70 ? s : `${s.slice(0, 60)}…`;
+}
+
 /** Rich text -> markdown. Annoteringerne er flag, ikke en traestruktur. */
 function tekst(dele) {
   return (dele || []).map((d) => {
@@ -68,15 +84,28 @@ function blokTilMd(b, dybde) {
       return tekst(v.rich_text).split('\n').map((l) => `\`${l}\``).join('\n');
     case 'child_page': return `**${v.title || 'Untitled'}** (subpage)`;
     case 'child_database': return `**${v.title || 'Untitled'}** (database)`;
-    // Billeder kan ikke vises: dodas CSP er img-src 'self', og Notions
-    // adresser er signerede og udloeber alligevel. Et link er aerligt.
-    case 'image': case 'file': case 'video': case 'pdf': {
-      const url = (v.file && v.file.url) || (v.external && v.external.url) || '';
-      const navn = tekst(v.caption) || b.type;
-      return url ? `[${navn}](${url})` : `(${b.type})`;
+    /*
+     * Filer peger paa BLOKKEN i Notion - aldrig paa filens egen adresse.
+     *
+     * To grunde, og den anden er den vigtigste:
+     *  1. Dodas CSP er img-src 'self', saa billedet kan alligevel ikke vises.
+     *  2. Notions fil-adresser er SIGNEREDE og udloeber efter en time. Et link
+     *     til en af dem er doedt i morgen - og de er ~1500 tegn, hvilket baade
+     *     fylder hele ruden og spraenger dodas link-genkendelse (som stopper
+     *     ved 500), saa halen loeber ud som raa tekst.
+     * Blok-adressen er kort, holder evigt og aabner det rigtige sted.
+     */
+    case 'image': case 'file': case 'video': case 'pdf': case 'audio': {
+      const navn = tekst(v.caption) || NAVNE[b.type] || b.type;
+      return b.id ? `[${navn}](${blokUrl(b.id)})` : `*(${navn})*`;
     }
     case 'bookmark': case 'embed': case 'link_preview':
-      return v.url ? `[${v.url}](${v.url})` : '';
+      if (!v.url) return '';
+      // En lang adresse vises kort OG peger paa blokken - ellers er linket
+      // baade ulaeseligt og for langt til at blive genkendt.
+      return v.url.length > 300
+        ? `[${kortUrl(v.url)}](${blokUrl(b.id)})`
+        : `[${kortUrl(v.url)}](${v.url})`;
     case 'table': case 'column_list': case 'synced_block':
       return `*(${b.type.replace(/_/g, ' ')} — open it in Notion)*`;
     default: return rt();

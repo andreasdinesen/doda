@@ -39,13 +39,35 @@ test('indlejring rykkes ind — men kun to niveauer, som dodas renderer kan vise
   assert.equal(md('bulleted_list_item', { rich_text: rt('dybt') }, 5), '    - dybt');
 });
 
-test('billeder bliver til LINKS — dodas CSP tillader ikke fremmede billeder', () => {
-  // img-src 'self' data: betyder, at et <img> mod Notions S3 ville vaere
-  // tomt. Et link er aerligt; et blokeret billede ligner en fejl.
-  assert.equal(md('image', { file: { url: 'https://s3/x.png' }, caption: rt('foto') }),
-    '[foto](https://s3/x.png)');
-  assert.equal(md('image', { external: { url: 'https://e/y.png' } }), '[image](https://e/y.png)');
-  assert.equal(md('image', {}), '(image)');
+test('billeder peger på BLOKKEN i Notion — aldrig på filens egen adresse', () => {
+  // To grunde. Dodas CSP (img-src 'self') gør, at billedet ikke kan vises.
+  // Og Notions fil-adresser er signerede: de udløber efter en time og er
+  // ~1500 tegn, så linket både dør og fylder hele ruden.
+  const signeret = `https://prod-files-secure.s3.us-west-2.amazonaws.com/x?${'X'.repeat(1400)}`;
+  const b1 = { type: 'image', id: '3bf981dd-94e6-802d-9dda-ee087333dc17', image: { file: { url: signeret } } };
+  const ud = N.blokTilMd(b1, 0);
+  assert.equal(ud, '[🖼 image](https://www.notion.so/3bf981dd94e6802d9ddaee087333dc17)');
+  assert.ok(!ud.includes('amazonaws'), 'den signerede adresse må ikke stå der');
+  assert.ok(ud.length < 100, `skal være kort, var ${ud.length} tegn`);
+
+  // Billedteksten bruges som navn, når der er en.
+  b1.image.caption = rt('Grønne hatte');
+  assert.match(N.blokTilMd(b1, 0), /^\[Grønne hatte\]/);
+
+  // Uden id er der ikke noget at pege på - så siges det bare.
+  assert.equal(md('image', {}), '*(🖼 image)*');
+});
+
+test('lange bogmærke-adresser vises kort og peger på blokken', () => {
+  // Dodas linkify stopper ved 500 tegn: en længere adresse ville blive
+  // halvt til et link og halvt til rå tekst midt i teksten.
+  const kort = { type: 'bookmark', id: 'aaaabbbbccccddddeeeeffff00001111', bookmark: { url: 'https://dr.dk/nyheder' } };
+  assert.equal(N.blokTilMd(kort, 0), '[dr.dk/nyheder](https://dr.dk/nyheder)');
+
+  const lang = { type: 'bookmark', id: 'aaaabbbbccccddddeeeeffff00001111', bookmark: { url: `https://e.dk/${'y'.repeat(400)}` } };
+  const ud = N.blokTilMd(lang, 0);
+  assert.match(ud, /…\]\(https:\/\/www\.notion\.so\//);
+  assert.ok(ud.length < 140, `skal være kort, var ${ud.length} tegn`);
 });
 
 test('det doda ikke kan vise, siger den ærligt — den lader ikke som ingenting', () => {
