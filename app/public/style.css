@@ -691,13 +691,20 @@ a:hover { text-decoration-thickness: 2px; }
 .modal-card {
   width: 100%;
   max-width: 560px;
+  /* Et grid-element maa som standard ikke blive smallere end sit indhold, og
+     en textarea har en indbygget mindstebredde paa ~20 tegn. Uden denne blev
+     kortet 378 px paa en 375 px skaerm, saa lukkeknappen laa uden for kanten. */
+  min-width: 0;
   padding: 26px;
   border-radius: var(--r-lg);
   background: var(--card);
   box-shadow: var(--shadow-lift);
 }
 
-.modal-foot { display: flex; align-items: center; gap: 8px; margin-top: 20px; }
+/* Fodraekken skal kunne bryde: paa en telefon er der ikke plads til Delete,
+   Make it a note, Cancel og Save paa én linje, og uden dette laa Save uden
+   for kortets kant. */
+.modal-foot { display: flex; align-items: center; gap: 8px; margin-top: 20px; flex-wrap: wrap; }
 textarea.input { resize: vertical; min-height: 90px; font-family: inherit; }
 
 .note-preview {
@@ -1278,6 +1285,15 @@ textarea.input { resize: vertical; min-height: 90px; font-family: inherit; }
   letter-spacing: -.02em;
   line-height: 1.25;
   outline: none;
+  /* Titlen er en textarea, saa en lang titel kan laeses i sin helhed - men den
+     skal se ud som en overskrift: ingen ramme, intet traek-haandtag, og ingen
+     egen rullebjaelke. Hoejden saettes af JS efter indholdet. */
+  width: 100%;
+  min-width: 0;
+  resize: none;
+  overflow: hidden;
+  font-family: inherit;
+  overflow-wrap: break-word;
 }
 
 .detail-title::placeholder { color: var(--muted); font-weight: 600; }

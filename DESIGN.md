@@ -341,6 +341,30 @@ Dette **afviger bevidst** fra handover §5.6, der gjorde »efter fuldførelse« 
 standard. Andreas har valgt Todoist-kompatibilitet, fordi han kender syntaksen —
 og synligheden løses i stedet af preview-chippen, der altid skriver tilstanden ud.
 
+### Titlen er en overskrift, der folder sig ud (v33)
+
+Titelfeltet i detaljeruden var et `input`: en lang titel kunne kun ses gennem
+et vindue, og man skulle rulle sidelæns for at finde ud af, hvad opgaven hed.
+Nu er det en `textarea`, der vokser med teksten.
+
+Den er stadig **én linje logisk set**, og det er ikke kosmetik: et linjeskift
+ville blive gemt i titlen, og parseren læser alt efter det første linjeskift
+som **beskrivelse** (`app/shared/parse.js`). Derfor spærres Enter — den
+forlader feltet i stedet, så genvejssyntaksen kører — og indsat tekst med
+linjeskift samles til én linje. ⌘+Enter gemmer som andre steder.
+
+**To ting, skiftet afslørede på telefonbredde:**
+
+- **En `textarea` har en indbygget mindstebredde** (~20 tegn, fra `cols`), og
+  et grid-element må som standard ikke klemmes under sit indhold
+  (`min-width: auto`). Kortet blev derfor 378 px på en 375 px skærm, og
+  lukkeknappen lå uden for kanten. `min-width: 0` på `.modal-card` løser det.
+- **`.modal-foot` kunne ikke bryde.** Delete, Make it a note, Cancel og Save er
+  for meget til én linje på en telefon, og Save lå uden for kortet.
+
+Projektsiden har samtidig fået samme **»Show the Notion page«** som en opgave —
+den kalder `notionRude()`, så de to steder ikke kan drive fra hinanden.
+
 ### At gå til en skærm betyder at se den ren (v32)
 
 `gaaTil()` nulstillede kun undertilstanden, **hvis skærmen skiftede**. Det gjorde

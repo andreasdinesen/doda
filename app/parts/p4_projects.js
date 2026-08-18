@@ -143,6 +143,7 @@ async function sideProjekt(id) {
       ${p.link_url ? `<div class="chiprow" style="margin-top:14px">
         <a class="chip link" href="${esc(p.link_url)}" target="_blank" rel="noopener noreferrer"
            title="${esc(p.link_url)}">${icon('link', 13)} ${esc(linkNavn(p))}</a></div>` : ''}
+      <div id="pNotion"></div>
       <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
         <button class="btn" id="editProject">Edit project</button>
         ${p.status === 'active' ? '<button class="btn ghost" data-pstatus="someday">Park as someday</button>' : ''}
@@ -200,6 +201,10 @@ function noteKort(it) {
 }
 
 function bindProjektvisning(p, d) {
+  // Samme udfoldning som paa en opgave - ét sted, saa de to ikke kan drive
+  // fra hinanden. Projektet HAR haft et link siden v17; det manglede bare
+  // vejen til at se siden uden at forlade doda.
+  notionRude(document.getElementById('pNotion'), p);
   document.getElementById('backToProjects').addEventListener('click', () => gaaTil('projects'));
   document.getElementById('editProject').addEventListener('click', () => redigerProjekt(p));
 

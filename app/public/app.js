@@ -736,7 +736,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 32;
+const APP_VERSION = 33;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -2847,7 +2847,8 @@ async function aabnElement(listeItem) {
     <div class="detail-head">
       ${it.kind === 'task' ? `<button class="tick big${u.status === 'done' ? ' on' : ''}" id="dTick"
         aria-label="Mark done" title="Mark done"></button>` : `<span class="detail-noteicon">${icon('note', 22)}</span>`}
-      <input class="detail-title" id="dTitle" value="${esc(u.title)}" placeholder="Title" aria-label="Title">
+      <textarea class="detail-title" id="dTitle" rows="1" placeholder="Title"
+        aria-label="Title" spellcheck="false">${esc(u.title)}</textarea>
       <button class="detail-close" id="dClose" aria-label="Close">×</button>
     </div>
 
@@ -3028,7 +3029,34 @@ async function aabnElement(listeItem) {
   const noteEl = host.querySelector('#dNote');
   const preview = host.querySelector('#dPreview');
 
-  titelEl.addEventListener('input', () => { u.title = titelEl.value; });
+  /*
+   * Titlen er et flerlinjet felt, saa en lang titel kan LAESES i sin helhed.
+   * Som `input` kunne man kun se et vindue af den og skulle rulle sidelaens
+   * for at finde ud af, hvad opgaven hed.
+   *
+   * Men den er stadig ÉN linje logisk set: et linjeskift ville blive gemt i
+   * titlen, og parseren laeser alt efter det foerste linjeskift som
+   * beskrivelse. Derfor spaerres Enter, og indsat tekst renses.
+   */
+  const voksTitel = () => {
+    titelEl.style.height = 'auto';
+    titelEl.style.height = `${titelEl.scrollHeight}px`;
+  };
+  voksTitel();
+  titelEl.addEventListener('input', () => {
+    if (titelEl.value.includes('\n')) {
+      const pos = titelEl.selectionStart;
+      titelEl.value = titelEl.value.replace(/\s*\n+\s*/g, ' ');
+      titelEl.setSelectionRange(pos, pos);
+    }
+    u.title = titelEl.value;
+    voksTitel();
+  });
+  titelEl.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || e.metaKey || e.ctrlKey) return;   // cmd+enter gemmer
+    e.preventDefault();
+    titelEl.blur();      // saa koerer genvejssyntaksen, som den plejer
+  });
 
   // Genvejssyntaksen skal virke HER ogsaa. Hjaelpeteksten i ruden lover
   // allerede "type # in the title to add one", og efter v4 lover paletten
@@ -3042,6 +3070,7 @@ async function aabnElement(listeItem) {
     if (ny === null) return;
     titelEl.value = ny;
     u.title = ny;
+    voksTitel();
     tegnChipsRow();
   });
 
@@ -3587,6 +3616,7 @@ async function sideProjekt(id) {
       ${p.link_url ? `<div class="chiprow" style="margin-top:14px">
         <a class="chip link" href="${esc(p.link_url)}" target="_blank" rel="noopener noreferrer"
            title="${esc(p.link_url)}">${icon('link', 13)} ${esc(linkNavn(p))}</a></div>` : ''}
+      <div id="pNotion"></div>
       <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
         <button class="btn" id="editProject">Edit project</button>
         ${p.status === 'active' ? '<button class="btn ghost" data-pstatus="someday">Park as someday</button>' : ''}
@@ -3644,6 +3674,10 @@ function noteKort(it) {
 }
 
 function bindProjektvisning(p, d) {
+  // Samme udfoldning som paa en opgave - ét sted, saa de to ikke kan drive
+  // fra hinanden. Projektet HAR haft et link siden v17; det manglede bare
+  // vejen til at se siden uden at forlade doda.
+  notionRude(document.getElementById('pNotion'), p);
   document.getElementById('backToProjects').addEventListener('click', () => gaaTil('projects'));
   document.getElementById('editProject').addEventListener('click', () => redigerProjekt(p));
 
