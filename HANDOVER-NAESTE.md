@@ -1,7 +1,7 @@
 # Handover — doda
 
 **Til:** Claude Code i en ny session
-**Skrevet:** 2026-08-18, efter v30
+**Skrevet:** 2026-08-18, efter v31
 
 > **Læs i denne rækkefølge, før du rører noget:**
 > 1. `~/ClaudeMacBook/RUNE-ERFARINGER.md` — fælles lærepenge for alle runer.
@@ -16,12 +16,12 @@
 
 ## Tilstand
 
-**v30 er udgivet. Arbejdsmappen er ren.** Alt er pushet.
+**v31 er udgivet. Arbejdsmappen er ren.** Alt er pushet.
 
 | | |
 |---|---|
 | Tests | **175 grønne** (`node --test tests/*.mjs`) |
-| Install-script | **115.388 / 126.000 tegn (91 %)** — se `PLAN.md` om guidens pris |
+| Install-script | **115.622 / 126.000 tegn (91 %)** — se `PLAN.md` om guidens pris |
 | Kode | `server.js` 3.594 linjer + syv moduler |
 
 Kør altid `python3 build_rune.py` efter en ændring i `app/` — den samler
@@ -113,7 +113,7 @@ De to andre blev lukket i **v24**:
 ## Pladsen i runen
 
 Install-scriptet må højst fylde **126.000 tegn** (hævet fra 120.000 i v7).
-Det fylder **115.388 (91 %)**, og build'et **fejler højt** ved loftet.
+Det fylder **115.622 (91 %)**, og build'et **fejler højt** ved loftet.
 Guiden (v25) er den dyreste enkeltside, appen har: dens tekst kostede 6.274 tegn
 og blev trimmet til ~4.700. Dens CSS koster kun 364. Skal der spares mere dér,
 er næste greb at skære hele emner væk — et indholdsvalg, ikke et teknisk.

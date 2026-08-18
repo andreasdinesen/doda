@@ -225,6 +225,7 @@ function aabnGentagelse(r) {
   };
   titelEl.addEventListener('blur', tolkTitel);
 
+  bindGemGenvej(host, host.querySelector('#rSave'));
   host.querySelector('#rSave').addEventListener('click', async () => {
     // Klikkes der paa Save uden at forlade titelfeltet foerst, naar blur ikke
     // at koere. Tolk derfor ogsaa her - ellers gemmes "@Hus" som tekst.

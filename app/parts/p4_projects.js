@@ -320,6 +320,7 @@ function redigerProjekt(p) {
   };
   tegnLink();
 
+  bindGemGenvej(host, host.querySelector('#pSave'));
   host.querySelector('#pSave').addEventListener('click', async () => {
     const felter = {
       name: host.querySelector('#pName').value,

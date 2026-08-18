@@ -882,6 +882,7 @@ async function aabnElement(listeItem) {
     link_title: u.link_title,
   }, ekstra || {}));
 
+  bindGemGenvej(host, host.querySelector('#edSave'));
   host.querySelector('#edSave').addEventListener('click', async () => {
     // Klikkes der paa Save uden at forlade titelfeltet foerst, naar blur
     // ikke at koere. Tolk derfor ogsaa her - ellers gemmes "/doda" som tekst.

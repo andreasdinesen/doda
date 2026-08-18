@@ -341,6 +341,21 @@ Dette **afviger bevidst** fra handover §5.6, der gjorde »efter fuldførelse« 
 standard. Andreas har valgt Todoist-kompatibilitet, fordi han kender syntaksen —
 og synligheden løses i stedet af preview-chippen, der altid skriver tilstanden ud.
 
+### ⌘+Enter gemmer — bundet på knappen, ikke på »den primære« (v31)
+
+En rude, man har tastet sig igennem, skal kunne afsluttes uden at gå efter
+musen. ⌘+Enter (Ctrl+Enter) gemmer opgaven, gentagelsen og projektet.
+
+Det afgørende er **hvor genvejen bindes**. Den nemme løsning — én global regel,
+der trykker på `.modal .btn.primary` — ville også ramme spørgsmålet *»denne
+gang eller alle fremtidige?«*, hvor den primære knap ændrer **hele serien**. Et
+tastetryk må ikke kunne svare på et spørgsmål ved et uheld. Derfor kalder hver
+rude selv `bindGemGenvej(host, dens egen knap)`, og en rude, der ikke gemmer
+noget, kalder den ikke.
+
+`preventDefault` er ikke pynt: uden den lægger beskrivelsesfeltet et linjeskift
+ind i samme ombæring. Enter alene laver stadig linjeskift dér — kun med ⌘ gemmer den.
+
 ### Forslag mens man skriver et navn (v30)
 
 Paletten viser nu de projekter og kontekster, der matcher et **halvskrevet**

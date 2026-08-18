@@ -736,7 +736,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 30;
+const APP_VERSION = 31;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -1347,6 +1347,30 @@ function saetNavSkjult(skjult) {
     knap.title = tekst;
     knap.classList.toggle('off', skjult);
   }
+}
+
+/* ------------------------------------------------------- gem-genvejen */
+
+/*
+ * ⌘+Enter (Ctrl+Enter) gemmer en aaben rude, saa man ikke skal efter musen
+ * for at afslutte en redigering, man har tastet sig igennem.
+ *
+ * Genvejen bindes paa den ENKELTE rude med DENS knap - ikke globalt paa
+ * `.modal .btn.primary`. Et spoergsmaal som »denne gang eller alle
+ * fremtidige?« har ogsaa en primaer knap, og den maa et tastetryk ikke kunne
+ * svare paa ved et uheld: den ville aendre hele serien. En rude, der ikke
+ * gemmer noget, kalder simpelthen ikke det her.
+ *
+ * `preventDefault` er ikke pynt - uden den lægger beskrivelsesfeltet et
+ * linjeskift ind i samme ombæring.
+ */
+function bindGemGenvej(host, knap) {
+  if (!host || !knap) return;
+  host.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || !(e.metaKey || e.ctrlKey)) return;
+    e.preventDefault();
+    knap.click();
+  });
 }
 
 /* --------------------------------------------------- brugermenuen */
@@ -3056,6 +3080,7 @@ async function aabnElement(listeItem) {
     link_title: u.link_title,
   }, ekstra || {}));
 
+  bindGemGenvej(host, host.querySelector('#edSave'));
   host.querySelector('#edSave').addEventListener('click', async () => {
     // Klikkes der paa Save uden at forlade titelfeltet foerst, naar blur
     // ikke at koere. Tolk derfor ogsaa her - ellers gemmes "/doda" som tekst.
@@ -3719,6 +3744,7 @@ function redigerProjekt(p) {
   };
   tegnLink();
 
+  bindGemGenvej(host, host.querySelector('#pSave'));
   host.querySelector('#pSave').addEventListener('click', async () => {
     const felter = {
       name: host.querySelector('#pName').value,
@@ -4275,6 +4301,7 @@ function aabnGentagelse(r) {
   };
   titelEl.addEventListener('blur', tolkTitel);
 
+  bindGemGenvej(host, host.querySelector('#rSave'));
   host.querySelector('#rSave').addEventListener('click', async () => {
     // Klikkes der paa Save uden at forlade titelfeltet foerst, naar blur ikke
     // at koere. Tolk derfor ogsaa her - ellers gemmes "@Hus" som tekst.
@@ -5560,6 +5587,7 @@ const GENVEJE = [
     ['↑ ↓', 'Step into the list below, without opening anything'],
     ['?', 'This list'],
     ['esc', 'Close whatever is open'],
+    ['⌘ enter', 'Save the open task, project or repeat'],
   ]],
   ['In the palette', [
     ['+', 'New task'], ['*', 'New note'],

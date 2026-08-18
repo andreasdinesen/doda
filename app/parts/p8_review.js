@@ -648,6 +648,7 @@ const GENVEJE = [
     ['↑ ↓', 'Step into the list below, without opening anything'],
     ['?', 'This list'],
     ['esc', 'Close whatever is open'],
+    ['⌘ enter', 'Save the open task, project or repeat'],
   ]],
   ['In the palette', [
     ['+', 'New task'], ['*', 'New note'],
