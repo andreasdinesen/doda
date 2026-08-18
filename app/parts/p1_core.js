@@ -5,7 +5,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 25;
+const APP_VERSION = 26;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -169,6 +169,8 @@ const ICONS = {
   out: '<path d="M14.5 4.5H18a1.5 1.5 0 011.5 1.5v12a1.5 1.5 0 01-1.5 1.5h-3.5"/><path d="M4.5 12h10M11 8.5l3.5 3.5-3.5 3.5"/>',
   link: '<path d="M10.5 13.5a3.5 3.5 0 005 0l3-3a3.5 3.5 0 00-5-5l-1 1"/><path d="M13.5 10.5a3.5 3.5 0 00-5 0l-3 3a3.5 3.5 0 005 5l1-1"/>',
   guide: '<path d="M4 5.5A1.5 1.5 0 015.5 4H10a2 2 0 012 2v12a2 2 0 00-2-2H4z"/><path d="M20 5.5A1.5 1.5 0 0018.5 4H14a2 2 0 00-2 2v12a2 2 0 012-2h6z"/>',
+  // Egen pil - IKKE repeat-ikonet, som i denne app betyder "gentagelse".
+  sync: '<path d="M19.5 12a7.5 7.5 0 01-12.9 5.3"/><path d="M4.5 12a7.5 7.5 0 0112.9-5.3"/><path d="M17.5 3v4h-4"/><path d="M6.5 21v-4h4"/>',
 };
 
 function icon(name, size = 18) {
@@ -360,7 +362,11 @@ function shellHtml() {
     <main class="main">
       <div class="topbar">
         <div class="offline-mark meta" id="offlineMark" hidden></div>
-        <div class="stats meta" id="statsHost">${statsHtml()}</div>
+        <div class="toprow">
+          <button class="syncbtn meta" id="syncBtn" title="Sync now" aria-label="Sync now">
+            ${icon('sync', 14)}<span id="syncLabel">just now</span></button>
+          <div class="stats meta" id="statsHost">${statsHtml()}</div>
+        </div>
         <div class="omni-card" id="omniCard">
           <div class="omni-field">
             <span class="omni-icon">${icon('search', 22)}</span>
@@ -507,6 +513,7 @@ function bindNav() {
 function bindShell() {
   bindNav();
   document.getElementById('userBtn').addEventListener('click', visBrugerMenu);
+  document.getElementById('syncBtn').addEventListener('click', () => synk(true));
   saetNavSkjult(navErSkjult());
   document.getElementById('pinBtn').addEventListener('click', () => {
     const skjul = !document.body.classList.contains('navskjult');

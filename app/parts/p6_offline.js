@@ -146,10 +146,98 @@ function opdaterOfflineMaerke() {
     : `${icon('calm', 14)}<span>${koe} waiting to send</span>`;
 }
 
+/* ------------------------------------------------------------- synk */
+
+/*
+ * Paa hjemmeskaermen bliver appen ALDRIG genindlaest. Den ligger i baggrunden,
+ * og naar man vender tilbage, staar der praecis det, der stod, da man gik -
+ * ogsaa selv om man har fanget noget fra Siri eller rettet noget paa en anden
+ * enhed imens. Foer v26 var den eneste vej til friske data at skifte skaerm,
+ * fordi hvert sideskift henter sin egen liste. Det er ikke en indstilling,
+ * brugeren skal kende: en app, der viser gamle tal, er en app, man holder op
+ * med at stole paa.
+ *
+ * To ting loeser det, og de skal begge to vaere der:
+ *   - AUTOMATISK, naar appen kommer frem igen (visibilitychange), naar den
+ *     genskabes fra bfcache (pageshow), og naar forbindelsen vender tilbage.
+ *   - EN SYNLIG KNAP, der ogsaa siger HVORNAAR der sidst blev hentet. Uden
+ *     det svar kan man ikke vide, om der ikke er sket noget, eller om appen
+ *     bare ikke har spurgt.
+ */
+const synkState = { sidst: Date.now(), koerer: false };
+
+/** Hvor gammelt er det, man ser paa? Kort og uden falsk praecision. */
+function synkAlder() {
+  const sek = Math.round((Date.now() - synkState.sidst) / 1000);
+  if (sek < 45) return 'just now';
+  const min = Math.round(sek / 60);
+  if (min < 60) return `${min} min ago`;
+  const timer = Math.round(min / 60);
+  return timer < 24 ? `${timer} h ago` : 'a while ago';
+}
+
+function tegnSynkMaerke() {
+  const el = document.getElementById('syncLabel');
+  if (!el) return;
+  el.textContent = synkState.koerer ? 'syncing…' : synkAlder();
+  const knap = document.getElementById('syncBtn');
+  if (knap) knap.classList.toggle('koerer', synkState.koerer);
+}
+
+/**
+ * Henter state og den aktuelle side igen.
+ *
+ * `manuel` = brugeren trykkede selv. Kun da kvitteres der; en automatisk synk
+ * skal vaere lydloes, ellers popper der en toast op, hver gang telefonen
+ * laases op.
+ */
+async function synk(manuel) {
+  if (synkState.koerer) return;
+  if (!navigator.onLine) {
+    opdaterOfflineMaerke();
+    if (manuel) toast('No connection — showing what was last loaded.');
+    return;
+  }
+  synkState.koerer = true;
+  tegnSynkMaerke();
+  stilleGentegning = true;
+  try {
+    await genindlaes();
+    synkState.sidst = Date.now();
+  } finally {
+    stilleGentegning = false;
+    synkState.koerer = false;
+    tegnSynkMaerke();
+  }
+  if (manuel) toast('Up to date');
+}
+
 function lytPaaForbindelse() {
-  window.addEventListener('online', () => { opdaterOfflineMaerke(); tomOutbox(); });
+  window.addEventListener('online', () => {
+    opdaterOfflineMaerke();
+    // Koeen foerst: det, man selv har lavet, skal ind, foer man henter ned.
+    tomOutbox().then(() => synk(false));
+  });
   window.addEventListener('offline', opdaterOfflineMaerke);
+
+  /* Appen kommer frem igen. Vaerdien af et par sekunders spaerre er, at et
+     tilladelses-ark eller en delefunktion, der blinker forbi, ikke udloeser
+     en hentning - ikke at spare kald. */
+  const naarSynlig = () => {
+    if (document.visibilityState !== 'visible') return;
+    if (Date.now() - synkState.sidst < 3000) { tegnSynkMaerke(); return; }
+    synk(false);
+  };
+  document.addEventListener('visibilitychange', naarSynlig);
+  window.addEventListener('pageshow', naarSynlig);
+  window.addEventListener('focus', naarSynlig);
+
+  // Etiketten skal ikke lyve, mens appen ligger aaben: "just now" er forkert
+  // ti minutter senere. Ét minut er rigeligt praecist til "min ago".
+  setInterval(tegnSynkMaerke, 30000);
+
   opdaterOfflineMaerke();
+  tegnSynkMaerke();
   tomOutbox();
 }
 

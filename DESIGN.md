@@ -341,6 +341,29 @@ Dette **afviger bevidst** fra handover §5.6, der gjorde »efter fuldførelse« 
 standard. Andreas har valgt Todoist-kompatibilitet, fordi han kender syntaksen —
 og synligheden løses i stedet af preview-chippen, der altid skriver tilstanden ud.
 
+### Appen henter selv, når den kommer frem igen (v26)
+
+En app på hjemmeskærmen bliver **aldrig** genindlæst. Den ligger i baggrunden,
+og indtil v26 var den eneste vej til friske data at skifte skærm — hvert
+sideskift henter jo sin egen liste. Det er ikke noget, brugeren skal kende:
+en app, der viser gamle tal, er en app, man holder op med at stole på.
+
+To ting, og de skal begge være der:
+
+- **Automatisk** på `visibilitychange`, `pageshow` (iOS' bfcache) og `online`.
+  Ved `online` tømmes udbakken **først** — det, man selv har lavet, skal ind,
+  før der hentes ned. En 3-sekunders spærre, så et delings-ark, der blinker
+  forbi, ikke udløser en hentning.
+- **En synlig knap**, der samtidig siger *hvor gammelt* det viste er
+  (»just now«, »8 min ago«). Uden det svar kan man ikke skelne »der er ikke
+  sket noget« fra »appen har ikke spurgt«.
+
+**En baggrunds-hentning må kun gøre siden nyere, aldrig tommere.** Derfor
+findes flaget `stilleGentegning`: ingen »Loading…«-skelet, og en fejl undervejs
+efterlader det, der står, i fred. Uden det ville et tabt signal midt i en synk
+erstatte brugerens liste med en fejlside — samme fejlklasse som v11's regel om
+aldrig at gentegne fra serveren efter en offline-handling.
+
 ### Guiden bor i brugermenuen, ikke i navigationen (v25)
 
 En samlet gennemgang af appen — bygget som tingdos `/settings/guide/` — ligger

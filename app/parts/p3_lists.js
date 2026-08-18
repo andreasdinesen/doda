@@ -8,6 +8,17 @@ const sideState = { fokusId: null };
 /* Optegning + sideoversigten i hoejre side. Oversigten skal bygges EFTER
    indholdet, og der er mange veje ud af tegnSideIndhold - derfor ét sted
    her i stedet for et kald i hver gren. */
+/*
+ * En STILLE gentegning henter friske data uden at siden blinker: ingen
+ * "Loading…"-skelet, og en fejl efterlader det, der staar, i fred.
+ *
+ * Baggrunden er den samme som ved offline-handlinger (RUNE-ERFARINGER, v11):
+ * henter man data og taber forbindelsen, bliver listen ellers erstattet af en
+ * fejlside - brugeren aabner appen paa sin telefon og ser sit arbejde
+ * forsvinde. En baggrunds-synk maa kun kunne goere siden NYERE, aldrig tommere.
+ */
+let stilleGentegning = false;
+
 async function tegnSide() {
   await tegnSideIndhold();
   byggToc();
@@ -40,9 +51,11 @@ async function tegnSideIndhold() {
   }
   if (view.fase) { host.innerHTML = sidePlaceholder(view); return; }
 
-  host.innerHTML = `<section class="page"><div class="page-head">
+  if (!stilleGentegning) {
+    host.innerHTML = `<section class="page"><div class="page-head">
       <h1>${esc(view.label)}</h1><p class="lead">${esc(BESKRIVELSER[view.id])}</p>
     </div><div class="skeleton">Loading…</div></section>`;
+  }
 
   try {
     if (view.id === 'inbox') {
@@ -58,6 +71,8 @@ async function tegnSideIndhold() {
     bindListe();
   } catch (ex) {
     if (ex.status === 401) { state.user = null; render(); return; }
+    // Under en stille synk beholder vi det, der staar. Se noten ved flaget.
+    if (stilleGentegning) return;
     host.innerHTML = `<section class="page"><div class="empty"><p>${esc(ex.message)}</p></div></section>`;
   }
 }

@@ -260,7 +260,24 @@ button.version-old:hover { text-decoration: underline; }
 
 .topbar { width: 100%; max-width: 940px; display: flex; flex-direction: column; align-items: center; }
 
-.stats { align-self: flex-end; display: flex; gap: 6px; padding: 0 4px 14px; }
+.toprow { align-self: flex-end; display: flex; align-items: baseline; gap: 14px; }
+.stats { display: flex; gap: 6px; padding: 0 4px 14px; }
+
+/* Synk-knappen staar altid samme sted og siger selv, hvor gammelt det, man
+   ser paa, er. Paa telefonen er den den ENESTE vej til friske data uden at
+   skifte skaerm - derfor er den ikke gemt bag en menu. */
+.syncbtn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 0 4px 14px; border: 0; background: none; cursor: pointer;
+  color: inherit; font: inherit; text-transform: inherit; letter-spacing: inherit;
+  opacity: .75; transition: opacity .14s;
+}
+.syncbtn:hover { opacity: 1; }
+/* flex:none - ellers klemmer flex-foraeldren ikonet sammen (§4). */
+.syncbtn svg { flex: none; }
+.syncbtn.koerer svg { animation: synkspin 1s linear infinite; }
+@keyframes synkspin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .syncbtn.koerer svg { animation: none; } }
 .stats span::after { content: "·"; margin-left: 6px; opacity: .5; }
 .stats span:last-child::after { content: ""; }
 

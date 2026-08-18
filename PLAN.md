@@ -13,10 +13,10 @@
 
 | | |
 |---|---|
-| **Fase** | **v25 udgivet.** Kravbeskrivelsen er bygget; v9–v25 er Andreas' ønsker. |
+| **Fase** | **v26 udgivet.** Kravbeskrivelsen er bygget; v9–v26 er Andreas' ønsker. |
 | **Næste** | Ingen igangværende opgave. Se `HANDOVER-NAESTE.md`. |
-| **Tilstand** | 167 tests grønne, install-script **112.652 / 126.000 (89 %)** |
-| **Udgivet version** | **25** |
+| **Tilstand** | 167 tests grønne, install-script **113.614 / 126.000 (90 %)** |
+| **Udgivet version** | **26** |
 | **Sidst opdateret** | 2026-08-18 |
 
 **Sprog:** interfacet er **engelsk** (Andreas' valg — æøå er besværligt at taste).
@@ -482,6 +482,7 @@ brug. Begrundelserne står i README's versionshistorik; her er sporet:
 | 24 | Genvejssyntaks i gentagelsernes titelfelt (kun `#`/`@`) · ens fejlform i hele `/api/v1` |
 
 | 25 | **Guide-siden** — hele appen forklaret, nået fra brugermenuen |
+| 26 | **Automatisk synk** når appen kommer frem + synlig synk-knap med alder |
 
 ### Om guiden, og hvad den kostede
 

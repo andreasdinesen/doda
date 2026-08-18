@@ -736,7 +736,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 25;
+const APP_VERSION = 26;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -900,6 +900,8 @@ const ICONS = {
   out: '<path d="M14.5 4.5H18a1.5 1.5 0 011.5 1.5v12a1.5 1.5 0 01-1.5 1.5h-3.5"/><path d="M4.5 12h10M11 8.5l3.5 3.5-3.5 3.5"/>',
   link: '<path d="M10.5 13.5a3.5 3.5 0 005 0l3-3a3.5 3.5 0 00-5-5l-1 1"/><path d="M13.5 10.5a3.5 3.5 0 00-5 0l-3 3a3.5 3.5 0 005 5l1-1"/>',
   guide: '<path d="M4 5.5A1.5 1.5 0 015.5 4H10a2 2 0 012 2v12a2 2 0 00-2-2H4z"/><path d="M20 5.5A1.5 1.5 0 0018.5 4H14a2 2 0 00-2 2v12a2 2 0 012-2h6z"/>',
+  // Egen pil - IKKE repeat-ikonet, som i denne app betyder "gentagelse".
+  sync: '<path d="M19.5 12a7.5 7.5 0 01-12.9 5.3"/><path d="M4.5 12a7.5 7.5 0 0112.9-5.3"/><path d="M17.5 3v4h-4"/><path d="M6.5 21v-4h4"/>',
 };
 
 function icon(name, size = 18) {
@@ -1091,7 +1093,11 @@ function shellHtml() {
     <main class="main">
       <div class="topbar">
         <div class="offline-mark meta" id="offlineMark" hidden></div>
-        <div class="stats meta" id="statsHost">${statsHtml()}</div>
+        <div class="toprow">
+          <button class="syncbtn meta" id="syncBtn" title="Sync now" aria-label="Sync now">
+            ${icon('sync', 14)}<span id="syncLabel">just now</span></button>
+          <div class="stats meta" id="statsHost">${statsHtml()}</div>
+        </div>
         <div class="omni-card" id="omniCard">
           <div class="omni-field">
             <span class="omni-icon">${icon('search', 22)}</span>
@@ -1238,6 +1244,7 @@ function bindNav() {
 function bindShell() {
   bindNav();
   document.getElementById('userBtn').addEventListener('click', visBrugerMenu);
+  document.getElementById('syncBtn').addEventListener('click', () => synk(true));
   saetNavSkjult(navErSkjult());
   document.getElementById('pinBtn').addEventListener('click', () => {
     const skjul = !document.body.classList.contains('navskjult');
@@ -2022,6 +2029,17 @@ const sideState = { fokusId: null };
 /* Optegning + sideoversigten i hoejre side. Oversigten skal bygges EFTER
    indholdet, og der er mange veje ud af tegnSideIndhold - derfor ét sted
    her i stedet for et kald i hver gren. */
+/*
+ * En STILLE gentegning henter friske data uden at siden blinker: ingen
+ * "Loading…"-skelet, og en fejl efterlader det, der staar, i fred.
+ *
+ * Baggrunden er den samme som ved offline-handlinger (RUNE-ERFARINGER, v11):
+ * henter man data og taber forbindelsen, bliver listen ellers erstattet af en
+ * fejlside - brugeren aabner appen paa sin telefon og ser sit arbejde
+ * forsvinde. En baggrunds-synk maa kun kunne goere siden NYERE, aldrig tommere.
+ */
+let stilleGentegning = false;
+
 async function tegnSide() {
   await tegnSideIndhold();
   byggToc();
@@ -2054,9 +2072,11 @@ async function tegnSideIndhold() {
   }
   if (view.fase) { host.innerHTML = sidePlaceholder(view); return; }
 
-  host.innerHTML = `<section class="page"><div class="page-head">
+  if (!stilleGentegning) {
+    host.innerHTML = `<section class="page"><div class="page-head">
       <h1>${esc(view.label)}</h1><p class="lead">${esc(BESKRIVELSER[view.id])}</p>
     </div><div class="skeleton">Loading…</div></section>`;
+  }
 
   try {
     if (view.id === 'inbox') {
@@ -2072,6 +2092,8 @@ async function tegnSideIndhold() {
     bindListe();
   } catch (ex) {
     if (ex.status === 401) { state.user = null; render(); return; }
+    // Under en stille synk beholder vi det, der staar. Se noten ved flaget.
+    if (stilleGentegning) return;
     host.innerHTML = `<section class="page"><div class="empty"><p>${esc(ex.message)}</p></div></section>`;
   }
 }
@@ -4225,10 +4247,98 @@ function opdaterOfflineMaerke() {
     : `${icon('calm', 14)}<span>${koe} waiting to send</span>`;
 }
 
+/* ------------------------------------------------------------- synk */
+
+/*
+ * Paa hjemmeskaermen bliver appen ALDRIG genindlaest. Den ligger i baggrunden,
+ * og naar man vender tilbage, staar der praecis det, der stod, da man gik -
+ * ogsaa selv om man har fanget noget fra Siri eller rettet noget paa en anden
+ * enhed imens. Foer v26 var den eneste vej til friske data at skifte skaerm,
+ * fordi hvert sideskift henter sin egen liste. Det er ikke en indstilling,
+ * brugeren skal kende: en app, der viser gamle tal, er en app, man holder op
+ * med at stole paa.
+ *
+ * To ting loeser det, og de skal begge to vaere der:
+ *   - AUTOMATISK, naar appen kommer frem igen (visibilitychange), naar den
+ *     genskabes fra bfcache (pageshow), og naar forbindelsen vender tilbage.
+ *   - EN SYNLIG KNAP, der ogsaa siger HVORNAAR der sidst blev hentet. Uden
+ *     det svar kan man ikke vide, om der ikke er sket noget, eller om appen
+ *     bare ikke har spurgt.
+ */
+const synkState = { sidst: Date.now(), koerer: false };
+
+/** Hvor gammelt er det, man ser paa? Kort og uden falsk praecision. */
+function synkAlder() {
+  const sek = Math.round((Date.now() - synkState.sidst) / 1000);
+  if (sek < 45) return 'just now';
+  const min = Math.round(sek / 60);
+  if (min < 60) return `${min} min ago`;
+  const timer = Math.round(min / 60);
+  return timer < 24 ? `${timer} h ago` : 'a while ago';
+}
+
+function tegnSynkMaerke() {
+  const el = document.getElementById('syncLabel');
+  if (!el) return;
+  el.textContent = synkState.koerer ? 'syncing…' : synkAlder();
+  const knap = document.getElementById('syncBtn');
+  if (knap) knap.classList.toggle('koerer', synkState.koerer);
+}
+
+/**
+ * Henter state og den aktuelle side igen.
+ *
+ * `manuel` = brugeren trykkede selv. Kun da kvitteres der; en automatisk synk
+ * skal vaere lydloes, ellers popper der en toast op, hver gang telefonen
+ * laases op.
+ */
+async function synk(manuel) {
+  if (synkState.koerer) return;
+  if (!navigator.onLine) {
+    opdaterOfflineMaerke();
+    if (manuel) toast('No connection — showing what was last loaded.');
+    return;
+  }
+  synkState.koerer = true;
+  tegnSynkMaerke();
+  stilleGentegning = true;
+  try {
+    await genindlaes();
+    synkState.sidst = Date.now();
+  } finally {
+    stilleGentegning = false;
+    synkState.koerer = false;
+    tegnSynkMaerke();
+  }
+  if (manuel) toast('Up to date');
+}
+
 function lytPaaForbindelse() {
-  window.addEventListener('online', () => { opdaterOfflineMaerke(); tomOutbox(); });
+  window.addEventListener('online', () => {
+    opdaterOfflineMaerke();
+    // Koeen foerst: det, man selv har lavet, skal ind, foer man henter ned.
+    tomOutbox().then(() => synk(false));
+  });
   window.addEventListener('offline', opdaterOfflineMaerke);
+
+  /* Appen kommer frem igen. Vaerdien af et par sekunders spaerre er, at et
+     tilladelses-ark eller en delefunktion, der blinker forbi, ikke udloeser
+     en hentning - ikke at spare kald. */
+  const naarSynlig = () => {
+    if (document.visibilityState !== 'visible') return;
+    if (Date.now() - synkState.sidst < 3000) { tegnSynkMaerke(); return; }
+    synk(false);
+  };
+  document.addEventListener('visibilitychange', naarSynlig);
+  window.addEventListener('pageshow', naarSynlig);
+  window.addEventListener('focus', naarSynlig);
+
+  // Etiketten skal ikke lyve, mens appen ligger aaben: "just now" er forkert
+  // ti minutter senere. Ét minut er rigeligt praecist til "min ago".
+  setInterval(tegnSynkMaerke, 30000);
+
   opdaterOfflineMaerke();
+  tegnSynkMaerke();
   tomOutbox();
 }
 
