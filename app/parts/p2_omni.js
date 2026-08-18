@@ -402,7 +402,7 @@ async function aktiver() {
 function gaaTilNavigation(mode, id) {
   if (mode === '/') gaaTilProjekt(id);
   else if (mode === '#') gaaTil('next', { context: id });
-  else { state.filterArea = id; gaaTil('projects'); }
+  else gaaTil('projects', { area: id });
 }
 
 /**

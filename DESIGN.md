@@ -341,6 +341,24 @@ Dette **afviger bevidst** fra handover §5.6, der gjorde »efter fuldførelse« 
 standard. Andreas har valgt Todoist-kompatibilitet, fordi han kender syntaksen —
 og synligheden løses i stedet af preview-chippen, der altid skriver tilstanden ud.
 
+### At gå til en skærm betyder at se den ren (v32)
+
+`gaaTil()` nulstillede kun undertilstanden, **hvis skærmen skiftede**. Det gjorde
+et projekt til en blindgyde: står man inde i ét, er `state.view` allerede
+`projects`, så hverken sidebaren eller »← Projects« ændrede noget — `openProject`
+blev stående, og siden tegnede sig selv igen. Der skete tilsyneladende ingenting.
+Samme fejl ramte kontekstfilteret i Next Actions og projektfilteret i logbogen.
+
+Reglen nu: **`gaaTil()` rydder altid `openProject`, `filterContext`,
+`filterArea` og `logProject`**, og `opt` sætter det, der er ment
+(`gaaTil('next', {context})`, `gaaTil('projects', {area})`). Et filter er noget,
+man vælger — ikke noget, man arver.
+
+Den generelle form, værd at kende igen: **en nulstilling, der er betinget af
+»kun hvis noget skiftede«, svigter præcis dér, hvor brugeren står i en
+undertilstand af den skærm, han klikker på.** Og det samme klikmål skal kunne
+rydde den tilstand, det selv kan sætte.
+
 ### ⌘+Enter gemmer — bundet på knappen, ikke på »den primære« (v31)
 
 En rude, man har tastet sig igennem, skal kunne afsluttes uden at gå efter

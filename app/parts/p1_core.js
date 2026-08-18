@@ -5,7 +5,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 31;
+const APP_VERSION = 32;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -550,18 +550,38 @@ function bindShell() {
   bindOmni();
 }
 
+/*
+ * At gaa til en skaerm betyder at se den REN.
+ *
+ * Nulstillingen laa foer bag `if (skifter)`, og det gjorde et projekt til en
+ * blindgyde: staar man inde i ét, er `state.view` allerede 'projects', saa
+ * hverken sidebaren eller »← Projects« aendrede noget - `openProject` blev
+ * staaende, og siden tegnede sig selv igen. Der skete tilsyneladende
+ * ingenting. Samme fejl ramte et kontekstfilter i Next Actions og et
+ * projektfilter i logbogen.
+ *
+ * Reglen nu: gaaTil() rydder ALTID undertilstanden, og `opt` saetter det, der
+ * er ment. Et filter er noget, man vaelger - ikke noget, man arver.
+ */
 function gaaTil(view, opt) {
   const skifter = state.view !== view;
+  // Var der noget at rydde, er skaermen aendret, selv om `view` er den samme.
+  const havdeFilter = !!(state.openProject || state.filterContext
+    || state.filterArea || state.logProject);
   state.view = view;
-  if (skifter) { state.filterContext = null; state.openProject = null; }
+  state.openProject = null;
+  state.filterContext = null;
+  state.filterArea = null;
+  state.logProject = null;
   if (opt && opt.context !== undefined) state.filterContext = opt.context;
+  if (opt && opt.area !== undefined) state.filterArea = opt.area;
   document.body.classList.remove('navopen');
   opdaterNav();
   tegnGennemgangsbaand();
   tegnSide();
   // Scroll kun til toppen ved reelt sideskift - ellers kastes brugeren op,
   // hver gang en inline-redigering gentegner (RUNE-ERFARINGER §4).
-  if (skifter) window.scrollTo(0, 0);
+  if (skifter || havdeFilter) window.scrollTo(0, 0);
 }
 
 /** Henter state og gentegner NAV og SIDE, men aldrig hele skallen. */

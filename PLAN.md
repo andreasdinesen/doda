@@ -13,10 +13,10 @@
 
 | | |
 |---|---|
-| **Fase** | **v31 udgivet.** Kravbeskrivelsen er bygget; v9–v31 er Andreas' ønsker. |
+| **Fase** | **v32 udgivet.** Kravbeskrivelsen er bygget; v9–v32 er Andreas' ønsker. |
 | **Næste** | Ingen igangværende opgave. Se `HANDOVER-NAESTE.md`. |
-| **Tilstand** | 175 tests grønne, install-script **115.622 / 126.000 (91 %)** |
-| **Udgivet version** | **31** |
+| **Tilstand** | 175 tests grønne, install-script **115.650 / 126.000 (91 %)** |
+| **Udgivet version** | **32** |
 | **Sidst opdateret** | 2026-08-18 |
 
 **Sprog:** interfacet er **engelsk** (Andreas' valg — æøå er besværligt at taste).
@@ -488,6 +488,7 @@ brug. Begrundelserne står i README's versionshistorik; her er sporet:
 | 29 | Rettelse: sidste række i en liste startede også en fangst (fra v27) |
 | 30 | **Forslag** mens man skriver `/`, `@` eller `#` · søgning på tolket titel |
 | 31 | **⌘+Enter gemmer** en opgave, en gentagelse eller et projekt |
+| 32 | Rettelse: et projekt var en blindgyde — nulstilling lå bag »hvis skærmen skifter« |
 
 ### Om guiden, og hvad den kostede
 
