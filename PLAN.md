@@ -13,11 +13,11 @@
 
 | | |
 |---|---|
-| **Fase** | **v23 udgivet.** Kravbeskrivelsen er bygget; v9–v23 er Andreas' ønsker. |
-| **Næste** | Ingen igangværende opgave. Se `HANDOVER-NAESTE.md` for hvad der venter på Andreas. |
-| **Tilstand** | 156 tests grønne, install-script **106.799 / 126.000 (84 %)** |
-| **Udgivet version** | **23** |
-| **Sidst opdateret** | 2026-08-17 |
+| **Fase** | **v25 udgivet.** Kravbeskrivelsen er bygget; v9–v25 er Andreas' ønsker. |
+| **Næste** | Ingen igangværende opgave. Se `HANDOVER-NAESTE.md`. |
+| **Tilstand** | 167 tests grønne, install-script **112.652 / 126.000 (89 %)** |
+| **Udgivet version** | **25** |
+| **Sidst opdateret** | 2026-08-18 |
 
 **Sprog:** interfacet er **engelsk** (Andreas' valg — æøå er besværligt at taste).
 Parseren er tosproget: engelsk primært, dansk virker fortsat. Kode, kommentarer og
@@ -479,19 +479,27 @@ brug. Begrundelserne står i README's versionshistorik; her er sporet:
 | 19–22 | Notion-sidens **indhold** vist i doda, og to rettelser af billed-links |
 | 23 | Kalenderen peger **tilbage** til opgaven (`?item=<id>`) |
 
-### Ikke udgivet endnu — venter på Andreas' ja
+| 24 | Genvejssyntaks i gentagelsernes titelfelt (kun `#`/`@`) · ens fejlform i hele `/api/v1` |
 
-De to kendte huller fra `HANDOVER-NAESTE.md` er lukket. `APP_VERSION` står
-stadig på 23; bliver det udgivet, er det v24.
+| 25 | **Guide-siden** — hele appen forklaret, nået fra brugermenuen |
 
-- **Fejlsvarene i `/api/v1` har samme form hele vejen.** Fem ruter svarede
-  `{error: 'not found'}` uden `message` (F2's to lag), og tre 400-svar
-  (`title is required`, `name is required` ×2) gjorde det samme.
-  `tests/apierror.test.mjs` tjekker nu både de konkrete ruter og **formen** —
-  koden skal matche `^[a-z][a-z0-9_]*$`, og beskeden skal være en sætning.
-  Testen er set fejle på den gamle kode: 9 af 11 røde.
-- **Genvejssyntaks i gentagelses-rudens titelfelt** — kun `#` og `@`, aldrig
-  reglen. Se `DESIGN.md §3`. Nye navne oprettes først ved Save.
+### Om guiden, og hvad den kostede
+
+- **Guide-siden** (`app/parts/p9_guide.js`) — en samlet gennemgang af appen,
+  nået fra menuen på brugerknappen. Bygget i tingdos form (dele → grupper →
+  emner med mærker) efter at have læst forlægget gennem Andreas' egen Chrome;
+  indholdet er dodas eget. 4 dele, 8 grupper, 25 emner, 72 rækker.
+  Syntaksen kommer fra `syntaksTabel()` og genvejene fra `GENVEJE`, så guiden
+  ikke kan drive fra Settings. Se `DESIGN.md §3`.
+  Install-scriptet voksede 107.326 → **112.631 tegn (89 %)**.
+
+  Målt med leave-one-out, så det ikke skal gættes igen: guidens **tekst**
+  kostede 6.274 tegn, dens **CSS kun 364**. Én runde stramning af prosaen
+  (én sætning pr. indledning, én påstand pr. række, ingen tast gentaget fra
+  tastatur-afsnittet) tog teksten ned til ~4.700 — **1.566 tegn sparet uden
+  at fjerne et eneste emne**. En anden runde på markup og småting gav **0**:
+  de 30 tegn, teksten tabte, kom tilbage som kode. Næste greb ville være at
+  skære hele emner væk — et indholdsvalg, ikke et teknisk.
 
 ---
 

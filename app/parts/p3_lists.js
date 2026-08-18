@@ -19,6 +19,7 @@ async function tegnSideIndhold() {
   const view = viewById(state.view);
 
   if (view.id === 'settings') { host.innerHTML = sideSettings(); bindSettings(); return; }
+  if (view.id === 'guide') { host.innerHTML = sideGuide(); bindGuide(); return; }
   if (view.id === 'contexts') { host.innerHTML = sideContexts(); bindContexts(); return; }
   if (view.id === 'repeat') { await sideRepeat(); return; }
   if (view.id === 'waiting') { await sideStatusliste('waiting', 'Waiting For'); return; }
@@ -838,15 +839,7 @@ function sideSettings() {
       </div></div>
 
     <div class="card"><h2>Capture syntax</h2>
-      <table class="syntax">
-        <tr><td><code>+ text</code></td><td>task (also the default)</td></tr>
-        <tr><td><code>* text</code></td><td>note</td></tr>
-        <tr><td><code>#context</code></td><td>add a context</td></tr>
-        <tr><td><code>@project</code> · <code>/project</code></td><td>file under a project — <code>/"two words"</code></td></tr>
-        <tr><td><code>!date</code></td><td><code>!tomorrow</code>, <code>!friday</code>, <code>!3/9</code>, <code>!in 2 weeks</code></td></tr>
-        <tr><td><code>~date</code></td><td>hide until that date</td></tr>
-        <tr><td><code>text // more</code></td><td>everything after <code>//</code> becomes the description</td></tr>
-      </table>
+      ${syntaksTabel()}
       <p class="gate-note" style="text-align:left">Danish words work too: <code>!i morgen</code>, <code>!om 2 uger</code>.</p>
     </div>
 

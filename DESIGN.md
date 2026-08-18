@@ -341,6 +341,37 @@ Dette **afviger bevidst** fra handover §5.6, der gjorde »efter fuldførelse« 
 standard. Andreas har valgt Todoist-kompatibilitet, fordi han kender syntaksen —
 og synligheden løses i stedet af preview-chippen, der altid skriver tilstanden ud.
 
+### Guiden bor i brugermenuen, ikke i navigationen (v25)
+
+En samlet gennemgang af appen — bygget som tingdos `/settings/guide/` — ligger
+som en side med `group: 0`, altså uden for sidebaren. Den nås fra menuen på
+brugerknappen, ved siden af Settings og genvejsarket: det er dér, man i forvejen
+leder efter »om appen«-ting, og en ellevte linje i navigationen ville koste
+plads hver eneste dag for noget, man læser to gange.
+
+**Formen er tingdos, indholdet er dodas.** Fire **dele** (»How doda works«,
+kommandobaren, tastaturet, uden for browseren), inde i dem **grupper** med et
+versalt mærke (CAPTURE, ACT, ORGANISE …), og inde i dem **emner** med en kort
+indledning, rækker med et mærke i venstre side, og af og til en »In short«.
+Siden er ren data i `GUIDE_DELE` — teksten står ét sted, opsætningen et andet.
+
+Tre ting holder guiden fra at komme til at lyve:
+
+- **Fangst-syntaksen kommer fra `syntaksTabel()`** og genvejene fra `GENVEJE` —
+  samme kilder som Settings og genvejsarket bruger. Ændres syntaksen ét sted,
+  følger alle tre med.
+- **doda er ikke tingdo, og guiden må ikke arve forlæggets funktioner.**
+  Fokus *tager ikke tid* (der er ingen registrering), der er ingen
+  »Scheduled«-liste, og gentagelser findes kun her.
+- Mærket i venstre side afgøres af **teksten**, ikke af dens længde: er den
+  skrevet med versaler, er den en etiket, ellers er den noget, man kan taste
+  af. En længderegel gjorde `!every monday` til en etiket, og
+  `text-transform: uppercase` skrev den som `!EVERY MONDAY` — altså en syntaks,
+  der ikke findes.
+
+Hvert emne er en `<h2>`, så sideoversigten i højre kant (§9b i erfaringsfilen)
+bliver guidens indholdsfortegnelse uden en linje ny mekanik.
+
 ### Hvor syntaksen virker — og hvor den med vilje er skåret ned (v24)
 
 Genvejssyntaksen virker tre steder: i fangst, i **titlen man retter** i

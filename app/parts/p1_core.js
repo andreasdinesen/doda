@@ -5,7 +5,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 24;
+const APP_VERSION = 25;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -168,6 +168,7 @@ const ICONS = {
   pin: '<path d="M9 3.5h6l-1 5 3 3.5H7l3-3.5z"/><path d="M12 12v8.5"/>',
   out: '<path d="M14.5 4.5H18a1.5 1.5 0 011.5 1.5v12a1.5 1.5 0 01-1.5 1.5h-3.5"/><path d="M4.5 12h10M11 8.5l3.5 3.5-3.5 3.5"/>',
   link: '<path d="M10.5 13.5a3.5 3.5 0 005 0l3-3a3.5 3.5 0 00-5-5l-1 1"/><path d="M13.5 10.5a3.5 3.5 0 00-5 0l-3 3a3.5 3.5 0 005 5l1-1"/>',
+  guide: '<path d="M4 5.5A1.5 1.5 0 015.5 4H10a2 2 0 012 2v12a2 2 0 00-2-2H4z"/><path d="M20 5.5A1.5 1.5 0 0018.5 4H14a2 2 0 00-2 2v12a2 2 0 012-2h6z"/>',
 };
 
 function icon(name, size = 18) {
@@ -195,6 +196,8 @@ const VIEWS = [
   // brugerknappen, hvor kontoen i forvejen bor - to indgange til det samme
   // sted er én for meget.
   { id: 'settings', label: 'Settings', icon: 'settings', group: 0 },
+  // Guiden naas samme sted som Settings: menuen paa brugerknappen.
+  { id: 'guide', label: 'Guide', icon: 'guide', group: 0 },
 ];
 
 const viewById = (id) => VIEWS.find((v) => v.id === id) || VIEWS[0];
@@ -216,7 +219,28 @@ const BESKRIVELSER = {
   log: 'What you have finished, in chronological order.',
   review: 'The weekly review, step by step.',
   settings: 'Appearance, account and access.',
+  guide: 'How doda works — the whole thing, in the order you meet it.',
 };
+
+/*
+ * Fangst-syntaksen staar bade i Settings og i guiden. Ét sted, ellers driver
+ * de fra hinanden - og en legende, der lover mindre end parseren kan, betyder
+ * at funktionen i praksis ikke findes (RUNE-ERFARINGER, doda v9).
+ *
+ * Raekkerne skal matche app/shared/parse.js: + og * er praefikser, # @ / ! ~
+ * er markoerer, og " // " skiller beskrivelsen fra.
+ */
+function syntaksTabel() {
+  return `<table class="syntax">
+    <tr><td><code>+ text</code></td><td>task (also the default)</td></tr>
+    <tr><td><code>* text</code></td><td>note</td></tr>
+    <tr><td><code>#context</code></td><td>add a context</td></tr>
+    <tr><td><code>@project</code> · <code>/project</code></td><td>file under a project — <code>/"two words"</code></td></tr>
+    <tr><td><code>!date</code></td><td><code>!tomorrow</code>, <code>!friday</code>, <code>!3/9</code>, <code>!in 2 weeks</code></td></tr>
+    <tr><td><code>~date</code></td><td>hide until that date</td></tr>
+    <tr><td><code>text // more</code></td><td>everything after <code>//</code> becomes the description</td></tr>
+  </table>`;
+}
 
 /* ------------------------------------------------------------ optegning */
 
@@ -605,6 +629,7 @@ function visBrugerMenu() {
       <div class="usermenu-name">${esc(state.user.username)}</div>
       <div class="meta">Signed in${state.config.secureContext ? '' : ' · plain http'}</div>
     </div>
+    <button class="usermenu-item" data-go="guide">${icon('guide', 17)}<span>Guide</span></button>
     <button class="usermenu-item" data-go="settings">${icon('settings', 17)}<span>Settings</span></button>
     <button class="usermenu-item" data-go="shortcuts">${icon('log', 17)}<span>Keyboard shortcuts</span></button>
     <button class="usermenu-item danger" data-go="logout">${icon('out', 17)}<span>Log out</span></button>`;
@@ -620,6 +645,7 @@ function visBrugerMenu() {
       const hvad = el.dataset.go;
       luk();
       if (hvad === 'settings') gaaTil('settings');
+      else if (hvad === 'guide') gaaTil('guide');
       else if (hvad === 'shortcuts') visGenveje();
       else {
         await api('POST', '/api/logout', {});

@@ -1,7 +1,7 @@
 # Handover — doda
 
 **Til:** Claude Code i en ny session
-**Skrevet:** 2026-08-17, efter v23
+**Skrevet:** 2026-08-18, efter v25
 
 > **Læs i denne rækkefølge, før du rører noget:**
 > 1. `~/ClaudeMacBook/RUNE-ERFARINGER.md` — fælles lærepenge for alle runer.
@@ -16,12 +16,12 @@
 
 ## Tilstand
 
-**v23 er udgivet. Arbejdsmappen er ren.** Alt er pushet.
+**v25 er udgivet. Arbejdsmappen er ren.** Alt er pushet.
 
 | | |
 |---|---|
 | Tests | **167 grønne** (`node --test tests/*.mjs`) |
-| Install-script | **107.312 / 126.000 tegn (85 %)** |
+| Install-script | **112.652 / 126.000 tegn (89 %)** — se `PLAN.md` om guidens pris |
 | Kode | `server.js` 3.594 linjer + syv moduler |
 
 Kør altid `python3 build_rune.py` efter en ændring i `app/` — den samler
@@ -43,6 +43,7 @@ vedhæftninger, eksport/import, Todoist-import, passkeys, PWA) har den:
 | `app/notion.js` | Notion: søg, titler, og sidens indhold vist i doda |
 | `app/webauthn.js` | Passkeys |
 | `app/shared/parse.js` | Genvejssyntaksen — **én parser, tre køresteder** |
+| `app/parts/p9_guide.js` | Guiden: ren data i `GUIDE_DELE`, nået fra brugermenuen |
 
 Notifikationer går **primært gennem kalenderfeedet** (`VALARM`), ikke push.
 Push er alternativet for den, der ikke abonnerer med sin kalender.
@@ -96,8 +97,7 @@ Det skete tre gange. Brug Edit-værktøjet, eller skriv filen efter hvert trin.
 
 - **Ingen deling og ingen flere brugere.** Bevidst — se `DESIGN.md §7`.
 
-De to andre huller blev lukket 2026-08-18 og venter på at blive udgivet
-(`APP_VERSION` står stadig på 23 — se `PLAN.md`):
+De to andre blev lukket i **v24**:
 
 - Fejlsvarene i `/api/v1` har samme form hele vejen nu. Det var ikke kun
   `GET /api/v1/items/<id>`: fem ruter svarede `{error: 'not found'}` uden
@@ -113,7 +113,10 @@ De to andre huller blev lukket 2026-08-18 og venter på at blive udgivet
 ## Pladsen i runen
 
 Install-scriptet må højst fylde **126.000 tegn** (hævet fra 120.000 i v7).
-Det fylder **106.799 (84 %)**, og build'et **fejler højt** ved loftet.
+Det fylder **112.652 (89 %)**, og build'et **fejler højt** ved loftet.
+Guiden (v25) er den dyreste enkeltside, appen har: dens tekst kostede 6.274 tegn
+og blev trimmet til ~4.700. Dens CSS koster kun 364. Skal der spares mere dér,
+er næste greb at skære hele emner væk — et indholdsvalg, ikke et teknisk.
 
 Kommentar-strip i den udgivne kopi (v10) gav 24 %; kilderne beholder alt.
 Bliver det trangt igen, står de målte muligheder i `PLAN.md` — kort:

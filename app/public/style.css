@@ -1414,6 +1414,40 @@ button.chip:not(.flat):hover { text-decoration: line-through; }
 .shortcuts td { padding: 5px 0; }
 .shortcuts td:first-child { width: 120px; }
 
+/* ---- guiden ---- */
+
+/* Delens navn staar over sin egen streg, saa de fire dele kan skelnes fra
+   emnernes h2 uden at konkurrere med dem om opmaerksomheden. */
+.guide-part { margin: 34px 0 18px; padding-top: 18px; border-top: 1px solid var(--border); }
+.guide-part:first-of-type { margin-top: 22px; }
+.guide-part-name { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+.guide-group {
+  margin: 26px 0 4px; font-size: 11.5px; font-weight: 700;
+  letter-spacing: .09em; text-transform: uppercase; color: var(--muted);
+}
+
+.guide-card { padding-top: 4px; padding-bottom: 4px; }
+.guide-lead { margin: 6px 0 12px; }
+.guide-go { margin-top: 14px; }
+.guide-row { display: flex; gap: 14px; align-items: flex-start; padding: 12px 0; border-top: 1px solid var(--border); }
+.guide-row:first-child { border-top: 0; }
+/* flex:none - ellers klemmer flex-foraeldren maerket sammen (§4). */
+.guide-badge { flex: none; width: 96px; padding-top: 1px; }
+.guide-text { flex: 1; min-width: 0; }
+.guide-key, .guide-tag {
+  display: inline-block; max-width: 100%; padding: 2px 7px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--bg); font-size: 12px;
+  overflow-wrap: break-word;
+}
+.guide-tag { font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.guide-short { margin: 14px 0 4px; color: var(--muted); font-size: 13.5px; }
+
+@media (max-width: 900px) {
+  /* Paa en telefon er 96 px til et maerke en fjerdedel af skaermen. */
+  .guide-row { flex-direction: column; gap: 6px; }
+  .guide-badge { width: auto; }
+}
+
 .shortcuts kbd {
   display: inline-grid;
   place-items: center;
