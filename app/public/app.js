@@ -736,7 +736,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 28;
+const APP_VERSION = 29;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -2041,7 +2041,16 @@ document.addEventListener('keydown', (e) => {
   // Star fokus i en liste med tastaturafklaring, ejer LISTEN bogstaverne
   // (n = next, w = waiting, x = delete). preventDefault i raekkens egen
   // handler stopper ikke boblingen hertil - det skal dette tjek.
+  //
+  // Se ogsaa paa haendelsens MAAL og ikke kun paa det, der har fokus NU:
+  // en raekke, der flytter sig selv ud af listen (v27), er allerede vaek, naar
+  // haendelsen naar herop, og saa er activeElement faldet tilbage til body.
+  // Maalet ved stadig, hvor det kom fra - ogsaa efter det er taget ud af
+  // dokumentet. (Raekken stopper i forvejen udbredelsen; det her er
+  // spaerren for alt det, nogen bygger i morgen.)
+  const fra = e.target;
   if (el && el.closest && el.closest('[data-keynav]')) return;
+  if (fra && fra.closest && fra.closest('[data-keynav]')) return;
 
   const omni = omniEl();
   if (!omni) return;
@@ -2323,12 +2332,29 @@ async function raekkeTaster(e) {
   const id = el.dataset.id;
   if (e.metaKey || e.ctrlKey || e.altKey) return;
 
-  if (e.key === 'ArrowDown' || e.key === 'j') { e.preventDefault(); naboRaekke(el, 1).focus(); return; }
-  if (e.key === 'ArrowUp' || e.key === 'k') { e.preventDefault(); naboRaekke(el, -1).focus(); return; }
+  /*
+   * Har RAEKKEN taget tasten, maa ingen anden ogsaa faa den.
+   *
+   * `preventDefault()` alene stopper ikke boblingen op til dokumentets
+   * "begynd bare at skrive"-handler. Den har sit eget vaern (den traekker sig,
+   * naar fokus staar inde i et [data-keynav]), men fra v27 fjerner en
+   * statusaendring raekken MED DET SAMME - altsaa inde i denne handler - saa
+   * fokus er faldet tilbage til siden, foer haendelsen naar derop. Vaernet saa
+   * ingen liste, og "s" flyttede baade opgaven til Someday OG aabnede
+   * paletten med et "s".
+   *
+   * Derfor stopper vi udbredelsen her: den, der har handlet paa tasten, ejer
+   * den. Det er ikke en lappeloesning oven paa vaernet - det er den rigtige
+   * ende at goere det i.
+   */
+  const mit = () => { e.preventDefault(); e.stopPropagation(); };
+
+  if (e.key === 'ArrowDown' || e.key === 'j') { mit(); naboRaekke(el, 1).focus(); return; }
+  if (e.key === 'ArrowUp' || e.key === 'k') { mit(); naboRaekke(el, -1).focus(); return; }
   // Ud af listen igen - sa ejer "begynd bare at skrive" bogstaverne pa ny.
-  if (e.key === 'Escape') { e.preventDefault(); el.blur(); return; }
+  if (e.key === 'Escape') { mit(); el.blur(); return; }
   if (e.key === 'Enter') {
-    e.preventDefault();
+    mit();
     const it = state.items.find((x) => x.id === id);
     if (it) aabnElement(it);
     return;
@@ -2339,7 +2365,7 @@ async function raekkeTaster(e) {
   const husk = () => { sideState.fokusId = naeste && naeste.dataset.id !== id ? naeste.dataset.id : null; };
 
   if (e.key === ' ') {
-    e.preventDefault();
+    mit();
     const emne = state.items.find((x) => x.id === id);
     if (emne && emne.kind === 'note') return;   // en note kan ikke udfoeres
     husk();
@@ -2348,13 +2374,13 @@ async function raekkeTaster(e) {
   }
   const statusTaster = { n: 'next', w: 'waiting', s: 'someday', q: 'queued' };
   if (statusTaster[e.key]) {
-    e.preventDefault();
+    mit();
     husk();
     await saetStatus(id, statusTaster[e.key]);
     return;
   }
   if (e.key === 'x') {
-    e.preventDefault();
+    mit();
     husk();
     await slet(id);
     return;
@@ -2363,7 +2389,7 @@ async function raekkeTaster(e) {
   // Kontekst og projekt skal ogsaa kunne saettes uden mus (handover §7).
   // De aabner en lille vaelger i stedet for at gaette pa et navn.
   if (e.key === 'c' || e.key === 'p') {
-    e.preventDefault();
+    mit();
     const it = state.items.find((x) => x.id === id);
     if (it) vaelgHurtigt(it, e.key === 'c' ? 'context' : 'project');
   }

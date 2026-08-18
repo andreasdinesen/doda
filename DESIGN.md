@@ -341,6 +341,27 @@ Dette **afviger bevidst** fra handover §5.6, der gjorde »efter fuldførelse« 
 standard. Andreas har valgt Todoist-kompatibilitet, fordi han kender syntaksen —
 og synligheden løses i stedet af preview-chippen, der altid skriver tilstanden ud.
 
+### Den, der har handlet på tasten, ejer den (v29)
+
+Fangst-handleren (»begynd bare at skrive«) trækker sig, når fokus står i en
+liste med tastaturafklaring. Det værn hang på `document.activeElement` — og
+v27's optimistiske opdatering rykkede tæppet væk under det: rækken fjernes nu
+**inde i** tastetryk-håndteringen, og er det den **sidste** række i listen, er
+der ingen næste at give fokus til. Fokus faldt til `body`, værnet så ingen
+liste, og `s` både flyttede opgaven til Someday og åbnede paletten med et »s«.
+
+To lag, fordi ét ikke er nok:
+
+- **Rækken stopper udbredelsen** (`stopPropagation`), når den selv har
+  handlet på tasten. `preventDefault()` alene gør det ikke.
+- **Værnet ser på hændelsens `target`**, ikke kun på hvad der har fokus
+  bagefter. Et element ved stadig, hvor det kom fra, også efter det er taget
+  ud af dokumentet — det dækker alt, hvad der bygges oven på senere.
+
+Lærestregen er større end fejlen: **en optimistisk opdatering, der fjerner det
+fokuserede element, bryder ethvert værn, der spørger om fokus.** Og fejlen
+findes kun ved den SIDSTE række — med to rækker opførte alt sig pænt.
+
 ### Skærmen udfylder — den bestemmer ikke (v28)
 
 »Alt ind i Inbox« er stadig princippet: fang først, afklar bagefter. Men der er

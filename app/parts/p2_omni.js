@@ -476,7 +476,16 @@ document.addEventListener('keydown', (e) => {
   // Star fokus i en liste med tastaturafklaring, ejer LISTEN bogstaverne
   // (n = next, w = waiting, x = delete). preventDefault i raekkens egen
   // handler stopper ikke boblingen hertil - det skal dette tjek.
+  //
+  // Se ogsaa paa haendelsens MAAL og ikke kun paa det, der har fokus NU:
+  // en raekke, der flytter sig selv ud af listen (v27), er allerede vaek, naar
+  // haendelsen naar herop, og saa er activeElement faldet tilbage til body.
+  // Maalet ved stadig, hvor det kom fra - ogsaa efter det er taget ud af
+  // dokumentet. (Raekken stopper i forvejen udbredelsen; det her er
+  // spaerren for alt det, nogen bygger i morgen.)
+  const fra = e.target;
   if (el && el.closest && el.closest('[data-keynav]')) return;
+  if (fra && fra.closest && fra.closest('[data-keynav]')) return;
 
   const omni = omniEl();
   if (!omni) return;

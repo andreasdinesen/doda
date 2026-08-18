@@ -1,7 +1,7 @@
 # Handover — doda
 
 **Til:** Claude Code i en ny session
-**Skrevet:** 2026-08-18, efter v28
+**Skrevet:** 2026-08-18, efter v29
 
 > **Læs i denne rækkefølge, før du rører noget:**
 > 1. `~/ClaudeMacBook/RUNE-ERFARINGER.md` — fælles lærepenge for alle runer.
@@ -16,12 +16,12 @@
 
 ## Tilstand
 
-**v28 er udgivet. Arbejdsmappen er ren.** Alt er pushet.
+**v29 er udgivet. Arbejdsmappen er ren.** Alt er pushet.
 
 | | |
 |---|---|
 | Tests | **175 grønne** (`node --test tests/*.mjs`) |
-| Install-script | **114.653 / 126.000 tegn (90 %)** — se `PLAN.md` om guidens pris |
+| Install-script | **114.768 / 126.000 tegn (91 %)** — se `PLAN.md` om guidens pris |
 | Kode | `server.js` 3.594 linjer + syv moduler |
 
 Kør altid `python3 build_rune.py` efter en ændring i `app/` — den samler
@@ -167,6 +167,10 @@ intet. `parse.js` er 25 KB rå og koster 180 tegn, fordi den også ligger i
 - **Notions filadresser er signerede og udløber.** Link til
   `notion.so/<side-id>#<blok-id>` — blok-id'et **alene** åbner en tom side.
 - **PNG komprimeres ikke af brotli.** Alt binært koster over 125 % af sin vægt.
+- **En optimistisk opdatering, der fjerner det fokuserede element, bryder
+  ethvert værn, der spørger om `document.activeElement`.** Det ramte v27→v29:
+  `s` på den SIDSTE række i en liste flyttede opgaven *og* åbnede paletten.
+  Med to rækker opførte alt sig pænt — afprøv altid med præcis én tilbage.
 - **Skriv aldrig rå kontroltegn i et regex** — filen bliver binær, og `grep`
   holder op med at virke.
 
