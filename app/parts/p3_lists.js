@@ -423,8 +423,13 @@ async function slet(id) {
  * Navne, der ikke findes endnu, oprettes ikke her. De staar i udkastet som
  * `nytProjekt`/`nyeKontekster` og bliver foerst til noget ved Save - ruden
  * ma ikke aendre noget bag om et Cancel.
+ *
+ * `kunNavne` tager KUN @projekt og #kontekst og lader al `!`-tekst staa.
+ * Gentagelses-ruden bruger det: den har sit eget regelfelt, saa en dato eller
+ * en regel i titlen dér hverken kan eller skal lande noget sted - og en
+ * parser, der spiste teksten alligevel, ville vaere tavst datatab.
  */
-function anvendSyntaks(u, raa) {
+function anvendSyntaks(u, raa, kunNavne) {
   const p = (typeof dodaParse !== 'undefined') ? dodaParse : null;
   if (!p || !raa || !raa.trim()) return null;
   const r = p.tolkFangst(raa);
@@ -452,7 +457,7 @@ function anvendSyntaks(u, raa) {
   // Datoerne tages kun, naar ALT kunne tolkes. Er der en advarsel, staar der
   // en `!`-tekst tilbage, parseren ikke forstod - og saa skal titlen blive,
   // som brugeren skrev den.
-  if (!r.warnings.length) {
+  if (!kunNavne && !r.warnings.length) {
     if (r.due) { u.due_date = r.due.dato; u.due_time = r.due.tid || null; titel = r.title; fandt = true; }
     if (r.defer) { u.defer_date = r.defer; titel = r.title; fandt = true; }
   }

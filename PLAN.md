@@ -13,9 +13,9 @@
 
 | | |
 |---|---|
-| **Fase** | **v11 udgivet.** Connector (v5–v6), skallen (v7–v8), syntaks (v9), Notes (v10), offline-handlinger (v11). |
-| **Næste** | Andreas bruger den. Pladsen i runen er løst — 33 K ledigt |
-| **Tilstand** | 156 tests grønne, install-script **93.308 / 126.000 (74 %)** · alt fra kravbeskrivelsen er bygget |
+| **Fase** | **v23 udgivet.** Kravbeskrivelsen er bygget; v9–v23 er Andreas' ønsker. |
+| **Næste** | Ingen igangværende opgave. Se `HANDOVER-NAESTE.md` for hvad der venter på Andreas. |
+| **Tilstand** | 156 tests grønne, install-script **106.799 / 126.000 (84 %)** |
 | **Udgivet version** | **23** |
 | **Sidst opdateret** | 2026-08-17 |
 
@@ -459,6 +459,41 @@ genkender dubletten.
 
 Bliver det trangt igen: `style.css` er det største, der ikke er kode, og
 serveren kan stadig tegne ikonet ved opstart (~1.900 netto).
+
+## F14–F23 · Andreas' ønsker efter udgivelsen
+
+Kravbeskrivelsen var bygget ved v4. Alt herefter er kommet ét ad gangen fra
+brug. Begrundelserne står i README's versionshistorik; her er sporet:
+
+| v | Hvad |
+|---|---|
+| 9 | Genvejssyntaks når man **retter** en titel · kontekster på gentagelser |
+| 10 | Ny skærm: **Notes** · payload-strip 97 % → 74 % |
+| 11 | Offline dækker **handlinger**, ikke kun fangst |
+| 12 | Påmindelser på opgaver med klokkeslæt (`VALARM` i feedet) |
+| 13 | **Web Push** — VAPID uden pakker, push uden nyttelast |
+| 14 | Link til en side (fx Notion) på opgaver, noter og projekter |
+| 15 | Gennemgangen efter tingdo: ugeoverblik og tre måder |
+| 16 | **Notion-integration** · lækage i `GET /api/v1/settings` lukket |
+| 17–18 | Link på projekter · titler holder sig friske · databaser kan findes |
+| 19–22 | Notion-sidens **indhold** vist i doda, og to rettelser af billed-links |
+| 23 | Kalenderen peger **tilbage** til opgaven (`?item=<id>`) |
+
+### Ikke udgivet endnu — venter på Andreas' ja
+
+De to kendte huller fra `HANDOVER-NAESTE.md` er lukket. `APP_VERSION` står
+stadig på 23; bliver det udgivet, er det v24.
+
+- **Fejlsvarene i `/api/v1` har samme form hele vejen.** Fem ruter svarede
+  `{error: 'not found'}` uden `message` (F2's to lag), og tre 400-svar
+  (`title is required`, `name is required` ×2) gjorde det samme.
+  `tests/apierror.test.mjs` tjekker nu både de konkrete ruter og **formen** —
+  koden skal matche `^[a-z][a-z0-9_]*$`, og beskeden skal være en sætning.
+  Testen er set fejle på den gamle kode: 9 af 11 røde.
+- **Genvejssyntaks i gentagelses-rudens titelfelt** — kun `#` og `@`, aldrig
+  reglen. Se `DESIGN.md §3`. Nye navne oprettes først ved Save.
+
+---
 
 ## Efter hver fase
 

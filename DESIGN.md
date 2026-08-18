@@ -341,6 +341,22 @@ Dette **afviger bevidst** fra handover §5.6, der gjorde »efter fuldførelse« 
 standard. Andreas har valgt Todoist-kompatibilitet, fordi han kender syntaksen —
 og synligheden løses i stedet af preview-chippen, der altid skriver tilstanden ud.
 
+### Hvor syntaksen virker — og hvor den med vilje er skåret ned (v24)
+
+Genvejssyntaksen virker tre steder: i fangst, i **titlen man retter** i
+detaljeruden, og — fra v24 — i gentagelses-rudens titelfelt. De to første tager
+det hele. Gentagelses-ruden tager **kun `#kontekst` og `@projekt`**.
+
+Grunden er, at ruden har sit eget regelfelt lige under titlen. To veje til den
+samme regel er præcis den forvirring, ruden er skruet sammen for at undgå — og
+en `!`-tekst, der blev spist af parseren uden at kunne lande i et felt, ville
+være tavst datatab. `anvendSyntaks(u, raa, kunNavne)` slår derfor dato-grenen
+fra; alt med `!` bliver stående, som brugeren skrev det.
+
+Navne, der ikke findes endnu, oprettes **først ved Save** og vises indtil da
+som en chip eller et punkt i vælgeren mærket »— new«. Et Cancel må ikke kunne
+efterlade et projekt, brugeren aldrig bad om.
+
 ## 4 · Datamodel
 
 Ikke den generiske `items`-blob fra Kokkeri. Alt, der **forespørges eller filtreres**,

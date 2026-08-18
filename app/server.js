@@ -1508,7 +1508,7 @@ const ROUTES = {
     if (!user) return;
     const body = await readJsonBody(req);
     const felter = renseItem(body);
-    if (!felter.title && !felter.note) { sendJson(res, 400, { error: 'title is required' }); return; }
+    if (!felter.title && !felter.note) { apiFejl(res, 400, 'no_text', 'An item needs a title or a note.'); return; }
     const kontekstIder = Array.isArray(body.contexts)
       ? body.contexts.filter((id) => typeof id === 'string' && db.prepare('SELECT 1 FROM contexts WHERE id = ?').get(id))
       : [];
@@ -2149,7 +2149,7 @@ const ROUTES = {
     if (!user) return;
     const body = await readJsonBody(req);
     const navn = str(body.name, 60);
-    if (!navn) { sendJson(res, 400, { error: 'name is required' }); return; }
+    if (!navn) { apiFejl(res, 400, 'no_name', 'A context needs a name.'); return; }
     sendJson(res, 200, { context: findKontekst(navn) || opretKontekst(navn) });
   },
 
@@ -2158,7 +2158,7 @@ const ROUTES = {
     if (!user) return;
     const body = await readJsonBody(req);
     const navn = str(body.name, 120);
-    if (!navn) { sendJson(res, 400, { error: 'name is required' }); return; }
+    if (!navn) { apiFejl(res, 400, 'no_name', 'A project needs a name.'); return; }
     sendJson(res, 200, { project: findProjekt(navn) || opretProjekt(navn) });
   },
 
@@ -3357,7 +3357,7 @@ const MOENSTRE = [
       if (Array.isArray(body.contexts)) {
         const gyldige = body.contexts.filter((id) => typeof id === 'string'
           && db.prepare('SELECT 1 FROM contexts WHERE id = ?').get(id));
-        if (!hentItem(ctx.params[0])) { sendJson(res, 404, { error: 'not found' }); return; }
+        if (!hentItem(ctx.params[0])) { apiFejl(res, 404, 'not_found', 'No such item.'); return; }
         saetKontekster(ctx.params[0], gyldige);
       }
       const item = opdaterItem(ctx.params[0], felter);
@@ -3387,7 +3387,7 @@ const MOENSTRE = [
       const auth = godkend(req, res, 'write');
       if (!auth) return;
       const item = hentItem(ctx.params[0]);
-      if (!item) { sendJson(res, 404, { error: 'not found' }); return; }
+      if (!item) { apiFejl(res, 404, 'not_found', 'No such item.'); return; }
       // Én fuldfoerelse pr. element. Er den allerede udfoert, er svaret det
       // samme - sa en genafsendt genvej ikke laver ravage (DESIGN.md §6).
       if (item.status === 'done') { sendJson(res, 200, { item }); return; }
@@ -3413,7 +3413,7 @@ const MOENSTRE = [
       const auth = godkend(req, res, 'write');
       if (!auth) return;
       const item = hentItem(ctx.params[0]);
-      if (!item) { sendJson(res, 404, { error: 'not found' }); return; }
+      if (!item) { apiFejl(res, 404, 'not_found', 'No such item.'); return; }
       sendJson(res, 200, { item: opdaterItem(item.id, { status: 'next', completed_at: null }) });
     },
   },
@@ -3423,7 +3423,7 @@ const MOENSTRE = [
       const auth = godkend(req, res, 'read');
       if (!auth) return;
       const item = hentItem(ctx.params[0]);
-      if (!item) { sendJson(res, 404, { error: 'not found' }); return; }
+      if (!item) { apiFejl(res, 404, 'not_found', 'No such item.'); return; }
       sendJson(res, 200, { item });
     },
   },

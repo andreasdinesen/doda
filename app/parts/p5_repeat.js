@@ -93,7 +93,10 @@ function aabnGentagelse(r) {
     <p class="lead" style="margin:6px 0 18px">${esc(r.description)}</p>
 
     <label class="field"><span>Title (applies to every future one)</span>
-      <input class="input" id="rTitle" value="${esc(r.title)}"></label>
+      <input class="input" id="rTitle" value="${esc(r.title)}">
+      <p class="hintline meta" style="margin:6px 0 0">Type <code>#context</code> or
+        <code>@project</code> here and it moves into the fields below. The rule has its
+        own field — it is never read out of the title.</p></label>
 
     <label class="field"><span>Recurrence rule</span>
       <input class="input" id="rRule" value="${esc(r.rule.text)}"
@@ -135,14 +138,25 @@ function aabnGentagelse(r) {
      en chip fjerner den, plus-chippen tilfoejer. Serveren kunne modtage dem
      hele tiden - de manglede bare en vej ind. */
   const valgte = r.contexts.slice();
+  // Navne fra titlen, der ikke findes endnu. De oprettes FOERST ved Save -
+  // ruden maa ikke aendre noget bag om et Cancel (samme regel som detaljeruden).
+  const nyeKontekster = [];
+  let nytProjekt = null;
+
   const tegnKontekster = () => {
     const kendte = state.contexts.filter((c) => valgte.includes(c.id));
     host.querySelector('#rChips').innerHTML = `
       ${kendte.map((c) => `<button class="chip" data-fjern="${esc(c.id)}" title="Remove">#${esc(c.name)}</button>`).join('')}
-      <button class="chip flat" id="rAddCtx">${kendte.length ? '+' : '# context'}</button>`;
+      ${nyeKontekster.map((n) => `<button class="chip" data-fjernny="${esc(n)}" title="Remove">#${esc(n)} — new</button>`).join('')}
+      <button class="chip flat" id="rAddCtx">${kendte.length || nyeKontekster.length ? '+' : '# context'}</button>`;
     host.querySelectorAll('[data-fjern]').forEach((el) => el.addEventListener('click', () => {
       const i = valgte.indexOf(el.dataset.fjern);
       if (i >= 0) valgte.splice(i, 1);
+      tegnKontekster();
+    }));
+    host.querySelectorAll('[data-fjernny]').forEach((el) => el.addEventListener('click', () => {
+      const i = nyeKontekster.indexOf(el.dataset.fjernny);
+      if (i >= 0) nyeKontekster.splice(i, 1);
       tegnKontekster();
     }));
     host.querySelector('#rAddCtx').addEventListener('click', () => {
@@ -160,12 +174,77 @@ function aabnGentagelse(r) {
   };
   tegnKontekster();
 
+  /* Et projekt, der ikke findes endnu, skal kunne SES i vaelgeren. Ellers
+     forsvinder @navn ud af titlen uden at lande et sted, brugeren kan se -
+     og saa lyver ruden om, hvad den lige har gjort. */
+  const projektEl = host.querySelector('#rProject');
+  const saetProjekt = (id) => {
+    projektEl.querySelectorAll('[data-nyt]').forEach((o) => o.remove());
+    if (nytProjekt) {
+      const o = document.createElement('option');
+      o.value = '';
+      o.dataset.nyt = '1';
+      o.textContent = `${nytProjekt} — new`;
+      projektEl.appendChild(o);
+      o.selected = true;
+      return;
+    }
+    projektEl.value = id || '';
+  };
+  projektEl.addEventListener('change', () => {
+    // Vaelger man selv i listen, gaelder valget - ikke det navn, titlen naevnte.
+    const valgt = projektEl.value;
+    nytProjekt = null;
+    saetProjekt(valgt);
+  });
+
+  /* Genvejssyntaks i titlen: #kontekst og @projekt flyttes ned i rudens egne
+     felter, praecis som i detaljeruden. Reglen roeres IKKE - den har sit eget
+     felt lige nedenunder, og to veje til den samme regel var netop det, ruden
+     er skruet sammen for at undgaa (DESIGN.md §3).
+
+     Tolkningen sker ved blur - saa naar man at se markoeren forsvinde og
+     chippen dukke op, foer noget gemmes. */
+  const titelEl = host.querySelector('#rTitle');
+  const tolkTitel = () => {
+    const u = {
+      project_id: projektEl.value || null,
+      nytProjekt,
+      contexts: valgte,
+      nyeKontekster,
+      due_date: null,
+      due_time: null,
+      defer_date: null,
+    };
+    const ny = anvendSyntaks(u, titelEl.value, true);
+    if (ny === null) return;
+    titelEl.value = ny;
+    nytProjekt = u.nytProjekt;
+    saetProjekt(u.project_id);
+    tegnKontekster();
+  };
+  titelEl.addEventListener('blur', tolkTitel);
+
   host.querySelector('#rSave').addEventListener('click', async () => {
+    // Klikkes der paa Save uden at forlade titelfeltet foerst, naar blur ikke
+    // at koere. Tolk derfor ogsaa her - ellers gemmes "@Hus" som tekst.
+    tolkTitel();
     try {
+      let projektId = projektEl.value || null;
+      if (nytProjekt) {
+        const svar = await api('POST', '/api/v1/projects', { name: nytProjekt });
+        if (svar.project) { projektId = svar.project.id; nytProjekt = null; }
+      }
+      for (const navn of nyeKontekster.slice()) {
+        const svar = await api('POST', '/api/v1/contexts', { name: navn });
+        if (svar.context && !valgte.includes(svar.context.id)) valgte.push(svar.context.id);
+      }
+      nyeKontekster.length = 0;
+
       await api('POST', `/api/v1/recurrences/${r.id}`, {
-        title: host.querySelector('#rTitle').value,
+        title: titelEl.value,
         rule_text: host.querySelector('#rRule').value,
-        project_id: host.querySelector('#rProject').value || null,
+        project_id: projektId,
         contexts: valgte,
       });
       await efter('Saved — applies to every future one');

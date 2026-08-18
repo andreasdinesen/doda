@@ -1,102 +1,174 @@
-# Handover — hvad der mangler i doda
+# Handover — doda
 
 **Til:** Claude Code i en ny session
-**Skrevet:** 2026-08-17, efter v7 blev pushet.
+**Skrevet:** 2026-08-17, efter v23
 
-> **Start med at læse, i denne rækkefølge:**
+> **Læs i denne rækkefølge, før du rører noget:**
 > 1. `~/ClaudeMacBook/RUNE-ERFARINGER.md` — fælles lærepenge for alle runer.
->    Læs den **før og efter** arbejdet, og skriv nye generelle lærdomme ind nederst.
-> 2. `CLAUDE.md` i dette repo — konventioner og faste regler.
+>    **Afsnit 9** er genbrugelige byggeklodser (MCP+OAuth, sideoversigt,
+>    foldbar sidebar). Læs filen **før og efter** arbejdet, og skriv nye
+>    generelle lærdomme ind nederst under »Log«.
+> 2. `CLAUDE.md` — konventioner og faste regler.
 > 3. `DESIGN.md` — alle trufne beslutninger. Ændres noget, rettes det **her først**.
 > 4. Denne fil.
 
 ---
 
-## Tilstand lige nu
+## Tilstand
 
-**v8 er udgivet.** Alt fra 16.–17. august er ude: connectoren til claude.ai
-(v5 + v6-rettelsen), skallen (v7) og slette-rettelsen (v8). Arbejdsmappen er ren.
+**v23 er udgivet. Arbejdsmappen er ren.** Alt er pushet.
 
-`node --test tests/*.mjs` → **139 grønne**. `python3 build_rune.py` → 94 % af loftet.
+| | |
+|---|---|
+| Tests | **167 grønne** (`node --test tests/*.mjs`) |
+| Install-script | **107.312 / 126.000 tegn (85 %)** |
+| Kode | `server.js` 3.594 linjer + syv moduler |
 
-### To ting fra v8, der er værd at kende
+Kør altid `python3 build_rune.py` efter en ændring i `app/` — den samler
+frontenden, stempler versionen, bygger payloaden og verificerer rundturen.
 
-**Slette-fejlen var usynlig, indtil genvejen blev brugbar.** `opdaterItem()`
-slutter med at læse rækken frisk gennem `hentItem()`, som filtrerer
-`deleted = 0` fra. Efter en sletning returnerede den derfor **altid** `null`, og
-DELETE-ruten svarede 404 »not found« på en sletning, der lykkedes. Frontenden
-viste fejlen og sprang `genindlaes()` over, så rækken blev stående, selvom den
-var væk i databasen. Fejlen havde ligget der hele tiden — `x` kunne bare ikke
-nås uden at åbne opgaven først, før v7 gjorde tastaturet brugbart.
-**Generelt: en funktion, der returnerer rækken frisk efter en opdatering, kan
-ikke rapportere en række, den lige har gjort usynlig.**
+---
 
-**Sideoversigten i højre side folder først ud efter et klik — det er ikke doda.**
-Den eneste regel, der folder den ud, er `.toc:hover`; der findes ingen
-klik-handler. Når et klik får den til at virke, er det hover, der endelig når
-frem: macOS sender ikke `mousemove` til et browservindue, der ikke er aktivt.
-Andreas skulle prøve at klikke ét sted i vinduet og derefter kun bevæge musen.
-Melder han, at det stadig ikke virker, er næste skridt en klik-låst tilstand
-(`.toc.aaben`) — den har han sagt nej til indtil videre.
+## Hvad appen er nu
 
-## Pladsen i runen — vær opmærksom
+GTD-app som yggdrasil-rune. Ud over kernen (fangst, inbox, næste handlinger,
+projekter, områder, kontekster, gentagelser, gennemgang, logbog, fokustimer,
+vedhæftninger, eksport/import, Todoist-import, passkeys, PWA) har den:
 
-Install-scriptet må højst fylde **126.000 tegn** (hævet fra 120.000 i v7 efter
-aftale). Det fylder nu **119.575 (94 %)**, og build'et **fejler højt** ved
-loftet — det er en assert, ikke en advarsel.
+| Modul | Hvad |
+|---|---|
+| `app/mcp.js` | MCP-server på `/mcp` — Claude kan læse og skrive |
+| `app/oauth.js` | OAuth 2.1, så **claude.ai** kan forbinde som connector |
+| `app/push.js` | Web Push (VAPID, uden nyttelast) |
+| `app/notion.js` | Notion: søg, titler, og sidens indhold vist i doda |
+| `app/webauthn.js` | Passkeys |
+| `app/shared/parse.js` | Genvejssyntaksen — **én parser, tre køresteder** |
 
-Den rigtige grænse er Linux' `MAX_ARG_STRLEN` på 131.072 b; margenen skal kun
-dække panelets `{{VARIABEL}}`-udskiftninger, som er få og korte. **Hævningen er
-en udsættelse, ikke en løsning** — der er plads til en funktion eller to.
-`PLAN.md` har de målte muligheder, når den fejler igen. Kort:
+Notifikationer går **primært gennem kalenderfeedet** (`VALARM`), ikke push.
+Push er alternativet for den, der ikke abonnerer med sin kalender.
 
-- `app/public/icon-192.png` frigør **2.815 tegn**, men er iOS'
-  `apple-touch-icon` — fjern den ikke, uden at Andreas har accepteret, at
-  hjemmeskærms-ikonet på iPhone bliver et fallback.
-- Serveren kan tegne ikonet ved opstart (~1.900 netto, ~40 linjers PNG-encoder).
-- CSS'en (39 KB) er det største enkeltstående tekstaktiv.
+---
+
+## Det vigtigste at forstå, før du ændrer noget
+
+**Fire ting har kostet mest i denne kodebase. De står udførligt i
+`RUNE-ERFARINGER.md`, men her er de i kort form:**
+
+1. **Lover interfacet noget, skal koden holde det.** `/projekt` stod i
+   paletten i fire versioner uden at virke; `#` i detaljeruden i endnu flere;
+   `! date` manglede helt i legenden. Hver gang var bagenden klar, og forsiden
+   løj. **Læs en legende eller en hjælpetekst som en kravspecifikation.**
+2. **Mål efter animationen, ikke under den.** En `getBoundingClientRect()`
+   umiddelbart efter en klasseændring lyver, hvis der er en CSS-transition.
+   Verificér på `getComputedStyle().transform` eller en klasse.
+3. **Test *vejen* til en funktion, ikke bare funktionen.** Slette-fejlen lå i
+   otte udgivelser, fordi testene kaldte `slet()` direkte, mens genvejen ikke
+   kunne nås uden mus.
+4. **Se din test fejle på den gamle kode, før du tror på den.** Flere gange har
+   en test bestået, uden at bevise noget.
+
+**Og en arbejdsvane:** samler du flere `str.replace()` i ét Python-script, og en
+sen `assert` fejler, kasseres *hele* filen — også de erstatninger, der lykkedes.
+Det skete tre gange. Brug Edit-værktøjet, eller skriv filen efter hvert trin.
+
+---
+
+## Hvad der venter på Andreas, ikke på dig
+
+1. **Prøve connectoren mod den rigtige claude.ai.** Flowet er testet ende til
+   ende lokalt, men aldrig mod Anthropics klient. Går det galt, er det næsten
+   altid opdagelsen:
+   `curl -si https://doda.hjorten.eu/mcp -H 'Content-Type: application/json' -d '{}' | grep -i www-authenticate`
+2. **Bekræfte Web Push på telefonen.** Selve leveringen kan ikke testes her (der
+   er ingen push-tjeneste, og browser-panelet kan ikke registrere en service
+   worker). På iPhone virker det **kun**, når doda ligger på hjemmeskærmen.
+3. **Bekræfte kalenderpåmindelserne.** På iPhone skal abonnementet have
+   »Fjern påmindelser« slået **fra**, ellers stripper iOS `VALARM` uden at sige det.
+4. **Dele sine Notion-sider med integrationen.** Et gyldigt token er ikke nok.
+   Settings → Notion siger nu, hvor mange sider doda kan se — står der »no pages
+   yet«, er delingen ikke gået igennem.
+5. Offline-læsning og hjemmeskærm på telefonen. Todoist-import på en rigtig
+   eksport. En tingdo-eksport, hvis den import stadig ønskes (formatet er ukendt).
+
+---
+
+## Kendte huller
+
+- **Ingen deling og ingen flere brugere.** Bevidst — se `DESIGN.md §7`.
+
+De to andre huller blev lukket 2026-08-18 og venter på at blive udgivet
+(`APP_VERSION` står stadig på 23 — se `PLAN.md`):
+
+- Fejlsvarene i `/api/v1` har samme form hele vejen nu. Det var ikke kun
+  `GET /api/v1/items/<id>`: fem ruter svarede `{error: 'not found'}` uden
+  `message`, og tre 400-svar gjorde det samme. `tests/apierror.test.mjs`
+  holder både ruterne og **formen** fast.
+- Gentagelses-rudens titelfelt tolker `#kontekst` og `@projekt` og flytter dem
+  ned i rudens egne felter. Reglen røres aldrig — den har sit eget felt, og
+  det var to veje til reglen, den oprindelige beslutning ville undgå
+  (`DESIGN.md §3`).
+
+---
+
+## Pladsen i runen
+
+Install-scriptet må højst fylde **126.000 tegn** (hævet fra 120.000 i v7).
+Det fylder **106.799 (84 %)**, og build'et **fejler højt** ved loftet.
+
+Kommentar-strip i den udgivne kopi (v10) gav 24 %; kilderne beholder alt.
+Bliver det trangt igen, står de målte muligheder i `PLAN.md` — kort:
+`app/public/icon-192.png` frigør 2.815 tegn (men er iOS' hjemmeskærms-ikon),
+og `style.css` er det største, der ikke er kode.
+
+**Mål altid med leave-one-out** frem for at gætte: rå filstørrelse siger næsten
+intet. `parse.js` er 25 KB rå og koster 180 tegn, fordi den også ligger i
+`app.js`, og brotli genkender dubletten.
+
+---
 
 ## Faste regler, der IKKE må brydes
 
 - **Commit og push kræver Andreas' udtrykkelige ja.** Et push er en udgivelse.
 - **`APP_VERSION` bumpes kun ved udgivelse**, ét sted: `app/parts/p1_core.js`.
   Build stempler den i `index.html`, `sw.js` og runens `version:`.
-- **Nul npm-pakker.** Det er både arkitektur og sikkerhedsvalg.
+  `tests/version.test.mjs` fejler, hvis de kommer ud af trit.
+- **Nul npm-pakker.** Både arkitektur og sikkerhedsvalg.
 - `runes/doda.yaml` og `app/public/app.js` er **genererede** — redigér aldrig.
-- Kør `python3 build_rune.py` efter hver ændring i `app/`.
 - Interfacet er **engelsk**; kode, kommentarer og dokumenter er **dansk**.
 - Lokal kørsel: `DODA_DEV=1 BIND_PORT=8910 DATA_DIR=/tmp/dodadata node app/server.js`
   (`DODA_DEV=1` slår asset-cachen fra — uden den ser man ikke sine egne ændringer).
+- Dev-server til preview-værktøjet står i den **globale** `~/.claude/launch.json`.
 
 ---
 
 ## Fælder, der allerede er betalt for
 
-Gentag dem ikke — og læs `RUNE-ERFARINGER.md`, hvor de står udførligt:
-
-- **`PORT_<navn>` er HOST-porten.** Bind serveren til `BIND_PORT || 3000` og
-  intet andet. v2 var utilgængelig af den grund, og **intet fejlede højlydt**.
-- **Service workers kan ikke registreres i Claude Codes browser-panel.** Det
-  fejler også mod en helt nøgen server. Test med en nøgen server først.
-- **CSP'en kræver `worker-src 'self'`** — ellers blokerer man sin egen SW.
+- **`PORT_<navn>` er HOST-porten.** Bind til `BIND_PORT || 3000` og intet andet.
+  v2 var utilgængelig af den grund, og **intet fejlede højlydt**.
 - **CORS og `Cross-Origin-Resource-Policy: same-origin` slås.** De offentlige
   OAuth-ruter går derfor uden om `securityHeaders()`.
-- **Service workeren må kun cache app-skallen under `'./'`.** Uden `pathname ===
-  '/'`-vagten endte samtykkesiden som det, man fik at se offline.
-- **PNG komprimeres ikke af brotli.** Alt binært koster fuld pris i payloaden.
-- **`programmatisk .focus()` udløser ikke fokus-hændelsen** i browser-panelet.
+- **`form-action 'self'` gælder også omdirigeringen efter en POST.** Det dræbte
+  OAuth-samtykkeknappen tavst i v5.
+- **Et endepunkt, der returnerer »alt i en tabel«, er en tidsindstillet lækage.**
+  `GET /api/v1/settings` gav hemmeligheder væk til enhver `read`-nøgle, indtil
+  v16. Nye hemmeligheder skal i `HEMMELIGE_SETTINGS`.
+- **Service workers kan ikke registreres i Claude Codes browser-panel**, og
+  panelet sender syntetiske keydown med **tom `e.key`** — tastaturnavigation kan
+  ikke afprøves der. Dispatch en rigtig `KeyboardEvent` i stedet.
+- **Notions filadresser er signerede og udløber.** Link til
+  `notion.so/<side-id>#<blok-id>` — blok-id'et **alene** åbner en tom side.
+- **PNG komprimeres ikke af brotli.** Alt binært koster over 125 % af sin vægt.
 - **Skriv aldrig rå kontroltegn i et regex** — filen bliver binær, og `grep`
-  holder op med at finde noget i den.
+  holder op med at virke.
 
 ---
 
-## Hvad der stadig venter på Andreas, ikke på dig
+## Sådan starter du
 
-1. Bekræfte offline-læsning og hjemmeskærm **på sin telefon** — service
-   worker-registreringen kunne ikke verificeres her.
-2. Prøve **Todoist-importen** på en rigtig eksport.
-3. Sende en **tingdo-eksport**, hvis den import stadig ønskes — formatet er ukendt.
-4. **Prøve connectoren mod den rigtige claude.ai** — flowet er testet ende til
-   ende mod en rigtig server lokalt, men ikke mod Anthropics klient. Går noget
-   galt, er det næsten altid opdagelsen: `curl -si https://doda.hjorten.eu/mcp
-   -d '{}' -H 'Content-Type: application/json' | grep -i www-authenticate`.
+```
+Læs HANDOVER-NAESTE.md i ~/ClaudeMacBook/doda og gå i gang.
+```
+
+Er der ikke en konkret opgave, så spørg Andreas hvad der skal ske — og lad være
+med at bygge videre på egen hånd. Appen er færdig i den forstand, at hele
+kravbeskrivelsen er bygget; alt siden har været hans ønsker, ét ad gangen.
