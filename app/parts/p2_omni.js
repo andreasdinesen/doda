@@ -100,6 +100,15 @@ function tegnChips() {
   if (!raa || !t || (omniState.mode && !'+*'.includes(omniState.mode))) { host.innerHTML = ''; return; }
 
   const chips = [];
+  /* Udfylder skaermen noget, skal det staa HER, foer man trykker Enter -
+     ellers sker det bag om ryggen paa brugeren, og det er praecis den slags
+     tavse hjaelpsomhed, en chip-raekke findes for at afsloere.
+     Teksten vinder, saa chippen udebliver, naar man selv har skrevet det. */
+  const skaerm = skaermensUdfyldning();
+  if (skaerm && t.kind !== 'note'
+    && !(skaerm.project && t.project) && !(skaerm.context && t.contexts.length)) {
+    chips.push([`→ ${skaerm.vis}`, 'neutral']);
+  }
   for (const c of t.contexts) chips.push([`#${c}`, 'accent']);
   if (t.project) chips.push([`@${t.project}`, 'accent']);
   if (t.due) chips.push([`⏰ ${visDato(t.due.dato)}${t.due.tid ? ` ${t.due.tid}` : ''}`, 'accent']);
@@ -321,6 +330,25 @@ async function opretNavigation(raekke) {
   }
 }
 
+/*
+ * Skaermen, man staar paa, udfylder det, teksten tier om (DESIGN.md §3).
+ * Serveren har det sidste ord - den tjekker, at id'erne findes, og at
+ * statussen er én, en skaerm overhovedet maa implicere.
+ */
+function skaermensUdfyldning() {
+  if (state.view === 'waiting') return { status: 'waiting', vis: 'Waiting For' };
+  if (state.view === 'someday') return { status: 'someday', vis: 'Someday' };
+  if (state.view === 'projects' && state.openProject) {
+    const p = state.projects.find((x) => x.id === state.openProject);
+    return p ? { project: p.id, vis: `@${p.name}` } : null;
+  }
+  if (state.view === 'next' && state.filterContext) {
+    const k = state.contexts.find((x) => x.id === state.filterContext);
+    return k ? { context: k.id, vis: `#${k.name}` } : null;
+  }
+  return null;
+}
+
 async function fangstNu(bekraeftet) {
   let tekst = omniEl().value.trim();
   if (!tekst) return;
@@ -333,7 +361,10 @@ async function fangstNu(bekraeftet) {
   const skalSpoerge = !bekraeftet && (ukendte.contexts.length > 0 || ukendte.project);
 
   try {
-    const svar = await api('POST', '/api/v1/capture', { text: tekst, createNew: !skalSpoerge });
+    const skaerm = skaermensUdfyldning();
+    const krop = { text: tekst, createNew: !skalSpoerge };
+    if (skaerm) krop.from = { status: skaerm.status, project: skaerm.project, context: skaerm.context };
+    const svar = await api('POST', '/api/v1/capture', krop);
     if (svar.needsConfirm) {
       omniState.bekraeft = svar.needsConfirm;
       omniState.valgt = 0;

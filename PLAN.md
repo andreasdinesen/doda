@@ -13,10 +13,10 @@
 
 | | |
 |---|---|
-| **Fase** | **v27 udgivet.** Kravbeskrivelsen er bygget; v9–v27 er Andreas' ønsker. |
+| **Fase** | **v28 udgivet.** Kravbeskrivelsen er bygget; v9–v28 er Andreas' ønsker. |
 | **Næste** | Ingen igangværende opgave. Se `HANDOVER-NAESTE.md`. |
-| **Tilstand** | 167 tests grønne, install-script **114.007 / 126.000 (90 %)** |
-| **Udgivet version** | **27** |
+| **Tilstand** | 175 tests grønne, install-script **114.653 / 126.000 (90 %)** |
+| **Udgivet version** | **28** |
 | **Sidst opdateret** | 2026-08-18 |
 
 **Sprog:** interfacet er **engelsk** (Andreas' valg — æøå er besværligt at taste).
@@ -484,6 +484,7 @@ brug. Begrundelserne står i README's versionshistorik; her er sporet:
 | 25 | **Guide-siden** — hele appen forklaret, nået fra brugermenuen |
 | 26 | **Automatisk synk** når appen kommer frem + synlig synk-knap med alder |
 | 27 | **Optimistisk opdatering** — tastetryk og fangst svarer med det samme |
+| 28 | **Skærmen udfylder** en ny opgave (Waiting/Someday/projekt/kontekst) |
 
 ### Om guiden, og hvad den kostede
 

@@ -86,6 +86,7 @@ const GUIDE_DELE = [
               ['+', 'A task, said explicitly. Plain text does the same.'],
               ['*', 'A note. It lands in Notes and never joins an action list.'],
               ['//', 'Everything after <code> // </code>, or after a line break, becomes the description.'],
+              ['WHERE', 'The screen fills in what your text left out: on Waiting For or Someday it lands there, on a project page it joins that project, on a context-filtered list it carries that context. A chip says so before you press Enter, and anything you write yourself wins.'],
             ],
             kort: 'an empty inbox is the goal — not today, but over time.',
             go: [['inbox', 'Open Inbox']],

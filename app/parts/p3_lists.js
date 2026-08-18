@@ -403,7 +403,8 @@ function gentegnRaekke(id) {
  * saettes raekken tilbage, foer den almindelige fejl/offline-haandtering
  * loeber - saa kan `offlineKoe` gentegne raekken, som den plejer.
  */
-const VIEW_STATUS = { inbox: 'inbox', next: 'next' };
+const VIEW_STATUS = { inbox: 'inbox', next: 'next', waiting: 'waiting', someday: 'someday' };
+const VIEW_TITEL = { waiting: 'Waiting For', someday: 'Someday' };
 
 /** Tegner den aktuelle liste ud fra state, uden at spoerge serveren. */
 function tegnListeFraState() {
@@ -411,6 +412,7 @@ function tegnListeFraState() {
   if (!host) return false;
   if (state.view === 'inbox') host.innerHTML = sideInbox();
   else if (state.view === 'next') host.innerHTML = sideNext();
+  else if (VIEW_TITEL[state.view]) { tegnStatusliste(state.view, VIEW_TITEL[state.view]); return true; }
   else return false;
   bindListe();          // genskaber ogsaa fokus via sideState.fokusId
   return true;

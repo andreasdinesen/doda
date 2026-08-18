@@ -1,7 +1,7 @@
 # Handover — doda
 
 **Til:** Claude Code i en ny session
-**Skrevet:** 2026-08-18, efter v27
+**Skrevet:** 2026-08-18, efter v28
 
 > **Læs i denne rækkefølge, før du rører noget:**
 > 1. `~/ClaudeMacBook/RUNE-ERFARINGER.md` — fælles lærepenge for alle runer.
@@ -16,12 +16,12 @@
 
 ## Tilstand
 
-**v27 er udgivet. Arbejdsmappen er ren.** Alt er pushet.
+**v28 er udgivet. Arbejdsmappen er ren.** Alt er pushet.
 
 | | |
 |---|---|
-| Tests | **167 grønne** (`node --test tests/*.mjs`) |
-| Install-script | **114.007 / 126.000 tegn (90 %)** — se `PLAN.md` om guidens pris |
+| Tests | **175 grønne** (`node --test tests/*.mjs`) |
+| Install-script | **114.653 / 126.000 tegn (90 %)** — se `PLAN.md` om guidens pris |
 | Kode | `server.js` 3.594 linjer + syv moduler |
 
 Kør altid `python3 build_rune.py` efter en ændring i `app/` — den samler

@@ -1262,9 +1262,41 @@ function hentGentagelser() {
  * Ukendte kontekster og projekter kraever bekraeftelse (handover §5.1),
  * medmindre kalderen udtrykkeligt beder om at oprette dem.
  */
-function fangst(tekst, opretNye) {
+/*
+ * Skaermen, brugeren staar paa, maa UDFYLDE - aldrig bestemme.
+ *
+ * Gaar man ind i Waiting For eller Someday og skriver, har man taget
+ * beslutningen ved at gaa derhen; at sende den til inbox betyder, at man skal
+ * tage den igen senere. Det samme gaelder en projektside og en kontekst-filtreret
+ * liste (DESIGN.md §3). Men teksten vinder altid: skriver man @NogetAndet,
+ * er det dét, der gaelder - ellers ville skaermen kunne overskrive noget,
+ * brugeren udtrykkeligt har skrevet.
+ *
+ * Kun disse to statusser kan en skaerm implicere. "next" kan den ikke: noget,
+ * der falder én ind midt i arbejdet, er ikke afklaret, fordi man stod paa
+ * listen over afklaret arbejde.
+ */
+const SKAERM_STATUS = ['waiting', 'someday'];
+
+function skaermensUdfyldning(fra) {
+  const ud = { status: null, projektId: null, kontekstId: null };
+  if (!fra || typeof fra !== 'object') return ud;
+  if (typeof fra.status === 'string' && SKAERM_STATUS.includes(fra.status)) ud.status = fra.status;
+  if (typeof fra.project === 'string'
+    && db.prepare('SELECT 1 FROM projects WHERE id = ? AND deleted = 0').get(fra.project)) {
+    ud.projektId = fra.project;
+  }
+  if (typeof fra.context === 'string'
+    && db.prepare('SELECT 1 FROM contexts WHERE id = ?').get(fra.context)) {
+    ud.kontekstId = fra.context;
+  }
+  return ud;
+}
+
+function fangst(tekst, opretNye, fra) {
   const tolket = parse.tolkFangst(tekst);
   if (!tolket.title && !tolket.note) return { fejl: 'der er ingen tekst at fange' };
+  const skaerm = skaermensUdfyldning(fra);
 
   const manglerKontekster = tolket.contexts.filter((n) => !findKontekst(n));
   const manglerProjekt = tolket.project && !findProjekt(tolket.project) ? tolket.project : null;
@@ -1276,6 +1308,10 @@ function fangst(tekst, opretNye) {
   const kontekstIder = tolket.contexts.map((n) => (findKontekst(n) || opretKontekst(n)).id);
   let projektId = null;
   if (tolket.project) projektId = (findProjekt(tolket.project) || opretProjekt(tolket.project)).id;
+
+  // Skaermen udfylder kun det, teksten TAV om.
+  if (!projektId && skaerm.projektId) projektId = skaerm.projektId;
+  if (!kontekstIder.length && skaerm.kontekstId) kontekstIder.push(skaerm.kontekstId);
 
   // Er der en gentagelsesregel, oprettes en GENTAGELSE - ikke en loes opgave.
   // Dens foerste forekomst laves med det samme, sa der altid er praecis én.
@@ -1297,8 +1333,8 @@ function fangst(tekst, opretNye) {
   const item = opretItem({
     kind: tolket.kind,
     // En note er reference, ikke en handling - den skal aldrig ligge og vente
-    // pa afklaring i inbox (handover §4).
-    status: tolket.kind === 'note' ? 'queued' : 'inbox',
+    // pa afklaring i inbox (handover §4), og en skaerm kan ikke aendre det.
+    status: tolket.kind === 'note' ? 'queued' : (skaerm.status || 'inbox'),
     title: tolket.title.slice(0, GRAENSER.title),
     note: tolket.note.slice(0, GRAENSER.note),
     project_id: projektId,
@@ -1472,7 +1508,9 @@ const ROUTES = {
     // genvej kan ikke svare pa et bekraeftelsesspoergsmal. Webappen sender
     // createNew: false og haandterer bekraeftelsen selv.
     const opretNye = auth.viaToken ? body.createNew !== false : body.createNew === true;
-    const svar = fangst(tekst, opretNye);
+    // `from` er skaermen, webappen staar paa. En klient uden skaerm (en
+    // iOS-genvej, Claude) sender den ikke, og saa er inbox stadig svaret.
+    const svar = fangst(tekst, opretNye, body.from);
     if (svar.fejl) { apiFejl(res, 400, 'no_text', svar.fejl); return; }
     if (svar.skalBekraeftes) {
       sendJson(res, 200, { needsConfirm: svar.skalBekraeftes, parsed: svar.tolket });

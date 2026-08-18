@@ -5,9 +5,16 @@
 /* ------------------------------------------------- Waiting For / Someday */
 
 async function sideStatusliste(status, titel) {
-  const host = document.getElementById('pageHost');
   const d = await api('GET', `/api/v1/items?status=${status}`);
   state.items = d.items;
+  tegnStatusliste(status, titel);
+}
+
+/* Tegner listen af state ALENE - saa den kan tegnes om uden at spoerge
+   serveren, naar en raekke flyttes eller en ny fanges (p3_lists §straksVaek). */
+function tegnStatusliste(status, titel) {
+  const host = document.getElementById('pageHost');
+  const d = { items: state.items };
 
   if (!d.items.length) {
     host.innerHTML = `<section class="page">

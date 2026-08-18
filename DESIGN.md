@@ -341,6 +341,39 @@ Dette **afviger bevidst** fra handover §5.6, der gjorde »efter fuldførelse« 
 standard. Andreas har valgt Todoist-kompatibilitet, fordi han kender syntaksen —
 og synligheden løses i stedet af preview-chippen, der altid skriver tilstanden ud.
 
+### Skærmen udfylder — den bestemmer ikke (v28)
+
+»Alt ind i Inbox« er stadig princippet: fang først, afklar bagefter. Men der er
+forskel på **at fange** og **at stå et sted**. Trykker man en tast på en
+vilkårlig skærm, er man i fangst-tilstand og har ikke besluttet noget. Går man
+derimod *ind i* Waiting For eller Someday og skriver, er beslutningen taget ved
+at gå derhen — at sende den til Inbox betyder, at man skal tage den igen.
+
+| Skærm | Udfylder | Status |
+|---|---|---|
+| Waiting For · Someday | statussen | `waiting` · `someday` |
+| En projektside | projektet | bliver `inbox` |
+| Next Actions filtreret på en kontekst | konteksten | bliver `inbox` |
+
+De to sidste bliver med vilje i Inbox: noget, der falder én ind midt i
+arbejdet, er ikke afklaret, bare fordi man stod på en liste.
+
+Fire regler holder det ærligt:
+
+- **Teksten vinder altid.** Skriver man `@NogetAndet`, gælder det — skærmen må
+  aldrig overskrive noget, brugeren udtrykkeligt har skrevet.
+- **Kun `waiting` og `someday`** kan en skærm implicere. Aldrig `next`.
+- **En note rives aldrig med.** Reference får ingen status af en skærm.
+- **Ukendte id'er ignoreres i stilhed.** En fangst må aldrig kunne fejle på
+  noget, brugeren ikke selv skrev.
+
+Udfyldningen sendes som `from` til `/api/v1/capture`, og **serveren har det
+sidste ord** (`skaermensUdfyldning()`). En klient uden skærm — iOS-genvej,
+Siri, Claude — sender ingenting og får Inbox som før; det er den regel, der er
+usynlig i browseren, og derfor den vigtigste i `tests/capturefrom.test.mjs`.
+Og chippen under feltet siger hvor opgaven lander, **før** man trykker Enter:
+udfylder appen noget, skal man kunne se det, mens man stadig kan ombestemme sig.
+
 ### Ventetiden hører bag brugeren, ikke foran ham (v27)
 
 Et tryk på `n` ventede på **tre kald i træk** — gem, hent tal, hent liste —
