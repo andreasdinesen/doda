@@ -341,6 +341,27 @@ Dette **afviger bevidst** fra handover §5.6, der gjorde »efter fuldførelse« 
 standard. Andreas har valgt Todoist-kompatibilitet, fordi han kender syntaksen —
 og synligheden løses i stedet af preview-chippen, der altid skriver tilstanden ud.
 
+### Ventetiden hører bag brugeren, ikke foran ham (v27)
+
+Et tryk på `n` ventede på **tre kald i træk** — gem, hent tal, hent liste —
+før rækken rørte sig. Lokalt er det 24 ms og usynligt; over en tunnel er hver
+rundtur ~180 ms, og så sidder man og trykker på en tast, der tilsyneladende
+ikke virker. **Serveren svarer på under et millisekund; det var rækkefølgen,
+der var forkert.**
+
+- Rækken forlader listen **først**, tegnet af `state` alene, og serveren får
+  besked bagefter. Tal og liste opfriskes derefter stille (`synk(false)`).
+- **Fangst venter på ét kald i stedet for tre**: svaret fra `/capture`
+  indeholder allerede elementet, så det sættes direkte ind i listen.
+- Måles der i **kald**, ikke i millisekunder: et blokerende kald mere er
+  altid mærkbart for den, der sidder langt væk fra serveren.
+
+En optimistisk opdatering må aldrig kunne æde data. Derfor returnerer
+`straksVaek()` en **fortryd-funktion**, som køres *før* den almindelige
+fejlhåndtering — så `offlineKoe()` finder rækken, hvor den plejer, og kan
+markere den »waiting to send«. Og den bruges kun på skærme, listen kan tegnes
+af `state` alene (Inbox og Next Actions); alle andre går den gamle vej.
+
 ### Appen henter selv, når den kommer frem igen (v26)
 
 En app på hjemmeskærmen bliver **aldrig** genindlæst. Den ligger i baggrunden,

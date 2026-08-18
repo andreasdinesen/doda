@@ -342,7 +342,10 @@ async function fangstNu(bekraeftet) {
     }
     const it = svar.item;
     luk();
-    await genindlaes();
+    // Staar man paa den skaerm, opgaven lander paa, skal den vaere der NU.
+    // Ellers hentes state og liste som foer (p3_lists' indsaetStraks).
+    if (indsaetStraks(it)) opfriskBagefter();
+    else await genindlaes();
     toast(it.kind === 'note' ? 'Note saved' : `Added to ${statusNavn(it.status)}`, {
       label: 'Undo',
       run: async () => { await api('DELETE', `/api/v1/items/${it.id}`, {}); await genindlaes(); },

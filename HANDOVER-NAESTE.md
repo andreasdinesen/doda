@@ -1,7 +1,7 @@
 # Handover — doda
 
 **Til:** Claude Code i en ny session
-**Skrevet:** 2026-08-18, efter v26
+**Skrevet:** 2026-08-18, efter v27
 
 > **Læs i denne rækkefølge, før du rører noget:**
 > 1. `~/ClaudeMacBook/RUNE-ERFARINGER.md` — fælles lærepenge for alle runer.
@@ -16,12 +16,12 @@
 
 ## Tilstand
 
-**v26 er udgivet. Arbejdsmappen er ren.** Alt er pushet.
+**v27 er udgivet. Arbejdsmappen er ren.** Alt er pushet.
 
 | | |
 |---|---|
 | Tests | **167 grønne** (`node --test tests/*.mjs`) |
-| Install-script | **113.614 / 126.000 tegn (90 %)** — se `PLAN.md` om guidens pris |
+| Install-script | **114.007 / 126.000 tegn (90 %)** — se `PLAN.md` om guidens pris |
 | Kode | `server.js` 3.594 linjer + syv moduler |
 
 Kør altid `python3 build_rune.py` efter en ændring i `app/` — den samler
@@ -155,6 +155,9 @@ intet. `parse.js` er 25 KB rå og koster 180 tegn, fordi den også ligger i
 - **Et endepunkt, der returnerer »alt i en tabel«, er en tidsindstillet lækage.**
   `GET /api/v1/settings` gav hemmeligheder væk til enhver `read`-nøgle, indtil
   v16. Nye hemmeligheder skal i `HEMMELIGE_SETTINGS`.
+- **Panelets skjulte side klemmer `setTimeout` op til ~1 sekund.** Simulér
+  ALDRIG netværksforsinkelse med `setTimeout` dér — man måler sin egen
+  målemetode. Instrumentér funktionerne i stedet.
 - **Browser-panelet kører selv med `document.visibilityState === 'hidden'`.**
   Alt, der hænger på at appen »kommer frem«, kan derfor ikke udløses naturligt
   dér — overskriv getteren og send begivenheden selv.

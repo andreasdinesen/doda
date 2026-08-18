@@ -736,7 +736,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 26;
+const APP_VERSION = 27;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -1907,7 +1907,10 @@ async function fangstNu(bekraeftet) {
     }
     const it = svar.item;
     luk();
-    await genindlaes();
+    // Staar man paa den skaerm, opgaven lander paa, skal den vaere der NU.
+    // Ellers hentes state og liste som foer (p3_lists' indsaetStraks).
+    if (indsaetStraks(it)) opfriskBagefter();
+    else await genindlaes();
     toast(it.kind === 'note' ? 'Note saved' : `Added to ${statusNavn(it.status)}`, {
       label: 'Undo',
       run: async () => { await api('DELETE', `/api/v1/items/${it.id}`, {}); await genindlaes(); },
@@ -2407,16 +2410,89 @@ function gentegnRaekke(id) {
   bindListe();
 }
 
+/* --------------------------------------------- afklaring uden ventetid */
+
+/*
+ * Et tastetryk skal flytte raekken MED DET SAMME.
+ *
+ * Foer v27 ventede `n` paa tre rundture i traek, foer noget rykkede sig:
+ * POST'en, `/state` og listen. Lokalt er det 24 ms og usynligt - men paa en
+ * telefon gennem en tunnel er hver rundtur et par hundrede millisekunder, og
+ * saa sidder man og trykker paa en tast, der tilsyneladende ikke virker.
+ * Serveren er ikke langsom (den svarer paa under et millisekund); det er
+ * ventetiden, der er lagt foran brugeren i stedet for bag ham.
+ *
+ * Derfor: fjern raekken af state og tegn listen om af state ALENE, send saa.
+ * Lykkes det, opfriskes tal og liste stille i baggrunden. Gaar det galt,
+ * saettes raekken tilbage, foer den almindelige fejl/offline-haandtering
+ * loeber - saa kan `offlineKoe` gentegne raekken, som den plejer.
+ */
+const VIEW_STATUS = { inbox: 'inbox', next: 'next' };
+
+/** Tegner den aktuelle liste ud fra state, uden at spoerge serveren. */
+function tegnListeFraState() {
+  const host = document.getElementById('pageHost');
+  if (!host) return false;
+  if (state.view === 'inbox') host.innerHTML = sideInbox();
+  else if (state.view === 'next') host.innerHTML = sideNext();
+  else return false;
+  bindListe();          // genskaber ogsaa fokus via sideState.fokusId
+  return true;
+}
+
+/**
+ * Tager raekken ud af listen med det samme. Returnerer en fortryd-funktion,
+ * eller null hvis skaermen ikke er én, vi kan tegne af state alene.
+ */
+function straksVaek(id) {
+  if (!VIEW_STATUS[state.view]) return null;
+  const i = state.items.findIndex((x) => x.id === id);
+  if (i < 0) return null;
+  const [emne] = state.items.splice(i, 1);
+  if (!tegnListeFraState()) { state.items.splice(i, 0, emne); return null; }
+  return () => { state.items.splice(i, 0, emne); tegnListeFraState(); };
+}
+
+/**
+ * Saetter et NYT element ind i listen med det samme, hvis det hoerer hjemme
+ * paa den skaerm, man staar paa. Svaret fra /capture indeholder allerede hele
+ * elementet, saa der er intet at hente igen - det var kun raekkefoelgen af
+ * kald, der gjorde, at man sad og ventede paa sin egen opgave.
+ *
+ * Sorteringen kan vaere en anelse forkert, indtil den stille opfriskning
+ * lander: bedre end at stirre paa en liste, hvor der ingenting skete.
+ */
+function indsaetStraks(it) {
+  if (!it || VIEW_STATUS[state.view] !== it.status) return false;
+  // "Skjul indtil" betyder skjult - ogsaa for det, man lige har skrevet.
+  if (state.view === 'next' && it.defer_date && it.defer_date > state.today) return false;
+  state.items.push(it);
+  if (!tegnListeFraState()) { state.items.pop(); return false; }
+  // Tallet i sidebaren skal ogsaa flytte sig nu, ikke om et sekund.
+  const n = VIEW_STATUS[state.view];
+  state.counts[n] = (state.counts[n] || 0) + 1;
+  opdaterNav();
+  return true;
+}
+
+/** Tal og liste hentes bagefter - stille, saa siden ikke blinker. */
+function opfriskBagefter() {
+  synk(false);
+}
+
 async function fuldfoer(id) {
   const it = state.items.find((x) => x.id === id);
+  const fortryd = straksVaek(id);
   try {
     await api('POST', `/api/v1/items/${id}/complete`, {});
-    await genindlaes();
+    if (!fortryd) await genindlaes();
     toast(`Done: ${it ? it.title : 'item'}`, {
       label: 'Undo',
       run: async () => { await api('POST', `/api/v1/items/${id}/uncomplete`, {}); await genindlaes(); },
     });
+    if (fortryd) opfriskBagefter();
   } catch (ex) {
+    if (fortryd) fortryd();
     offlineKoe(ex, { type: 'complete', item: id, titel: it ? it.title : '' },
       `Done: ${it ? it.title : 'item'}`);
   }
@@ -2424,11 +2500,16 @@ async function fuldfoer(id) {
 
 async function saetStatus(id, status) {
   const it = state.items.find((x) => x.id === id);
+  // Bliver elementet paa skaermen (fx "n" paa noget, der allerede er next),
+  // er der intet at fjerne - saa gaar den ad den gamle vej.
+  const fortryd = VIEW_STATUS[state.view] === status ? null : straksVaek(id);
   try {
     await api('POST', `/api/v1/items/${id}`, { status });
-    await genindlaes();
+    if (!fortryd) await genindlaes();
     toast(`Moved to ${statusNavn(status)}`);
+    if (fortryd) opfriskBagefter();
   } catch (ex) {
+    if (fortryd) fortryd();
     offlineKoe(ex, { type: 'status', item: id, status, titel: it ? it.title : '' },
       `Moved to ${statusNavn(status)}`);
   }
