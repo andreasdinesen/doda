@@ -113,7 +113,7 @@ De to andre blev lukket i **v24**:
 ## Pladsen i runen
 
 Install-scriptet må højst fylde **126.000 tegn** (hævet fra 120.000 i v7).
-Det fylder **112.652 (89 %)**, og build'et **fejler højt** ved loftet.
+Det fylder **115.388 (91 %)**, og build'et **fejler højt** ved loftet.
 Guiden (v25) er den dyreste enkeltside, appen har: dens tekst kostede 6.274 tegn
 og blev trimmet til ~4.700. Dens CSS koster kun 364. Skal der spares mere dér,
 er næste greb at skære hele emner væk — et indholdsvalg, ikke et teknisk.
