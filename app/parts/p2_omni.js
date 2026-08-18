@@ -50,6 +50,80 @@ function tolkNu(tekst) {
   return p.tolkFangst(omniState.mode === '*' ? `* ${tekst}` : tekst);
 }
 
+/* ------------------------------------------------ forslag mens man skriver */
+
+/*
+ * Skriver man `/dod` midt i en linje, skal de projekter, der matcher, kunne
+ * ses - ellers er den eneste vej til det rigtige navn at huske det.
+ *
+ * Det er ikke en soegning: den kigger paa den MARKOER, markoeren staar i.
+ * Reglerne foelger parseren (app/shared/parse.js), for ellers ville paletten
+ * foreslaa noget, teksten bagefter bliver tolket anderledes:
+ *   - markoeren skal staa ved linjestart eller efter et mellemrum
+ *     (ellers ville "andreas@omlidt.dk" udloese en projektliste)
+ *   - navnet er ét ord af bogstaver, tal, _ og -
+ *   - der maa ikke vaere naaet et mellemrum efter markoeren
+ */
+const MARKOER_KILDE = {
+  '/': { hvad: 'project', kilde: () => state.projects, ikon: 'projects' },
+  '@': { hvad: 'project', kilde: () => state.projects, ikon: 'projects' },
+  '#': { hvad: 'context', kilde: () => state.contexts, ikon: 'contexts' },
+};
+
+/** Hvilken markoer staar markoeren (caret'en) i? Null, hvis ingen. */
+function markoerVedCaret() {
+  const el = omniEl();
+  if (!el) return null;
+  // Navigations-tilstandene har deres egen liste; der er intet inline at gaette paa.
+  if (omniState.mode && !'+*'.includes(omniState.mode)) return null;
+  const pos = el.selectionStart;
+  if (pos === null || pos === undefined) return null;
+  const foer = el.value.slice(0, pos);
+  const m = foer.match(/(^|\s)([/@#])([\p{L}\p{N}_-]*)$/u);
+  if (!m) return null;
+  return { tegn: m[2], delvist: m[3], start: pos - m[3].length - 1, slut: pos };
+}
+
+/** Rækker til paletten: de navne, der matcher det halvskrevne. */
+function forslagsRaekker() {
+  const t = markoerVedCaret();
+  if (!t) return [];
+  const k = MARKOER_KILDE[t.tegn];
+  if (!k) return [];
+  const q = t.delvist.toLowerCase();
+  // Det, der BEGYNDER med det skrevne, foerst. Med ren "indeholder"-sortering
+  // foreslog "/hus" projektet Sommerhus foer "Hus og have" - og Tab satte det
+  // forkerte navn ind. Naar man fuldfoerer et navn, vejer begyndelsen tungest.
+  return k.kilde()
+    .filter((x) => !q || x.name.toLowerCase().includes(q))
+    .sort((a, b) => {
+      const aa = a.name.toLowerCase().startsWith(q) ? 0 : 1;
+      const bb = b.name.toLowerCase().startsWith(q) ? 0 : 1;
+      return aa - bb || a.name.localeCompare(b.name);
+    })
+    .slice(0, 6)
+    .map((x) => ({ type: 'forslag', navn: x.name, tegn: t.tegn, ikon: k.ikon, hvad: k.hvad, token: t }));
+}
+
+/**
+ * Saetter det fulde navn ind i stedet for det halvskrevne.
+ *
+ * Navne med mellemrum saettes i anfoerselstegn - parseren laeser `@"To ord"`,
+ * og uden dem ville kun det foerste ord blive til projektet.
+ */
+function fuldfoerMarkoer(raekke) {
+  const el = omniEl();
+  const t = raekke.token;
+  const navn = /[\s]/.test(raekke.navn) ? `"${raekke.navn}"` : raekke.navn;
+  const ind = `${t.tegn}${navn} `;
+  el.value = el.value.slice(0, t.start) + ind + el.value.slice(t.slut);
+  const nyPos = t.start + ind.length;
+  el.focus();
+  el.setSelectionRange(nyPos, nyPos);
+  omniState.valgt = 0;
+  opdaterOmni();
+}
+
 function ukendteNavne(tolket) {
   if (!tolket) return { contexts: [], project: null };
   const kendteK = new Set(state.contexts.map((c) => c.name.toLowerCase()));
@@ -198,6 +272,11 @@ function byggRaekker() {
     });
   }
 
+  // Forslagene staar UNDER oprettelsen. Ét Enter skal stadig fange - det er
+  // appens aeldste regel (handover §5.1) - saa listen maa aldrig skubbe
+  // oprettelsen ned fra foerste plads. Tab tager det oeverste forslag.
+  for (const f of forslagsRaekker()) raekker.push(f);
+
   for (const item of omniState.resultater) raekker.push({ type: 'item', item });
   return raekker;
 }
@@ -230,6 +309,12 @@ function tegnPanel() {
         ${icon(r.ikon)}<span class="omni-row-main">
         <span class="omni-row-title">${esc(r.titel)}</span>
         <span class="omni-row-sub">${esc(r.under)}</span></span></button>`;
+    }
+    if (r.type === 'forslag') {
+      return `<button class="omni-row"${valgt} data-i="${i}">
+        ${icon(r.ikon)}<span class="omni-row-main">
+        <span class="omni-row-title">${esc(r.tegn)}${esc(r.navn)}</span>
+        <span class="omni-row-sub">${esc(r.hvad)} · tab to insert</span></span></button>`;
     }
     if (r.type === 'nyt') {
       return `<button class="omni-row"${valgt} data-i="${i}">
@@ -271,7 +356,16 @@ const statusNavn = (s) => STATUS_NAVNE[s] || s;
 
 function planlaegSoegning() {
   clearTimeout(omniState.soegeTimer);
-  const q = omniEl().value.trim();
+  /*
+   * Soeg paa den TOLKEDE titel, ikke paa den raa linje.
+   *
+   * Skrev man "test /dod", blev hele strengen sendt afsted - og de
+   * resultater, der stod der, mens man skrev "test", forsvandt i samme
+   * oejeblik man begyndte paa projektet. Markoererne hoerer til tolkningen,
+   * ikke til det, man leder efter; brugeren har stadig kun skrevet "test".
+   */
+  const t = omniState.tolket;
+  const q = ((t && t.title) || omniEl().value).trim();
   // Navigation soeger lokalt; kun fritekst og opgave-tilstand spoerger serveren.
   if (q.length < 2 || (omniState.mode && omniState.mode !== '+')) {
     omniState.resultater = [];
@@ -301,6 +395,7 @@ async function aktiver() {
   if (raekke.type === 'tom') return;
   if (raekke.type === 'goto') { luk(); gaaTilNavigation(raekke.mode, raekke.id); return; }
   if (raekke.type === 'nyt') { await opretNavigation(raekke); return; }
+  if (raekke.type === 'forslag') { fuldfoerMarkoer(raekke); return; }
   await fangstNu(raekke.type === 'confirm');
 }
 
@@ -434,6 +529,10 @@ function bindOmni() {
 
   el.addEventListener('input', opdaterOmni);
   el.addEventListener('focus', tegnPanel);
+  // Flytter man markoeren ind i et halvskrevet navn uden at aendre teksten,
+  // skal forslagene ogsaa komme frem. keyup daekker piletaster; click daekker mus.
+  el.addEventListener('keyup', (e) => { if (e.key.startsWith('Arrow') || e.key === 'Home' || e.key === 'End') tegnPanel(); });
+  el.addEventListener('click', tegnPanel);
   el.addEventListener('blur', () => {
     // Lille forsinkelse, sa et klik pa en raekke nar at blive registreret.
     setTimeout(() => {
@@ -458,6 +557,17 @@ function bindOmni() {
       const n = omniState.raekker.length;
       omniState.valgt = (omniState.valgt + (e.key === 'ArrowDown' ? 1 : n - 1)) % n;
       markerValgt();
+      return;
+    }
+    // Tab fuldfoerer et halvskrevet navn. Er oprettelsen valgt (det normale),
+    // tages det oeverste forslag - ellers det, man har rullet ned til.
+    if (e.key === 'Tab') {
+      const valgt = omniState.raekker[omniState.valgt];
+      const f = valgt && valgt.type === 'forslag'
+        ? valgt : omniState.raekker.find((r) => r.type === 'forslag');
+      if (!f) return;                     // intet at fuldfoere: lad Tab vaere Tab
+      e.preventDefault();
+      fuldfoerMarkoer(f);
       return;
     }
     if (e.key === 'Enter') { e.preventDefault(); aktiver(); }

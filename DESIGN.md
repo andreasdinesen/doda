@@ -341,6 +341,32 @@ Dette **afviger bevidst** fra handover §5.6, der gjorde »efter fuldførelse« 
 standard. Andreas har valgt Todoist-kompatibilitet, fordi han kender syntaksen —
 og synligheden løses i stedet af preview-chippen, der altid skriver tilstanden ud.
 
+### Forslag mens man skriver et navn (v30)
+
+Paletten viser nu de projekter og kontekster, der matcher et **halvskrevet**
+`/`, `@` eller `#` midt i en linje. Uden det var den eneste vej til det rigtige
+navn at huske det — og bekræftelsen (»Create @dod?«) fangede kun tastefejl
+*efter* de var begået.
+
+- **Forslagene følger parserens regler**, ikke sine egne: markøren skal stå ved
+  linjestart eller efter et mellemrum, og navnet er ét ord. Ellers ville
+  paletten foreslå noget, teksten bagefter blev tolket anderledes — og
+  `andreas@omlidt.dk` ville åbne en projektliste.
+- **Det, der begynder med det skrevne, står øverst.** Med ren
+  »indeholder«-sortering foreslog `/hus` projektet *Sommerhus* før *Hus og
+  have*, og Tab satte det forkerte navn ind.
+- **Forslagene står UNDER oprettelsen.** Ét Enter skal stadig fange — det er
+  appens ældste regel (handover §5.1). **Tab** tager det øverste forslag;
+  ruller man ned til et forslag, tager Enter dét, fordi Enter altid handler på
+  den valgte række.
+- Navne med mellemrum sættes i anførselstegn (`/"Hus og have"`), for det er
+  den form, parseren læser.
+
+Samme runde: **søgningen bruger den tolkede titel**, ikke den rå linje. Skrev
+man `test /dod`, blev hele strengen sendt til søgningen, og de resultater, der
+stod der et øjeblik før, forsvandt. Markørerne hører til tolkningen — brugeren
+har stadig kun skrevet »test«.
+
 ### Den, der har handlet på tasten, ejer den (v29)
 
 Fangst-handleren (»begynd bare at skrive«) trækker sig, når fokus står i en

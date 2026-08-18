@@ -13,10 +13,10 @@
 
 | | |
 |---|---|
-| **Fase** | **v29 udgivet.** Kravbeskrivelsen er bygget; v9–v29 er Andreas' ønsker. |
+| **Fase** | **v30 udgivet.** Kravbeskrivelsen er bygget; v9–v30 er Andreas' ønsker. |
 | **Næste** | Ingen igangværende opgave. Se `HANDOVER-NAESTE.md`. |
-| **Tilstand** | 175 tests grønne, install-script **114.768 / 126.000 (91 %)** |
-| **Udgivet version** | **29** |
+| **Tilstand** | 175 tests grønne, install-script **115.388 / 126.000 (91 %)** |
+| **Udgivet version** | **30** |
 | **Sidst opdateret** | 2026-08-18 |
 
 **Sprog:** interfacet er **engelsk** (Andreas' valg — æøå er besværligt at taste).
@@ -486,6 +486,7 @@ brug. Begrundelserne står i README's versionshistorik; her er sporet:
 | 27 | **Optimistisk opdatering** — tastetryk og fangst svarer med det samme |
 | 28 | **Skærmen udfylder** en ny opgave (Waiting/Someday/projekt/kontekst) |
 | 29 | Rettelse: sidste række i en liste startede også en fangst (fra v27) |
+| 30 | **Forslag** mens man skriver `/`, `@` eller `#` · søgning på tolket titel |
 
 ### Om guiden, og hvad den kostede
 
