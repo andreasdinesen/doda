@@ -21,7 +21,38 @@ async function registrerSW() {
     return;
   }
   try {
-    await navigator.serviceWorker.register('sw.js', { scope: './' });
+    const reg = await navigator.serviceWorker.register('sw.js', { scope: './' });
+
+    /*
+     * En PWA paa hjemmeskaermen bliver maaske ALDRIG genindlaest: den lukkes
+     * ikke, den skjules. Uden et kald til update() opdager den derfor aldrig,
+     * at der ligger en ny sw.js - og saa serverer den gamle cache videre i
+     * det uendelige. Andreas' telefon stod paa v33, mens serveren var paa
+     * v38, og fejl, der var rettet for laengst, blev ved med at vise sig.
+     *
+     * Registreringen ovenfor tjekker kun ved sideindlaesning. Her tjekker vi
+     * ogsaa, hver gang appen kommer frem igen - samme oejeblik som den henter
+     * data (DESIGN.md §v26). Det er ét kald, og det er gratis, naar der
+     * ingen ny version er.
+     */
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) reg.update().catch(() => { /* offline er fint */ });
+    });
+
+    /*
+     * Naar en ny SW har taget over, koerer den GAMLE app.js stadig i siden -
+     * skipWaiting() skifter arbejderen ud, ikke koden foran brugeren. Derfor
+     * genindlaeser vi, men KUN hvis der var en controller i forvejen: ved
+     * allerfoerste registrering fyrer controllerchange ogsaa (clients.claim),
+     * og der ville en genindlaesning vaere stoej ved hver ny installation.
+     */
+    const havdeStyring = !!navigator.serviceWorker.controller;
+    let genindlaeser = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!havdeStyring || genindlaeser) return;
+      genindlaeser = true;
+      window.location.reload();
+    });
   } catch {
     /* Uden SW mister vi kun offline-laesning - appen virker uaendret. */
   }

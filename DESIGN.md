@@ -341,6 +341,38 @@ Dette **afviger bevidst** fra handover §5.6, der gjorde »efter fuldførelse« 
 standard. Andreas har valgt Todoist-kompatibilitet, fordi han kender syntaksen —
 og synligheden løses i stedet af preview-chippen, der altid skriver tilstanden ud.
 
+### En web app på hjemmeskærmen skal opdatere sig selv (v39)
+
+Andreas' doda på telefonen stod på **v33**, mens serveren kørte v38. Fejl, der
+var rettet for længst, blev ved med at vise sig — og han troede rimeligt nok,
+at rettelserne ikke virkede.
+
+Årsagen: `navigator.serviceWorker.register()` blev kun kaldt ved
+sideindlæsning, og **en PWA på hjemmeskærmen bliver stort set aldrig
+genindlæst.** Den lukkes ikke, den skjules. Så opdagede den aldrig, at der lå
+en ny `sw.js`, og serverede sin egen cache videre.
+
+- `reg.update()` kaldes nu, hver gang appen kommer frem igen — samme øjeblik
+  som den henter data (§v26). Er der ingen ny version, koster det ingenting.
+- Når en ny service worker tager over, **genindlæses siden**: `skipWaiting()`
+  skifter arbejderen ud, ikke koden foran brugeren.
+- Men kun hvis der var en controller i forvejen. Ved allerførste registrering
+  fyrer `controllerchange` også (`clients.claim()`), og dér ville en
+  genindlæsning være støj ved hver ny installation.
+
+Versionslinjen i sidebaren har hele tiden kunnet vise »v33 · v38 available —
+reload« og rydde cachen ved klik. Den virkede — den skulle bare **opdages**.
+**En knap, brugeren selv skal få øje på, er ikke en opdateringsstrategi;** den
+er en udvej for de gange, automatikken ikke slår til.
+
+Og på telefonen kunne den slet ikke opdages: sidebaren stod med `height:
+100vh`, og **på iPhone er `100vh` højere end det synlige felt**, så hele foden
+— brugerknap, versionslinje og tema — lå under skærmkanten. Rettet med `100dvh`
+(med `100vh` som fallback i en egen erklæring), `overflow-y: auto` så en lav
+skærm kan rulle til foden, og `env(safe-area-inset-bottom)`, som bundnavigationen
+i forvejen havde. **Udvejen skal virke netop dér, hvor automatikken svigtede** —
+og det var på telefonen.
+
 ### Focus er en skærm, ikke kun en timer (v38)
 
 Hjælpeteksten i detaljeruden har hele tiden lovet: *»Everything else out of the
