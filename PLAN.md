@@ -13,10 +13,10 @@
 
 | | |
 |---|---|
-| **Fase** | **v35 udgivet.** Kravbeskrivelsen er bygget; v9–v35 er Andreas' ønsker. |
+| **Fase** | **v36 udgivet.** Kravbeskrivelsen er bygget; v9–v36 er Andreas' ønsker. |
 | **Næste** | Ingen igangværende opgave. Se `HANDOVER-NAESTE.md`. |
-| **Tilstand** | 178 tests grønne, install-script **118.463 / 126.000 (94 %)** |
-| **Udgivet version** | **35** |
+| **Tilstand** | 178 tests grønne, install-script **119.350 / 126.000 (95 %)** |
+| **Udgivet version** | **36** |
 | **Sidst opdateret** | 2026-08-18 |
 
 **Sprog:** interfacet er **engelsk** (Andreas' valg — æøå er besværligt at taste).
@@ -492,6 +492,7 @@ brug. Begrundelserne står i README's versionshistorik; her er sporet:
 | 33 | Titlen folder sig ud · Notion-siden på et projekt · to mobil-rettelser |
 | 34 | **Kommentér en Notion-side** fra doda — læs og skriv, uden at gemme noget |
 | 35 | **Noter kan slås fra** · en Notion-side kan **oprettes** fra link-vælgeren |
+| 36 | **Fil på kommandobaren** → opgave · Queued ryddet op · Notion-ruden foldet ud |
 
 ### Om guiden, og hvad den kostede
 

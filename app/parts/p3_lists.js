@@ -59,7 +59,11 @@ async function tegnSideIndhold() {
 
   try {
     if (view.id === 'inbox') {
-      const d = await api('GET', '/api/v1/items?status=inbox');
+      /* 'queued' med: den er noternes hvileplads, men en OPGAVE kan have
+         faaet den (den var i statusvaelgeren indtil v36, og et genaabnet
+         projekt vaekker sine opgaver dertil). Uden dette laa de usynlige i
+         hver eneste liste. Inbox er det rigtige sted: de er uafklarede. */
+      const d = await api('GET', '/api/v1/items?status=inbox,queued&kind=task');
       state.items = d.items;
       host.innerHTML = sideInbox();
     } else {
@@ -308,7 +312,7 @@ async function raekkeTaster(e) {
     await fuldfoer(id);
     return;
   }
-  const statusTaster = { n: 'next', w: 'waiting', s: 'someday', q: 'queued' };
+  const statusTaster = { n: 'next', w: 'waiting', s: 'someday' };
   if (statusTaster[e.key]) {
     mit();
     husk();
@@ -637,8 +641,6 @@ async function aabnElement(listeItem) {
     <textarea class="detail-note" id="dNote" rows="1"
       placeholder="Add details…" aria-label="Details">${esc(u.note)}</textarea>
     <div class="note-preview" id="dPreview" hidden></div>
-    <div id="dNotion"></div>
-
     <div class="chiprow" id="dChips"></div>
 
     <div class="detail-help" id="dHelp" hidden>
@@ -668,6 +670,8 @@ async function aabnElement(listeItem) {
       </dl>
       <button class="btn primary" id="dGotIt">Got it</button>
     </div>
+
+    <div id="dNotion"></div>
 
     ${vedhaeftningerHtml(it)}
 
@@ -751,7 +755,15 @@ async function aabnElement(listeItem) {
         } else if (hvad === 'status') {
           redigerInline(knap, {
             tag: 'select',
-            options: ['inbox', 'next', 'queued', 'waiting', 'someday', 'done', 'dropped'].map((s) =>
+            /* 'queued' staar IKKE her. Den er dodas interne hvileplads for
+               noter (og for opgaver, der vaekkes med et genaabnet projekt) og
+               har ingen skaerm - en opgave sat dertil forsvandt fra Inbox,
+               Next, Waiting, Someday OG logbogen og kunne kun soeges frem.
+               Vil man parkere noget, hedder det Someday. Findes den paa et
+               element i forvejen, vises den stadig, saa man kan komme VAEK
+               fra den. */
+            options: ['inbox', 'next', 'waiting', 'someday', 'done', 'dropped']
+              .concat(u.status === 'queued' ? ['queued'] : []).map((s) =>
               `<option value="${s}"${s === u.status ? ' selected' : ''}>${esc(statusNavn(s))}</option>`).join(''),
             onchange: (v) => { u.status = v; },
           });

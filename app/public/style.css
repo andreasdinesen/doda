@@ -1103,6 +1103,10 @@ textarea.input { resize: vertical; min-height: 90px; font-family: inherit; }
 
 .offline-mark[hidden] { display: none !important; }
 
+/* Kommandobaren, mens en fil svaever over den. Samme sprog som filfeltet
+   i detaljeruden: en stiplet kant og accentfarven - ikke en ny opfindelse. */
+.omni-card.draaber { outline: 2px dashed var(--accent); outline-offset: 3px; }
+
 /* Kommentarer fra Notion. Daempede kort, saa de ikke konkurrerer med sidens
    indhold - men med en kant, saa man kan se hvor én slutter og naeste begynder. */
 .notionkom { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }

@@ -40,6 +40,10 @@ const omniState = {
   bekraeft: null,      // {contexts:[], project} - ukendte navne der skal godkendes
   soegeTimer: null,
   soegeToken: 0,
+  // Filer, der er trukket ind, men endnu ikke sendt. De VENTER paa titlen:
+  // en fil maa ikke oprette noget bag om brugeren, og et Esc skal kunne
+  // fortryde det hele uden at efterlade en opgave, ingen bad om.
+  filer: [],
 };
 
 function omniEl() { return document.getElementById('omni'); }
@@ -178,9 +182,13 @@ function tegnChips() {
   const t = omniState.tolket;
   const raa = omniEl() ? omniEl().value.trim() : '';
   // Navigations-tilstandene har ingen tolkning at vise.
-  if (!raa || !t || (omniState.mode && !'+*'.includes(omniState.mode))) { host.innerHTML = ''; return; }
+  if ((!raa && !omniState.filer.length) || (omniState.mode && !'+*'.includes(omniState.mode))) { host.innerHTML = ''; return; }
+  if (!t) { host.innerHTML = omniState.filer.map((f) =>
+    `<span class="chip">${esc(`📎 ${f.name}`)}</span>`).join(''); return; }
 
   const chips = [];
+  // Ventende filer staar foerst: de er det mest overraskende i feltet.
+  for (const f of omniState.filer) chips.push([`📎 ${f.name}`, 'accent']);
   /* Udfylder skaermen noget, skal det staa HER, foer man trykker Enter -
      ellers sker det bag om ryggen paa brugeren, og det er praecis den slags
      tavse hjaelpsomhed, en chip-raekke findes for at afsloere.
@@ -474,7 +482,18 @@ async function fangstNu(bekraeftet) {
       return;
     }
     const it = svar.item;
+    const venter = omniState.filer.slice();
     luk();
+    /* Filerne sendes FOERST nu: elementet skal findes, foer det kan have en
+       vedhaeftning. Fejler en af dem, er opgaven stadig oprettet - og det er
+       den rigtige rangorden: teksten er det vigtige, filen er tilbehoeret. */
+    if (venter.length) {
+      let sendt = 0;
+      for (const f of venter) {
+        try { await uploadFil(it.id, f); sendt++; } catch (ex) { toast(ex.message); }
+      }
+      if (sendt) toast(`${sendt} file${sendt === 1 ? '' : 's'} attached`);
+    }
     // Staar man paa den skaerm, opgaven lander paa, skal den vaere der NU.
     // Ellers hentes state og liste som foer (p3_lists' indsaetStraks).
     if (indsaetStraks(it)) opfriskBagefter();
@@ -504,6 +523,7 @@ function luk() {
   omniState.resultater = [];
   omniState.bekraeft = null;
   omniState.valgt = 0;
+  omniState.filer = [];
   tegnChips();
   tegnPanel();
   tegnLegend();
@@ -528,9 +548,45 @@ function opdaterOmni() {
   planlaegSoegning();
 }
 
+/*
+ * En fil trukket ind paa kommandobaren er STARTEN paa en opgave.
+ *
+ * Den opretter ikke noget af sig selv: filen laegger sig som en chip og
+ * venter paa, at man skriver en titel og trykker Enter - praecis som en
+ * dato eller en kontekst gor. Er feltet tomt, foreslaas filnavnet som titel,
+ * saa ét Enter er nok. Esc fortryder det hele uden at efterlade noget.
+ */
+function bindOmniFiler() {
+  const kort = omniKort();
+  const el = omniEl();
+  if (!kort || !el) return;
+
+  const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
+  ['dragenter', 'dragover'].forEach((n) => kort.addEventListener(n, (e) => {
+    if (!e.dataTransfer || !Array.from(e.dataTransfer.types || []).includes('Files')) return;
+    stop(e);
+    kort.classList.add('draaber');
+  }));
+  ['dragleave', 'dragend'].forEach((n) => kort.addEventListener(n, () => kort.classList.remove('draaber')));
+
+  kort.addEventListener('drop', (e) => {
+    const filer = e.dataTransfer && e.dataTransfer.files ? [...e.dataTransfer.files] : [];
+    if (!filer.length) return;
+    stop(e);
+    kort.classList.remove('draaber');
+    omniState.filer = omniState.filer.concat(filer);
+    // Filnavnet UDEN endelse er et bedre forslag end intet - men det maa
+    // aldrig overskrive noget, brugeren allerede har skrevet.
+    if (!el.value.trim()) el.value = filer[0].name.replace(/\.[^.]+$/, '');
+    el.focus();
+    opdaterOmni();
+  });
+}
+
 function bindOmni() {
   const el = omniEl();
   if (!el) return;
+  bindOmniFiler();
   saetMode(null);
   tegnLegend();
 

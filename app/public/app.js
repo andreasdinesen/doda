@@ -736,7 +736,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 35;
+const APP_VERSION = 36;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -1658,6 +1658,10 @@ const omniState = {
   bekraeft: null,      // {contexts:[], project} - ukendte navne der skal godkendes
   soegeTimer: null,
   soegeToken: 0,
+  // Filer, der er trukket ind, men endnu ikke sendt. De VENTER paa titlen:
+  // en fil maa ikke oprette noget bag om brugeren, og et Esc skal kunne
+  // fortryde det hele uden at efterlade en opgave, ingen bad om.
+  filer: [],
 };
 
 function omniEl() { return document.getElementById('omni'); }
@@ -1796,9 +1800,13 @@ function tegnChips() {
   const t = omniState.tolket;
   const raa = omniEl() ? omniEl().value.trim() : '';
   // Navigations-tilstandene har ingen tolkning at vise.
-  if (!raa || !t || (omniState.mode && !'+*'.includes(omniState.mode))) { host.innerHTML = ''; return; }
+  if ((!raa && !omniState.filer.length) || (omniState.mode && !'+*'.includes(omniState.mode))) { host.innerHTML = ''; return; }
+  if (!t) { host.innerHTML = omniState.filer.map((f) =>
+    `<span class="chip">${esc(`📎 ${f.name}`)}</span>`).join(''); return; }
 
   const chips = [];
+  // Ventende filer staar foerst: de er det mest overraskende i feltet.
+  for (const f of omniState.filer) chips.push([`📎 ${f.name}`, 'accent']);
   /* Udfylder skaermen noget, skal det staa HER, foer man trykker Enter -
      ellers sker det bag om ryggen paa brugeren, og det er praecis den slags
      tavse hjaelpsomhed, en chip-raekke findes for at afsloere.
@@ -2092,7 +2100,18 @@ async function fangstNu(bekraeftet) {
       return;
     }
     const it = svar.item;
+    const venter = omniState.filer.slice();
     luk();
+    /* Filerne sendes FOERST nu: elementet skal findes, foer det kan have en
+       vedhaeftning. Fejler en af dem, er opgaven stadig oprettet - og det er
+       den rigtige rangorden: teksten er det vigtige, filen er tilbehoeret. */
+    if (venter.length) {
+      let sendt = 0;
+      for (const f of venter) {
+        try { await uploadFil(it.id, f); sendt++; } catch (ex) { toast(ex.message); }
+      }
+      if (sendt) toast(`${sendt} file${sendt === 1 ? '' : 's'} attached`);
+    }
     // Staar man paa den skaerm, opgaven lander paa, skal den vaere der NU.
     // Ellers hentes state og liste som foer (p3_lists' indsaetStraks).
     if (indsaetStraks(it)) opfriskBagefter();
@@ -2122,6 +2141,7 @@ function luk() {
   omniState.resultater = [];
   omniState.bekraeft = null;
   omniState.valgt = 0;
+  omniState.filer = [];
   tegnChips();
   tegnPanel();
   tegnLegend();
@@ -2146,9 +2166,45 @@ function opdaterOmni() {
   planlaegSoegning();
 }
 
+/*
+ * En fil trukket ind paa kommandobaren er STARTEN paa en opgave.
+ *
+ * Den opretter ikke noget af sig selv: filen laegger sig som en chip og
+ * venter paa, at man skriver en titel og trykker Enter - praecis som en
+ * dato eller en kontekst gor. Er feltet tomt, foreslaas filnavnet som titel,
+ * saa ét Enter er nok. Esc fortryder det hele uden at efterlade noget.
+ */
+function bindOmniFiler() {
+  const kort = omniKort();
+  const el = omniEl();
+  if (!kort || !el) return;
+
+  const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
+  ['dragenter', 'dragover'].forEach((n) => kort.addEventListener(n, (e) => {
+    if (!e.dataTransfer || !Array.from(e.dataTransfer.types || []).includes('Files')) return;
+    stop(e);
+    kort.classList.add('draaber');
+  }));
+  ['dragleave', 'dragend'].forEach((n) => kort.addEventListener(n, () => kort.classList.remove('draaber')));
+
+  kort.addEventListener('drop', (e) => {
+    const filer = e.dataTransfer && e.dataTransfer.files ? [...e.dataTransfer.files] : [];
+    if (!filer.length) return;
+    stop(e);
+    kort.classList.remove('draaber');
+    omniState.filer = omniState.filer.concat(filer);
+    // Filnavnet UDEN endelse er et bedre forslag end intet - men det maa
+    // aldrig overskrive noget, brugeren allerede har skrevet.
+    if (!el.value.trim()) el.value = filer[0].name.replace(/\.[^.]+$/, '');
+    el.focus();
+    opdaterOmni();
+  });
+}
+
 function bindOmni() {
   const el = omniEl();
   if (!el) return;
+  bindOmniFiler();
   saetMode(null);
   tegnLegend();
 
@@ -2293,7 +2349,11 @@ async function tegnSideIndhold() {
 
   try {
     if (view.id === 'inbox') {
-      const d = await api('GET', '/api/v1/items?status=inbox');
+      /* 'queued' med: den er noternes hvileplads, men en OPGAVE kan have
+         faaet den (den var i statusvaelgeren indtil v36, og et genaabnet
+         projekt vaekker sine opgaver dertil). Uden dette laa de usynlige i
+         hver eneste liste. Inbox er det rigtige sted: de er uafklarede. */
+      const d = await api('GET', '/api/v1/items?status=inbox,queued&kind=task');
       state.items = d.items;
       host.innerHTML = sideInbox();
     } else {
@@ -2542,7 +2602,7 @@ async function raekkeTaster(e) {
     await fuldfoer(id);
     return;
   }
-  const statusTaster = { n: 'next', w: 'waiting', s: 'someday', q: 'queued' };
+  const statusTaster = { n: 'next', w: 'waiting', s: 'someday' };
   if (statusTaster[e.key]) {
     mit();
     husk();
@@ -2871,8 +2931,6 @@ async function aabnElement(listeItem) {
     <textarea class="detail-note" id="dNote" rows="1"
       placeholder="Add details…" aria-label="Details">${esc(u.note)}</textarea>
     <div class="note-preview" id="dPreview" hidden></div>
-    <div id="dNotion"></div>
-
     <div class="chiprow" id="dChips"></div>
 
     <div class="detail-help" id="dHelp" hidden>
@@ -2902,6 +2960,8 @@ async function aabnElement(listeItem) {
       </dl>
       <button class="btn primary" id="dGotIt">Got it</button>
     </div>
+
+    <div id="dNotion"></div>
 
     ${vedhaeftningerHtml(it)}
 
@@ -2985,7 +3045,15 @@ async function aabnElement(listeItem) {
         } else if (hvad === 'status') {
           redigerInline(knap, {
             tag: 'select',
-            options: ['inbox', 'next', 'queued', 'waiting', 'someday', 'done', 'dropped'].map((s) =>
+            /* 'queued' staar IKKE her. Den er dodas interne hvileplads for
+               noter (og for opgaver, der vaekkes med et genaabnet projekt) og
+               har ingen skaerm - en opgave sat dertil forsvandt fra Inbox,
+               Next, Waiting, Someday OG logbogen og kunne kun soeges frem.
+               Vil man parkere noget, hedder det Someday. Findes den paa et
+               element i forvejen, vises den stadig, saa man kan komme VAEK
+               fra den. */
+            options: ['inbox', 'next', 'waiting', 'someday', 'done', 'dropped']
+              .concat(u.status === 'queued' ? ['queued'] : []).map((s) =>
               `<option value="${s}"${s === u.status ? ' selected' : ''}>${esc(statusNavn(s))}</option>`).join(''),
             onchange: (v) => { u.status = v; },
           });
@@ -4255,7 +4323,22 @@ function tegnNotionKommentarer(host, o, liste) {
  * gennem dodas EGEN markdown-renderer, som escaper foerst; der bygges aldrig
  * HTML af fremmed indhold.
  */
-function notionRude(host, o) {
+/*
+ * Om ruden er foldet sammen, huskes paa TVAERS af elementer - ikke pr. side.
+ * "Jeg vil ikke have den foldet ud automatisk" er en vane, ikke en holdning
+ * til én bestemt opgave; pr. element ville det ogsaa vokse i det uendelige i
+ * localStorage og vaere umuligt at gennemskue. Standard er foldet UD: har man
+ * haengt en side paa, er den det, man kom for.
+ */
+function notionFoldet() {
+  try { return localStorage.getItem('doda_notion_fold') === '1'; } catch { return false; }
+}
+
+function saetNotionFoldet(fold) {
+  try { localStorage.setItem('doda_notion_fold', fold ? '1' : '0'); } catch { /* privat tilstand */ }
+}
+
+function notionRude(host, o, foldSammen) {
   if (!host) return;
   const erNotion = /(^|\.)notion\.(so|site)\//.test(String(o.link_url || ''))
     || /notion\.com\//.test(String(o.link_url || ''));
@@ -4264,7 +4347,7 @@ function notionRude(host, o) {
   host.innerHTML = `<button class="btn ghost" id="ntShow" style="margin-top:10px">
     ${icon('note', 15)} Show the Notion page</button>`;
 
-  host.querySelector('#ntShow').addEventListener('click', async () => {
+  const vis = async () => {
     host.innerHTML = '<p class="lead" style="margin-top:12px">Loading the page…</p>';
     try {
       const d = await api('GET', `/api/v1/notion/page?url=${encodeURIComponent(o.link_url)}`);
@@ -4277,14 +4360,22 @@ function notionRude(host, o) {
         <p class="gate-note" style="text-align:left">Read-only. Images stay in Notion —
         doda only shows content from its own server, so they appear as links.</p>
         <button class="btn ghost" id="ntHide">Hide</button>`;
-      host.querySelector('#ntHide').addEventListener('click', () => notionRude(host, o));
+      // "Hide" folder sammen - og saa staar knappen der igen, som foer.
+      host.querySelector('#ntHide').addEventListener('click', () => {
+        saetNotionFoldet(true);
+        notionRude(host, o, true);
+      });
       notionKommentarer(host.querySelector('#ntKom'), o);
     } catch (ex) {
       host.innerHTML = `<p class="lead" style="margin-top:12px">${esc(ex.message)}</p>
         <button class="btn ghost" id="ntAgain" style="margin-top:8px">Try again</button>`;
-      host.querySelector('#ntAgain').addEventListener('click', () => notionRude(host, o));
+      host.querySelector('#ntAgain').addEventListener('click', () => notionRude(host, o, true));
     }
-  });
+  };
+
+  host.querySelector('#ntShow').addEventListener('click', () => { saetNotionFoldet(false); vis(); });
+  // Kaldes den uden et udtrykkeligt valg, gaelder det, brugeren gjorde sidst.
+  if (foldSammen === undefined ? !notionFoldet() : !foldSammen) vis();
 }
 
 /* ---- p5_repeat.js ---- */
@@ -5814,7 +5905,7 @@ const GENVEJE = [
     ['esc', 'Leave the list — letters go back to capturing'],
     ['enter', 'Open the item'],
     ['space', 'Mark it done'],
-    ['n', 'Next Actions'], ['w', 'Waiting For'], ['s', 'Someday'], ['q', 'Queued'],
+    ['n', 'Next Actions'], ['w', 'Waiting For'], ['s', 'Someday'],
     ['c', 'Set a context'], ['p', 'Set a project'],
     ['x', 'Delete'],
   ]],

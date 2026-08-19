@@ -661,7 +661,7 @@ const GENVEJE = [
     ['esc', 'Leave the list — letters go back to capturing'],
     ['enter', 'Open the item'],
     ['space', 'Mark it done'],
-    ['n', 'Next Actions'], ['w', 'Waiting For'], ['s', 'Someday'], ['q', 'Queued'],
+    ['n', 'Next Actions'], ['w', 'Waiting For'], ['s', 'Someday'],
     ['c', 'Set a context'], ['p', 'Set a project'],
     ['x', 'Delete'],
   ]],

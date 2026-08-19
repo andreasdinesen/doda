@@ -326,9 +326,33 @@ function opret(srv) {
    */
   async function opretSide(foraelderId, raaTitel) {
     const t = String(raaTitel || '').trim().slice(0, 200) || 'Untitled';
+
+    /*
+     * En side og en DATABASE er to forskellige foraeldre for Notion.
+     * En side vil have `parent.page_id` og egenskaben `title`; en database vil
+     * have `parent.database_id` OG at titel-egenskaben hedder det, DATABASEN
+     * kalder den ("Name", "Opgave", hvad som helst). Sender man en database
+     * som page_id, afvises det.
+     *
+     * Adressen alene afsloerer ikke hvad det er, saa vi spoerger. Svarer
+     * /databases/<id> med 200, er det en database - ellers behandles det som
+     * en side. Det koster ét kald og fjerner en hel klasse af fejl, brugeren
+     * ellers ville se som "Notion ville ikke".
+     */
+    const skema = await kald('GET', `/databases/${encodeURIComponent(foraelderId)}`);
+    const erDatabase = skema.status === 200 && skema.data && skema.data.object === 'database';
+
+    let titelNavn = 'title';
+    if (erDatabase) {
+      // Titlen findes paa TYPEN, ikke paa navnet - samme regel som titel().
+      const fundet = Object.entries(skema.data.properties || {})
+        .find(([, v]) => v && v.type === 'title');
+      titelNavn = fundet ? fundet[0] : 'Name';
+    }
+
     const r = await kald('POST', '/pages', {
-      parent: { page_id: foraelderId },
-      properties: { title: { title: [{ text: { content: t } }] } },
+      parent: erDatabase ? { database_id: foraelderId } : { page_id: foraelderId },
+      properties: { [titelNavn]: { title: [{ text: { content: t } }] } },
     });
     if (r.status === 403) return { fejl: MANGLER_LOV };
     if (r.status !== 200 || !r.data) {

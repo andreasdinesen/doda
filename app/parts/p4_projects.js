@@ -737,7 +737,22 @@ function tegnNotionKommentarer(host, o, liste) {
  * gennem dodas EGEN markdown-renderer, som escaper foerst; der bygges aldrig
  * HTML af fremmed indhold.
  */
-function notionRude(host, o) {
+/*
+ * Om ruden er foldet sammen, huskes paa TVAERS af elementer - ikke pr. side.
+ * "Jeg vil ikke have den foldet ud automatisk" er en vane, ikke en holdning
+ * til én bestemt opgave; pr. element ville det ogsaa vokse i det uendelige i
+ * localStorage og vaere umuligt at gennemskue. Standard er foldet UD: har man
+ * haengt en side paa, er den det, man kom for.
+ */
+function notionFoldet() {
+  try { return localStorage.getItem('doda_notion_fold') === '1'; } catch { return false; }
+}
+
+function saetNotionFoldet(fold) {
+  try { localStorage.setItem('doda_notion_fold', fold ? '1' : '0'); } catch { /* privat tilstand */ }
+}
+
+function notionRude(host, o, foldSammen) {
   if (!host) return;
   const erNotion = /(^|\.)notion\.(so|site)\//.test(String(o.link_url || ''))
     || /notion\.com\//.test(String(o.link_url || ''));
@@ -746,7 +761,7 @@ function notionRude(host, o) {
   host.innerHTML = `<button class="btn ghost" id="ntShow" style="margin-top:10px">
     ${icon('note', 15)} Show the Notion page</button>`;
 
-  host.querySelector('#ntShow').addEventListener('click', async () => {
+  const vis = async () => {
     host.innerHTML = '<p class="lead" style="margin-top:12px">Loading the page…</p>';
     try {
       const d = await api('GET', `/api/v1/notion/page?url=${encodeURIComponent(o.link_url)}`);
@@ -759,12 +774,20 @@ function notionRude(host, o) {
         <p class="gate-note" style="text-align:left">Read-only. Images stay in Notion —
         doda only shows content from its own server, so they appear as links.</p>
         <button class="btn ghost" id="ntHide">Hide</button>`;
-      host.querySelector('#ntHide').addEventListener('click', () => notionRude(host, o));
+      // "Hide" folder sammen - og saa staar knappen der igen, som foer.
+      host.querySelector('#ntHide').addEventListener('click', () => {
+        saetNotionFoldet(true);
+        notionRude(host, o, true);
+      });
       notionKommentarer(host.querySelector('#ntKom'), o);
     } catch (ex) {
       host.innerHTML = `<p class="lead" style="margin-top:12px">${esc(ex.message)}</p>
         <button class="btn ghost" id="ntAgain" style="margin-top:8px">Try again</button>`;
-      host.querySelector('#ntAgain').addEventListener('click', () => notionRude(host, o));
+      host.querySelector('#ntAgain').addEventListener('click', () => notionRude(host, o, true));
     }
-  });
+  };
+
+  host.querySelector('#ntShow').addEventListener('click', () => { saetNotionFoldet(false); vis(); });
+  // Kaldes den uden et udtrykkeligt valg, gaelder det, brugeren gjorde sidst.
+  if (foldSammen === undefined ? !notionFoldet() : !foldSammen) vis();
 }

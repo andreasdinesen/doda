@@ -341,6 +341,35 @@ Dette **afviger bevidst** fra handover §5.6, der gjorde »efter fuldførelse« 
 standard. Andreas har valgt Todoist-kompatibilitet, fordi han kender syntaksen —
 og synligheden løses i stedet af preview-chippen, der altid skriver tilstanden ud.
 
+### En fil på kommandobaren venter på titlen (v36)
+
+Trækker man en fil ind på kommandobaren, **oprettes der ikke noget**. Filen
+lægger sig som en chip ved siden af dato- og kontekst-chippene og venter på, at
+man skriver en titel og trykker Enter. Er feltet tomt, foreslås filnavnet uden
+endelse — men det overskriver aldrig noget, brugeren har skrevet, og **Esc
+fortryder det hele uden at efterlade en opgave, ingen bad om**.
+
+Filerne sendes **efter** at elementet findes (en vedhæftning skal have noget at
+hænge på). Fejler en upload, er opgaven stadig oprettet: teksten er det
+vigtige, filen er tilbehøret.
+
+### »Queued« var en intern tilstand, der var sluppet ud (v36)
+
+`queued` er dodas hvileplads for **noter** — og den, opgaver vækkes til, når et
+droppet projekt genåbnes. Den har **ingen skærm**, men stod alligevel i
+status-menuen og på `q`-tasten. En opgave sat dertil forsvandt fra Inbox, Next
+Actions, Waiting For, Someday **og** logbogen og kunne kun findes ved at søge.
+
+- Den er ude af menuen og af `q` — vil man parkere noget, hedder det Someday.
+- Står et element allerede på Queued, **vises den stadig i menuen**, så man kan
+  komme væk fra den.
+- **Inbox viser nu `queued` opgaver** (`kind=task`, så noterne ikke rives med).
+  Det lukker samtidig hullet med, at et genåbnet projekts opgaver landede i
+  ingenmandsland.
+
+Den generelle form: **en intern tilstand, der kan vælges i brugerfladen, er en
+fælde** — den har ingen skærm, fordi den aldrig var ment som et valg.
+
 ### Noter kan slås fra — vejene ind, ikke dataene (v35)
 
 Holder man sin reference i Notion, er dodas noter ét sted for meget.
