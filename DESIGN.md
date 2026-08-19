@@ -341,6 +341,29 @@ Dette **afviger bevidst** fra handover §5.6, der gjorde »efter fuldførelse« 
 standard. Andreas har valgt Todoist-kompatibilitet, fordi han kender syntaksen —
 og synligheden løses i stedet af preview-chippen, der altid skriver tilstanden ud.
 
+### Kilden og den færdige note er to udgaver — kun én ad gangen (v37)
+
+Beskrivelsen i detaljeruden har både et redigeringsfelt og en renderet
+visning. **Der må kun være én af dem fremme.** Indtil v37 blev kun previewet
+styret — det skjultes, mens feltet havde fokus — mens selve tekstfeltet aldrig
+blev skjult. Uden fokus stod noten derfor **to gange**: rå i feltet og renderet
+nedenunder.
+
+Det var usynligt, så længe noterne var korte. Først da MsGraphBud begyndte at
+sende mails ind med en 300 tegn lang Outlook-adresse i beskrivelsen, fyldte
+kilden mere end selve opgaven, og fejlen blev åbenlys.
+
+- **I hvile:** den færdige udgave. Feltet er skjult.
+- **Under redigering:** kilden. Previewet er skjult.
+- **Et klik på previewet** bringer feltet tilbage med markøren i enden —
+  **undtagen på et link**, som skal kunne følges (`e.target.closest('a')`).
+- Feltet skal være synligt, *før* det kan få fokus, og `scrollHeight` er 0 så
+  længe det er skjult — derfor måles højden først bagefter.
+
+Den generelle regel: **viser man både en kilde og dens gengivelse, er
+synligheden ét valg med to sider.** Styrer man kun den ene, står begge fremme i
+den tilstand, ingen tænkte på.
+
 ### En fil på kommandobaren venter på titlen (v36)
 
 Trækker man en fil ind på kommandobaren, **oprettes der ikke noget**. Filen

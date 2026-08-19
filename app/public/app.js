@@ -736,7 +736,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 36;
+const APP_VERSION = 37;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -3163,14 +3163,36 @@ async function aabnElement(listeItem) {
   // Feltet vokser med teksten - en fast hoejde ville enten spilde plads
   // eller klemme en lang note sammen.
   const voks = () => { noteEl.style.height = 'auto'; noteEl.style.height = `${Math.max(noteEl.scrollHeight, 28)}px`; };
+  /*
+   * Feltet og previewet er TO udgaver af den samme note, saa der maa kun vaere
+   * én af dem fremme. Foer skjulte vi kun previewet, naar feltet havde fokus -
+   * men feltet blev aldrig skjult, og uden fokus stod noten derfor to gange:
+   * raa i tekstfeltet og renderet nedenunder. Med en lang adresse i noten
+   * fyldte kilden mere end selve opgaven.
+   *
+   * Nu: har noten indhold, og redigerer man den ikke, ser man den faerdige
+   * udgave. Et klik paa den bringer feltet tilbage - undtagen paa et link,
+   * som skal kunne foelges.
+   */
   const tegnPreview = () => {
     const v = noteEl.value.trim();
-    preview.hidden = !v || document.activeElement === noteEl;
+    const vis = !!v && document.activeElement !== noteEl;
+    preview.hidden = !vis;
     preview.innerHTML = v ? markdown(v) : '';
+    noteEl.hidden = vis;
   };
   noteEl.addEventListener('input', () => { u.note = noteEl.value; voks(); });
   noteEl.addEventListener('focus', tegnPreview);
   noteEl.addEventListener('blur', tegnPreview);
+  preview.addEventListener('click', (e) => {
+    if (e.target.closest('a')) return;
+    // Feltet skal vaere synligt, foer det kan faa fokus - og scrollHeight er 0,
+    // saa laenge det er skjult, saa hoejden maales foerst bagefter.
+    noteEl.hidden = false;
+    noteEl.focus();
+    noteEl.setSelectionRange(noteEl.value.length, noteEl.value.length);
+    voks();
+  });
   voks();
   tegnPreview();
 

@@ -13,7 +13,7 @@
 
 | | |
 |---|---|
-| **Fase** | **v36 udgivet.** Kravbeskrivelsen er bygget; v9–v36 er Andreas' ønsker. |
+| **Fase** | **v37 udgivet.** Kravbeskrivelsen er bygget; v9–v37 er Andreas' ønsker. |
 | **Næste** | Ingen igangværende opgave. Se `HANDOVER-NAESTE.md`. |
 | **Tilstand** | 178 tests grønne, install-script **119.350 / 126.000 (95 %)** |
 | **Udgivet version** | **36** |
