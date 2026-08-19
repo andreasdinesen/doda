@@ -673,7 +673,9 @@ async function aabnElement(listeItem) {
 
     <div class="modal-foot">
       <button class="btn ghost" id="edDelete">Delete</button>
-      <button class="btn ghost" id="edConvert">${it.kind === 'note' ? 'Make it a task' : 'Make it a note'}</button>
+      ${it.kind === 'note' || state.notesEnabled
+    ? `<button class="btn ghost" id="edConvert">${it.kind === 'note' ? 'Make it a task' : 'Make it a note'}</button>`
+    : ''}
       <span style="flex:1"></span>
       <button class="btn" id="edCancel">Cancel</button>
       <button class="btn primary" id="edSave">Save</button>
@@ -762,7 +764,7 @@ async function aabnElement(listeItem) {
         } else if (hvad === 'link') {
           // Et link skrives, ikke vaelges - derfor en lille dialog og ikke
           // chip-vaelgeren.
-          spoergOmLink(u, tegnChipsRow);
+          spoergOmLink(u, tegnChipsRow, u.title);
         } else {
           redigerInline(knap, {
             tag: 'select',
@@ -941,7 +943,8 @@ async function aabnElement(listeItem) {
   // Konvertering ma ALDRIG miste indhold: bade titel og beskrivelse foelger
   // med begge veje (handover §5.5). En note er reference og skal derfor ud af
   // handlingslisterne - den far status "queued", ikke "inbox".
-  host.querySelector('#edConvert').addEventListener('click', async () => {
+  const konverter = host.querySelector('#edConvert');
+  if (konverter) konverter.addEventListener('click', async () => {
     const tilNote = it.kind !== 'note';
     try {
       await gem({ kind: tilNote ? 'note' : 'task', status: tilNote ? 'queued' : (u.status === 'queued' ? 'inbox' : u.status) });
@@ -983,6 +986,19 @@ function sideSettings() {
     <div class="card"><h2>Capture syntax</h2>
       ${syntaksTabel()}
       <p class="gate-note" style="text-align:left">Danish words work too: <code>!i morgen</code>, <code>!om 2 uger</code>.</p>
+    </div>
+
+    <div class="card"><h2>Notes</h2>
+      <p class="lead" style="margin:6px 0 0">Keep your reference material somewhere else —
+      Notion, say? Then doda's notes are one place too many. Turning them off hides the
+      Notes screen, the <code>*</code> shortcut and <em>Make it a note</em>.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+        <button class="btn ${state.notesEnabled ? 'primary' : ''}" data-notes="on">Notes on</button>
+        <button class="btn ${state.notesEnabled ? '' : 'primary'}" data-notes="off">Notes off</button>
+      </div>
+      <p class="gate-note" style="text-align:left">${state.noteCount
+    ? `You have <strong>${state.noteCount} note${state.noteCount === 1 ? '' : 's'}</strong>. They are kept either way — they still show on their project and in search, and a single note can still be turned into a task.`
+    : 'Nothing is deleted either way: this only hides the ways in.'}</p>
     </div>
 
     <div class="card"><h2>Passkeys</h2>
@@ -1219,6 +1235,19 @@ function bindNoegler() {
 }
 
 function bindSettings() {
+  document.querySelectorAll('[data-notes]').forEach((el) => {
+    el.addEventListener('click', async () => {
+      const fra = el.dataset.notes === 'off';
+      await api('POST', '/api/v1/settings', { settings: { notes_off: fra ? '1' : '0' } });
+      // Staar man PAA notesiden, naar den slaas fra, skal man ikke blive
+      // staaende paa noget, menuen ikke laengere har.
+      if (fra && state.view === 'notes') state.view = 'next';
+      await genindlaes();
+      render();
+      gaaTil('settings');
+      toast(fra ? 'Notes are off' : 'Notes are on');
+    });
+  });
   bindNoegler();
   bindData();
   bindPush();

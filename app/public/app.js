@@ -736,7 +736,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 34;
+const APP_VERSION = 35;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -759,6 +759,11 @@ const state = {
   filterContext: null,
   items: [],
   indlaeser: false,
+  // Noter kan slaas fra (Settings). Bruger man Notion til reference, er
+  // dodas noter ét sted for meget. Standard er TIL - en ny installation skal
+  // ikke mangle noget, fordi ingen har taget stilling.
+  notesEnabled: true,
+  noteCount: 0,
 };
 
 /* ------------------------------------------------------------ hjaelpere */
@@ -1063,7 +1068,9 @@ function bindGate() {
 }
 
 function navHtml() {
-  const iNav = VIEWS.filter((v) => v.group > 0);
+  // Slaaet fra betyder: ingen vej IND. Det, der allerede findes, forsvinder
+  // ikke - noterne staar stadig paa deres projekt og kan soeges frem.
+  const iNav = VIEWS.filter((v) => v.group > 0 && (v.id !== 'notes' || state.notesEnabled));
   const grupper = [...new Set(iNav.map((v) => v.group))];
   return grupper.map((g) => `<nav class="nav">${iNav.filter((v) => v.group === g).map((v) => {
     const antal = v.tael ? (state.counts[v.tael] || 0) : 0;
@@ -1332,6 +1339,8 @@ async function hentState() {
     state.counts = d.counts;
     state.today = d.today;
     state.reviewDue = d.reviewDue;
+    if (d.notesEnabled !== undefined) state.notesEnabled = d.notesEnabled;
+    if (d.noteCount !== undefined) state.noteCount = d.noteCount;
   } catch (ex) {
     if (ex.status !== 401) toast(ex.message);
   }
@@ -1634,7 +1643,11 @@ const NAVIGATION = {
   ':': { kilde: () => state.areas, hvad: 'area', flertal: 'areas', ikon: 'someday', sti: '/api/v1/areas', felt: 'area' },
 };
 
-const STANDARD_LEGEND = ['+ task', '* note', '/ projects', '# contexts', ': areas'];
+/* Legenden er en kravspecifikation (doda v9): naevner den "* note", skal den
+   tilstand findes. Derfor bygges den efter tilstanden, ikke som en konstant. */
+const standardLegend = () => ['+ task']
+  .concat(state.notesEnabled ? ['* note'] : [])
+  .concat(['/ projects', '# contexts', ': areas']);
 
 const omniState = {
   mode: null,          // et tegn fra MODER, eller null
@@ -1746,6 +1759,9 @@ function ukendteNavne(tolket) {
 /* ------------------------------------------------------------ tilstand */
 
 function saetMode(tegn) {
+  // Er noter slaaet fra, findes note-tilstanden ikke. Uden det her ville
+  // "*" aabne en tilstand, hvis resultat man bagefter ikke kunne finde.
+  if (tegn === '*' && !state.notesEnabled) tegn = null;
   omniState.mode = tegn;
   const el = omniEl();
   const pil = document.getElementById('omniMode');
@@ -1761,7 +1777,7 @@ function tegnLegend() {
   const host = document.getElementById('omniLegend');
   if (!host) return;
   const m = omniState.mode ? MODER[omniState.mode] : null;
-  const dele = m ? m.legend : STANDARD_LEGEND;
+  const dele = m ? m.legend : standardLegend();
   const enter = m ? m.enter : 'Select';
   host.innerHTML = `
     <span class="legend-keys">${dele.map((d) => {
@@ -2891,7 +2907,9 @@ async function aabnElement(listeItem) {
 
     <div class="modal-foot">
       <button class="btn ghost" id="edDelete">Delete</button>
-      <button class="btn ghost" id="edConvert">${it.kind === 'note' ? 'Make it a task' : 'Make it a note'}</button>
+      ${it.kind === 'note' || state.notesEnabled
+    ? `<button class="btn ghost" id="edConvert">${it.kind === 'note' ? 'Make it a task' : 'Make it a note'}</button>`
+    : ''}
       <span style="flex:1"></span>
       <button class="btn" id="edCancel">Cancel</button>
       <button class="btn primary" id="edSave">Save</button>
@@ -2980,7 +2998,7 @@ async function aabnElement(listeItem) {
         } else if (hvad === 'link') {
           // Et link skrives, ikke vaelges - derfor en lille dialog og ikke
           // chip-vaelgeren.
-          spoergOmLink(u, tegnChipsRow);
+          spoergOmLink(u, tegnChipsRow, u.title);
         } else {
           redigerInline(knap, {
             tag: 'select',
@@ -3159,7 +3177,8 @@ async function aabnElement(listeItem) {
   // Konvertering ma ALDRIG miste indhold: bade titel og beskrivelse foelger
   // med begge veje (handover §5.5). En note er reference og skal derfor ud af
   // handlingslisterne - den far status "queued", ikke "inbox".
-  host.querySelector('#edConvert').addEventListener('click', async () => {
+  const konverter = host.querySelector('#edConvert');
+  if (konverter) konverter.addEventListener('click', async () => {
     const tilNote = it.kind !== 'note';
     try {
       await gem({ kind: tilNote ? 'note' : 'task', status: tilNote ? 'queued' : (u.status === 'queued' ? 'inbox' : u.status) });
@@ -3201,6 +3220,19 @@ function sideSettings() {
     <div class="card"><h2>Capture syntax</h2>
       ${syntaksTabel()}
       <p class="gate-note" style="text-align:left">Danish words work too: <code>!i morgen</code>, <code>!om 2 uger</code>.</p>
+    </div>
+
+    <div class="card"><h2>Notes</h2>
+      <p class="lead" style="margin:6px 0 0">Keep your reference material somewhere else —
+      Notion, say? Then doda's notes are one place too many. Turning them off hides the
+      Notes screen, the <code>*</code> shortcut and <em>Make it a note</em>.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+        <button class="btn ${state.notesEnabled ? 'primary' : ''}" data-notes="on">Notes on</button>
+        <button class="btn ${state.notesEnabled ? '' : 'primary'}" data-notes="off">Notes off</button>
+      </div>
+      <p class="gate-note" style="text-align:left">${state.noteCount
+    ? `You have <strong>${state.noteCount} note${state.noteCount === 1 ? '' : 's'}</strong>. They are kept either way — they still show on their project and in search, and a single note can still be turned into a task.`
+    : 'Nothing is deleted either way: this only hides the ways in.'}</p>
     </div>
 
     <div class="card"><h2>Passkeys</h2>
@@ -3437,6 +3469,19 @@ function bindNoegler() {
 }
 
 function bindSettings() {
+  document.querySelectorAll('[data-notes]').forEach((el) => {
+    el.addEventListener('click', async () => {
+      const fra = el.dataset.notes === 'off';
+      await api('POST', '/api/v1/settings', { settings: { notes_off: fra ? '1' : '0' } });
+      // Staar man PAA notesiden, naar den slaas fra, skal man ikke blive
+      // staaende paa noget, menuen ikke laengere har.
+      if (fra && state.view === 'notes') state.view = 'next';
+      await genindlaes();
+      render();
+      gaaTil('settings');
+      toast(fra ? 'Notes are off' : 'Notes are on');
+    });
+  });
   bindNoegler();
   bindData();
   bindPush();
@@ -3638,9 +3683,10 @@ async function sideProjekt(id) {
         ${d.tasks.map((it, i) => projektOpgave(it, i, d.tasks.length)).join('')}</div>`
     : '<p class="lead" style="padding:8px 14px">Nothing here yet.</p>'}
 
-    <h2 class="group meta">Notes <span class="group-count">${d.notes.length}</span></h2>
-    ${d.notes.length ? `<div class="notes">${d.notes.map(noteKort).join('')}</div>`
-    : '<p class="lead" style="padding:8px 14px">No notes. Capture one with <code>* text @' + esc(p.name) + '</code>.</p>'}
+    ${d.notes.length || state.notesEnabled ? `
+      <h2 class="group meta">Notes <span class="group-count">${d.notes.length}</span></h2>
+      ${d.notes.length ? `<div class="notes">${d.notes.map(noteKort).join('')}</div>`
+    : '<p class="lead" style="padding:8px 14px">No notes. Capture one with <code>* text @' + esc(p.name) + '</code>.</p>'}` : ''}
   </section>`;
 
   bindProjektvisning(p, d);
@@ -3794,7 +3840,7 @@ function redigerProjekt(p) {
            title="${esc(u.link_url)}">${icon('link', 13)} ${esc(linkNavn(u))}</a>
          <button class="chip flat" id="pLinkEdit" type="button">edit link</button>`
       : '<button class="chip flat" id="pLinkEdit" type="button">+ link</button>';
-    host.querySelector('#pLinkEdit').addEventListener('click', () => spoergOmLink(u, tegnLink));
+    host.querySelector('#pLinkEdit').addEventListener('click', () => spoergOmLink(u, tegnLink, host.querySelector('#pName').value));
   };
   tegnLink();
 
@@ -3954,7 +4000,11 @@ function linkNavn(o) {
 }
 
 /** Lille dialog: adressen og et valgfrit navn. Gemmes foerst med Save. */
-function spoergOmLink(o, naar) {
+function spoergOmLink(o, naar, foreslaaetNavn) {
+  /* To ting i én dialog: linke til en side, der findes - eller lave en ny.
+     Tilstanden skifter kun, hvad et klik paa et soegeresultat betyder, saa
+     der er ingen ny liste og ingen ny tilstand at holde styr paa. */
+  let nyTilstand = false;
   const host = document.createElement('div');
   host.className = 'modal';
   host.innerHTML = `
@@ -3964,6 +4014,10 @@ function spoergOmLink(o, naar) {
       really lives — a Notion page, a document, an issue. It becomes a chip you can click.</p>
     <div class="field" id="lkSearchBox" hidden>
       <span>Search Notion</span>
+      <div class="pills" id="lkMode" style="margin:2px 0 8px">
+        <button class="pill on" data-lkmode="link">Link to a page</button>
+        <button class="pill" data-lkmode="new">Create a page inside</button>
+      </div>
       <input class="input" id="lkQ" placeholder="Type part of a page name…"
         autocomplete="off" spellcheck="false">
       <div id="lkHits" class="notionhits"></div>
@@ -3991,6 +4045,17 @@ function spoergOmLink(o, naar) {
   if (slet) slet.addEventListener('click', () => { o.link_url = null; o.link_title = null; luk(); naar(); });
 
   const felt = host.querySelector('#lkUrl');
+  host.querySelectorAll('[data-lkmode]').forEach((el) => {
+    el.addEventListener('click', () => {
+      nyTilstand = el.dataset.lkmode === 'new';
+      host.querySelectorAll('[data-lkmode]').forEach((x) => x.classList.toggle('on', x === el));
+      const navn = host.querySelector('#lkName');
+      if (nyTilstand && !navn.value && foreslaaetNavn) navn.value = foreslaaetNavn.slice(0, 200);
+      // Sig hvad et klik nu goer. Uden det ser listen ens ud i begge tilstande.
+      const h = host.querySelector('#lkHits');
+      if (h) h.classList.toggle('opretter', nyTilstand);
+    });
+  });
 
   /* Er Notion forbundet, kan man soege efter siden i stedet for at skifte
      vindue og kopiere en adresse. Er den ikke, er feltet der bare ikke -
@@ -4034,10 +4099,31 @@ function spoergOmLink(o, naar) {
                ⋯ → Connections, and add the one you pasted the token from. Sharing a
                parent page covers everything under it.</p>`;
           traf.querySelectorAll('[data-url]').forEach((el) => {
-            el.addEventListener('click', () => {
-              felt.value = el.dataset.url;
-              host.querySelector('#lkName').value = el.dataset.title;
-              host.querySelector('#lkOk').focus();
+            el.addEventListener('click', async () => {
+              if (!nyTilstand) {
+                felt.value = el.dataset.url;
+                host.querySelector('#lkName').value = el.dataset.title;
+                host.querySelector('#lkOk').focus();
+                return;
+              }
+              // Opret en side UNDER den, der blev klikket paa.
+              const navn = (host.querySelector('#lkName').value.trim()
+                || foreslaaetNavn || 'Untitled').slice(0, 200);
+              el.disabled = true;
+              const gammelTekst = el.innerHTML;
+              el.textContent = `Creating “${navn}” inside…`;
+              try {
+                const d = await api('POST', '/api/v1/notion/page',
+                  { parent: el.dataset.url, title: navn });
+                felt.value = d.page.url;
+                host.querySelector('#lkName').value = d.page.title;
+                toast('Page created in Notion');
+                host.querySelector('#lkOk').focus();
+              } catch (ex) {
+                toast(ex.message);
+                el.disabled = false;
+                el.innerHTML = gammelTekst;
+              }
             });
           });
         } catch (ex) {
@@ -6328,7 +6414,7 @@ function sideGuide() {
       </div>
       ${d.grupper.map((g) => `
         ${g.gruppe ? `<div class="guide-group">${esc(g.gruppe)}</div>` : ''}
-        ${g.emner.map((e) => {
+        ${g.emner.filter((e) => e.titel !== 'Notes' || state.notesEnabled).map((e) => {
     if (e.syntaks) {
       return `<h2>${esc(e.titel)}</h2><p class="lead guide-lead">${e.lead}</p>
         <div class="card">${syntaksTabel()}

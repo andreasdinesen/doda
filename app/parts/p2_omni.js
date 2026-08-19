@@ -25,7 +25,11 @@ const NAVIGATION = {
   ':': { kilde: () => state.areas, hvad: 'area', flertal: 'areas', ikon: 'someday', sti: '/api/v1/areas', felt: 'area' },
 };
 
-const STANDARD_LEGEND = ['+ task', '* note', '/ projects', '# contexts', ': areas'];
+/* Legenden er en kravspecifikation (doda v9): naevner den "* note", skal den
+   tilstand findes. Derfor bygges den efter tilstanden, ikke som en konstant. */
+const standardLegend = () => ['+ task']
+  .concat(state.notesEnabled ? ['* note'] : [])
+  .concat(['/ projects', '# contexts', ': areas']);
 
 const omniState = {
   mode: null,          // et tegn fra MODER, eller null
@@ -137,6 +141,9 @@ function ukendteNavne(tolket) {
 /* ------------------------------------------------------------ tilstand */
 
 function saetMode(tegn) {
+  // Er noter slaaet fra, findes note-tilstanden ikke. Uden det her ville
+  // "*" aabne en tilstand, hvis resultat man bagefter ikke kunne finde.
+  if (tegn === '*' && !state.notesEnabled) tegn = null;
   omniState.mode = tegn;
   const el = omniEl();
   const pil = document.getElementById('omniMode');
@@ -152,7 +159,7 @@ function tegnLegend() {
   const host = document.getElementById('omniLegend');
   if (!host) return;
   const m = omniState.mode ? MODER[omniState.mode] : null;
-  const dele = m ? m.legend : STANDARD_LEGEND;
+  const dele = m ? m.legend : standardLegend();
   const enter = m ? m.enter : 'Select';
   host.innerHTML = `
     <span class="legend-keys">${dele.map((d) => {

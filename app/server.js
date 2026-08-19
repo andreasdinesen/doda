@@ -1467,6 +1467,10 @@ const ROUTES = {
       counts: antal,
       today: iDag(),
       reviewDue: gennemgangForfalder(),
+      notesEnabled: getSetting('notes_off', '') !== '1',
+      // Hvor mange noter der ER - saa indstillingen kan sige sandheden om,
+      // hvad der sker med dem, i stedet for at lade brugeren gaette.
+      noteCount: db.prepare("SELECT COUNT(*) AS n FROM items WHERE kind = 'note' AND deleted = 0").get().n,
     });
   },
 
@@ -2085,6 +2089,34 @@ const ROUTES = {
    * kommentarer caches ALDRIG: en gammel kommentarliste er vaerre end ingen,
    * fordi den ser ud til at vaere hele samtalen.
    */
+  /* En ny side i Notion. Foraelderen er den, brugeren har valgt i soegningen -
+     doda kender ikke andre steder at laegge den, og det er med vilje: en side
+     skal ligge et sted, ejeren selv har peget paa. */
+  'POST /api/v1/notion/page': async (req, res) => {
+    const auth = godkend(req, res, 'write');
+    if (!auth) return;
+    const body = await readJsonBody(req, auth.viaToken);
+    if (!getSetting('notion_token', '')) {
+      apiFejl(res, 400, 'not_connected', 'Connect Notion under Settings first.');
+      return;
+    }
+    const foraelder = notionModul.idFraUrl(body.parent || '') || String(body.parent || '').trim();
+    if (!/^[0-9a-f]{32}$/i.test(foraelder.replace(/-/g, ''))) {
+      apiFejl(res, 400, 'not_notion', 'Pick the Notion page it should live under.');
+      return;
+    }
+    const titel = str(body.title, 200);
+    if (!titel) { apiFejl(res, 400, 'no_text', 'The new page needs a name.'); return; }
+    if (!rateAllow(`notionny:${clientIp(req)}`, 30, 3600)) {
+      apiFejl(res, 429, 'rate_limited', 'Too many new pages. Try again shortly.');
+      return;
+    }
+    const r = await notion.opretSide(foraelder.replace(/-/g, ''), titel);
+    if (r.fejl) { apiFejl(res, 502, 'notion_failed', r.fejl); return; }
+    audit('notion-side-oprettet', r.page.id, clientIp(req));
+    sendJson(res, 200, { page: r.page });
+  },
+
   'GET /api/v1/notion/comments': async (req, res, ctx) => {
     const auth = godkend(req, res, 'read');
     if (!auth) return;
@@ -2267,7 +2299,7 @@ const ROUTES = {
     if (!user) return;
     const body = await readJsonBody(req);
     // Whitelist - aldrig blind gennemskrivning af klientens noegler.
-    const ALLOWED = new Set(['theme', 'review_weekday', 'focus_item', 'focus_started', 'ical_alarm']);
+    const ALLOWED = new Set(['theme', 'review_weekday', 'focus_item', 'focus_started', 'ical_alarm', 'notes_off']);
     const written = {};
     for (const [key, value] of Object.entries(body.settings || {})) {
       if (!ALLOWED.has(key)) continue;

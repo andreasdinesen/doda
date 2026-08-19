@@ -317,7 +317,27 @@ function opret(srv) {
     };
   }
 
-  return { proev, soeg, side, indhold, kommentarer, kommenter };
+  /**
+   * Opretter en TOM side under en anden side.
+   *
+   * Notion kraever en foraelder: der findes ikke en "roden" at lave en side i.
+   * Derfor vaelger brugeren siden, den skal ligge under - og det er samtidig
+   * det eneste sted, integrationen har adgang.
+   */
+  async function opretSide(foraelderId, raaTitel) {
+    const t = String(raaTitel || '').trim().slice(0, 200) || 'Untitled';
+    const r = await kald('POST', '/pages', {
+      parent: { page_id: foraelderId },
+      properties: { title: { title: [{ text: { content: t } }] } },
+    });
+    if (r.status === 403) return { fejl: MANGLER_LOV };
+    if (r.status !== 200 || !r.data) {
+      return { fejl: (r.data && r.data.message) || 'Notion would not create that page.' };
+    }
+    return { page: { id: r.data.id, url: r.data.url || '', title: t } };
+  }
+
+  return { proev, soeg, side, indhold, kommentarer, kommenter, opretSide };
 }
 
 /** Side-id'et ligger i enden af en Notion-adresse: 32 tegn hex. */

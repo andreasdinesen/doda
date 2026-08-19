@@ -165,9 +165,10 @@ async function sideProjekt(id) {
         ${d.tasks.map((it, i) => projektOpgave(it, i, d.tasks.length)).join('')}</div>`
     : '<p class="lead" style="padding:8px 14px">Nothing here yet.</p>'}
 
-    <h2 class="group meta">Notes <span class="group-count">${d.notes.length}</span></h2>
-    ${d.notes.length ? `<div class="notes">${d.notes.map(noteKort).join('')}</div>`
-    : '<p class="lead" style="padding:8px 14px">No notes. Capture one with <code>* text @' + esc(p.name) + '</code>.</p>'}
+    ${d.notes.length || state.notesEnabled ? `
+      <h2 class="group meta">Notes <span class="group-count">${d.notes.length}</span></h2>
+      ${d.notes.length ? `<div class="notes">${d.notes.map(noteKort).join('')}</div>`
+    : '<p class="lead" style="padding:8px 14px">No notes. Capture one with <code>* text @' + esc(p.name) + '</code>.</p>'}` : ''}
   </section>`;
 
   bindProjektvisning(p, d);
@@ -321,7 +322,7 @@ function redigerProjekt(p) {
            title="${esc(u.link_url)}">${icon('link', 13)} ${esc(linkNavn(u))}</a>
          <button class="chip flat" id="pLinkEdit" type="button">edit link</button>`
       : '<button class="chip flat" id="pLinkEdit" type="button">+ link</button>';
-    host.querySelector('#pLinkEdit').addEventListener('click', () => spoergOmLink(u, tegnLink));
+    host.querySelector('#pLinkEdit').addEventListener('click', () => spoergOmLink(u, tegnLink, host.querySelector('#pName').value));
   };
   tegnLink();
 
@@ -481,7 +482,11 @@ function linkNavn(o) {
 }
 
 /** Lille dialog: adressen og et valgfrit navn. Gemmes foerst med Save. */
-function spoergOmLink(o, naar) {
+function spoergOmLink(o, naar, foreslaaetNavn) {
+  /* To ting i én dialog: linke til en side, der findes - eller lave en ny.
+     Tilstanden skifter kun, hvad et klik paa et soegeresultat betyder, saa
+     der er ingen ny liste og ingen ny tilstand at holde styr paa. */
+  let nyTilstand = false;
   const host = document.createElement('div');
   host.className = 'modal';
   host.innerHTML = `
@@ -491,6 +496,10 @@ function spoergOmLink(o, naar) {
       really lives — a Notion page, a document, an issue. It becomes a chip you can click.</p>
     <div class="field" id="lkSearchBox" hidden>
       <span>Search Notion</span>
+      <div class="pills" id="lkMode" style="margin:2px 0 8px">
+        <button class="pill on" data-lkmode="link">Link to a page</button>
+        <button class="pill" data-lkmode="new">Create a page inside</button>
+      </div>
       <input class="input" id="lkQ" placeholder="Type part of a page name…"
         autocomplete="off" spellcheck="false">
       <div id="lkHits" class="notionhits"></div>
@@ -518,6 +527,17 @@ function spoergOmLink(o, naar) {
   if (slet) slet.addEventListener('click', () => { o.link_url = null; o.link_title = null; luk(); naar(); });
 
   const felt = host.querySelector('#lkUrl');
+  host.querySelectorAll('[data-lkmode]').forEach((el) => {
+    el.addEventListener('click', () => {
+      nyTilstand = el.dataset.lkmode === 'new';
+      host.querySelectorAll('[data-lkmode]').forEach((x) => x.classList.toggle('on', x === el));
+      const navn = host.querySelector('#lkName');
+      if (nyTilstand && !navn.value && foreslaaetNavn) navn.value = foreslaaetNavn.slice(0, 200);
+      // Sig hvad et klik nu goer. Uden det ser listen ens ud i begge tilstande.
+      const h = host.querySelector('#lkHits');
+      if (h) h.classList.toggle('opretter', nyTilstand);
+    });
+  });
 
   /* Er Notion forbundet, kan man soege efter siden i stedet for at skifte
      vindue og kopiere en adresse. Er den ikke, er feltet der bare ikke -
@@ -561,10 +581,31 @@ function spoergOmLink(o, naar) {
                ⋯ → Connections, and add the one you pasted the token from. Sharing a
                parent page covers everything under it.</p>`;
           traf.querySelectorAll('[data-url]').forEach((el) => {
-            el.addEventListener('click', () => {
-              felt.value = el.dataset.url;
-              host.querySelector('#lkName').value = el.dataset.title;
-              host.querySelector('#lkOk').focus();
+            el.addEventListener('click', async () => {
+              if (!nyTilstand) {
+                felt.value = el.dataset.url;
+                host.querySelector('#lkName').value = el.dataset.title;
+                host.querySelector('#lkOk').focus();
+                return;
+              }
+              // Opret en side UNDER den, der blev klikket paa.
+              const navn = (host.querySelector('#lkName').value.trim()
+                || foreslaaetNavn || 'Untitled').slice(0, 200);
+              el.disabled = true;
+              const gammelTekst = el.innerHTML;
+              el.textContent = `Creating “${navn}” inside…`;
+              try {
+                const d = await api('POST', '/api/v1/notion/page',
+                  { parent: el.dataset.url, title: navn });
+                felt.value = d.page.url;
+                host.querySelector('#lkName').value = d.page.title;
+                toast('Page created in Notion');
+                host.querySelector('#lkOk').focus();
+              } catch (ex) {
+                toast(ex.message);
+                el.disabled = false;
+                el.innerHTML = gammelTekst;
+              }
             });
           });
         } catch (ex) {

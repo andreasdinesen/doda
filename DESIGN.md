@@ -341,6 +341,38 @@ Dette **afviger bevidst** fra handover §5.6, der gjorde »efter fuldførelse« 
 standard. Andreas har valgt Todoist-kompatibilitet, fordi han kender syntaksen —
 og synligheden løses i stedet af preview-chippen, der altid skriver tilstanden ud.
 
+### Noter kan slås fra — vejene ind, ikke dataene (v35)
+
+Holder man sin reference i Notion, er dodas noter ét sted for meget.
+`notes_off` i settings (fravær = til, så en ny installation ikke mangler noget)
+fjerner **vejene ind**: Notes i navigationen, `*` i paletten og dens legende,
+*Make it a note* i detaljeruden, hintet på projektsiden og guidens Notes-afsnit.
+
+**Det, der findes, forsvinder aldrig.** Noterne bliver liggende, står stadig på
+deres projekt, kan søges frem, og *Make it a task* bliver på en note, så en
+enkelt kan flyttes over. En indstilling, der skjuler data, man ikke kan komme
+til igen, er en datatabsmaskine med en pæn knap — derfor siger kortet også, hvor
+mange noter der er, og hvad der sker med dem.
+
+Flaget kommer med i `/api/v1/state` (ikke `public-config`), så det følger med
+hver synk og virker på tværs af enheder uden en genindlæsning. **Hver flade,
+der lover funktionen, skal kende flaget** — legenden er en kravspecifikation
+(v9), og det gælder også guiden.
+
+### En Notion-side kan oprettes fra doda (v35)
+
+Link-vælgeren har to tilstande: *Link to a page* og *Create a page inside*. I
+den anden betyder et klik på et søgeresultat »lav en ny side **under** denne«.
+
+- **Notion kræver en forælder** — der findes ikke en »rod« at oprette i. Det
+  passer med virkeligheden: siden skal ligge et sted, ejeren har peget på, og
+  det er også dér, integrationen har adgang.
+- Navnet foreslås ud fra opgavens eller projektets titel, men **overskriver
+  aldrig noget, brugeren selv har skrevet**.
+- Tilstanden ændrer kun, hvad et klik betyder — ingen ny liste, ingen ny
+  tilstand at holde styr på. Knappen siger hvad den gør, mens den gør det
+  (»Creating "…" inside«), for en side i Notion kan ikke tages tilbage herfra.
+
 ### Kommentarer til Notion — men doda ejer dem aldrig (v34)
 
 Folder man en Notion-side ud, står sidens kommentarer nedenunder med et felt

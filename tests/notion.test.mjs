@@ -171,6 +171,11 @@ test('uden en Notion-forbindelse peger begge ruter paa Settings', async () => {
   assert.equal(skriv.data.error, 'not_connected');
 });
 
+test('at oprette en side kraever ogsaa en forbindelse, en foraelder og et navn', async () => {
+  const uden = await J('/api/v1/notion/page', { parent: NOTION_URL, title: 'Ny' });
+  assert.equal(uden.data.error, 'not_connected');
+});
+
 test('forbindelsen tjekkes FOER linket og teksten', async () => {
   // Ellers ville en bruger uden forbindelse faa at vide, at hans link er
   // forkert - og lede det helt forkerte sted.

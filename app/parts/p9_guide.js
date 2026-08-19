@@ -383,7 +383,7 @@ function sideGuide() {
       </div>
       ${d.grupper.map((g) => `
         ${g.gruppe ? `<div class="guide-group">${esc(g.gruppe)}</div>` : ''}
-        ${g.emner.map((e) => {
+        ${g.emner.filter((e) => e.titel !== 'Notes' || state.notesEnabled).map((e) => {
     if (e.syntaks) {
       return `<h2>${esc(e.titel)}</h2><p class="lead guide-lead">${e.lead}</p>
         <div class="card">${syntaksTabel()}

@@ -5,7 +5,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 34;
+const APP_VERSION = 35;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -28,6 +28,11 @@ const state = {
   filterContext: null,
   items: [],
   indlaeser: false,
+  // Noter kan slaas fra (Settings). Bruger man Notion til reference, er
+  // dodas noter ét sted for meget. Standard er TIL - en ny installation skal
+  // ikke mangle noget, fordi ingen har taget stilling.
+  notesEnabled: true,
+  noteCount: 0,
 };
 
 /* ------------------------------------------------------------ hjaelpere */
@@ -332,7 +337,9 @@ function bindGate() {
 }
 
 function navHtml() {
-  const iNav = VIEWS.filter((v) => v.group > 0);
+  // Slaaet fra betyder: ingen vej IND. Det, der allerede findes, forsvinder
+  // ikke - noterne staar stadig paa deres projekt og kan soeges frem.
+  const iNav = VIEWS.filter((v) => v.group > 0 && (v.id !== 'notes' || state.notesEnabled));
   const grupper = [...new Set(iNav.map((v) => v.group))];
   return grupper.map((g) => `<nav class="nav">${iNav.filter((v) => v.group === g).map((v) => {
     const antal = v.tael ? (state.counts[v.tael] || 0) : 0;
@@ -601,6 +608,8 @@ async function hentState() {
     state.counts = d.counts;
     state.today = d.today;
     state.reviewDue = d.reviewDue;
+    if (d.notesEnabled !== undefined) state.notesEnabled = d.notesEnabled;
+    if (d.noteCount !== undefined) state.noteCount = d.noteCount;
   } catch (ex) {
     if (ex.status !== 401) toast(ex.message);
   }
