@@ -20,6 +20,13 @@ const https = require('node:https');
 
 const VERSION = '2022-06-28';   // Notion kraever en eksplicit API-version
 
+/* Kommentarer kraever en SAERSKILT tilladelse paa integrationen i Notion.
+   Et token, der kan laese sider fint, faar 403 paa kommentarer, indtil
+   afkrydsningen er sat - saa fejlen skal pege paa knappen, ikke paa tokenet. */
+const MANGLER_LOV = 'Your Notion integration may not read or write comments yet. '
+  + 'Open it in Notion under Settings → Connections, and tick the comment '
+  + 'capabilities. Then try again.';
+
 /* --------------------------------------------------- sidens indhold */
 
 const NAVNE = {
@@ -262,7 +269,55 @@ function opret(srv) {
     return { id: r.data.id, url: r.data.url || '', title: titel(r.data) || 'Untitled' };
   }
 
-  return { proev, soeg, side, indhold };
+  /**
+   * Kommentarerne paa en side.
+   *
+   * Notion kraever, at integrationen har faaet lov at LAESE kommentarer -
+   * det er en afkrydsning i Notion, ikke noget doda kan give sig selv. Uden
+   * den svarer API'et 403 `restricted_resource`, og den fejl skal siges med
+   * rene ord, ellers leder brugeren efter fejlen i sit token, som er i orden.
+   */
+  async function kommentarer(id) {
+    const r = await kald('GET', `/comments?block_id=${encodeURIComponent(id)}&page_size=50`);
+    if (r.status === 403) return { fejl: MANGLER_LOV };
+    if (r.status !== 200 || !r.data) {
+      return { fejl: (r.data && r.data.message) || 'Could not read the comments.' };
+    }
+    return {
+      comments: (r.data.results || []).map((k) => ({
+        id: k.id,
+        text: tekst(k.rich_text || []).slice(0, 2000),
+        // En integration har intet navn paa en person; er der ingen, siger vi
+        // det ikke, i stedet for at finde paa et.
+        author: (k.created_by && k.created_by.name) || '',
+        created: k.created_time || '',
+      })).filter((k) => k.text),
+    };
+  }
+
+  /** Skriver en kommentar paa siden. Notion svarer med den, den lavede. */
+  async function kommenter(id, raa) {
+    const t = String(raa || '').trim().slice(0, 2000);
+    if (!t) return { fejl: 'There is no comment to send.' };
+    const r = await kald('POST', '/comments', {
+      parent: { page_id: id },
+      rich_text: [{ text: { content: t } }],
+    });
+    if (r.status === 403) return { fejl: MANGLER_LOV };
+    if (r.status !== 200 || !r.data) {
+      return { fejl: (r.data && r.data.message) || 'Notion would not take that comment.' };
+    }
+    return {
+      comment: {
+        id: r.data.id,
+        text: tekst(r.data.rich_text || []) || t,
+        author: (r.data.created_by && r.data.created_by.name) || '',
+        created: r.data.created_time || '',
+      },
+    };
+  }
+
+  return { proev, soeg, side, indhold, kommentarer, kommenter };
 }
 
 /** Side-id'et ligger i enden af en Notion-adresse: 32 tegn hex. */

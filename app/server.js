@@ -2078,6 +2078,55 @@ const ROUTES = {
    * Svaret ligger i hukommelsen et kvarter, saa det ikke koster et kald at
    * folde den ud og ind igen.
    */
+  /*
+   * Kommentarer paa en Notion-side.
+   *
+   * Laesning kraever `read`, skrivning `write` - som alt andet her. Og
+   * kommentarer caches ALDRIG: en gammel kommentarliste er vaerre end ingen,
+   * fordi den ser ud til at vaere hele samtalen.
+   */
+  'GET /api/v1/notion/comments': async (req, res, ctx) => {
+    const auth = godkend(req, res, 'read');
+    if (!auth) return;
+    if (!getSetting('notion_token', '')) {
+      apiFejl(res, 400, 'not_connected', 'Connect Notion under Settings first.');
+      return;
+    }
+    const sideId = notionModul.idFraUrl(ctx.query.get('url') || '');
+    if (!sideId) { apiFejl(res, 400, 'not_notion', 'That link is not a Notion page.'); return; }
+    if (!rateAllow(`notionkom:${clientIp(req)}`, 120, 3600)) {
+      apiFejl(res, 429, 'rate_limited', 'Too many comment loads. Try again shortly.');
+      return;
+    }
+    const r = await notion.kommentarer(sideId);
+    if (r.fejl) { apiFejl(res, 502, 'notion_failed', r.fejl); return; }
+    sendJson(res, 200, { comments: r.comments });
+  },
+
+  'POST /api/v1/notion/comment': async (req, res) => {
+    const auth = godkend(req, res, 'write');
+    if (!auth) return;
+    const body = await readJsonBody(req, auth.viaToken);
+    if (!getSetting('notion_token', '')) {
+      apiFejl(res, 400, 'not_connected', 'Connect Notion under Settings first.');
+      return;
+    }
+    const sideId = notionModul.idFraUrl(body.url || '');
+    if (!sideId) { apiFejl(res, 400, 'not_notion', 'That link is not a Notion page.'); return; }
+    const tekst = str(body.text, 2000);
+    if (!tekst) { apiFejl(res, 400, 'no_text', 'There is no comment to send.'); return; }
+    // Lavere end laesningen: en skrivning gaar ud i verden og kan ikke tages
+    // tilbage fra doda.
+    if (!rateAllow(`notionskriv:${clientIp(req)}`, 60, 3600)) {
+      apiFejl(res, 429, 'rate_limited', 'Too many comments. Try again shortly.');
+      return;
+    }
+    const r = await notion.kommenter(sideId, tekst);
+    if (r.fejl) { apiFejl(res, 502, 'notion_failed', r.fejl); return; }
+    audit('notion-kommentar', sideId, clientIp(req));
+    sendJson(res, 200, { comment: r.comment });
+  },
+
   'GET /api/v1/notion/page': async (req, res, ctx) => {
     const auth = godkend(req, res, 'read');
     if (!auth) return;

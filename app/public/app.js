@@ -736,7 +736,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 33;
+const APP_VERSION = 34;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -4090,6 +4090,78 @@ async function friskNotionTitel(kind, id, o, naar) {
 }
 
 /**
+ * Kommentarerne paa siden - og en vej til at skrive en.
+ *
+ * Den ligger sammen med indholdet, fordi det er dér, man laeser sig frem til,
+ * at der er noget at sige. Kommentaren gaar ud i verden og kan ikke tages
+ * tilbage fra doda, saa knappen siger "Comment", ikke "Save", og feltet
+ * ryddes foerst, naar Notion har kvitteret.
+ */
+async function notionKommentarer(host, o) {
+  if (!host) return;
+  host.innerHTML = '<p class="meta" style="margin-top:18px">Comments</p><p class="lead">Loading…</p>';
+  let liste = [];
+  try {
+    const d = await api('GET', `/api/v1/notion/comments?url=${encodeURIComponent(o.link_url)}`);
+    liste = d.comments || [];
+  } catch (ex) {
+    // En manglende tilladelse er ikke en fejl, brugeren skal jages af - men
+    // den skal staa der, for ellers ser feltet ud til at vaere i stykker.
+    host.innerHTML = `<p class="meta" style="margin-top:18px">Comments</p>
+      <p class="lead">${esc(ex.message)}</p>`;
+    return;
+  }
+  tegnNotionKommentarer(host, o, liste);
+}
+
+function tegnNotionKommentarer(host, o, liste) {
+  host.innerHTML = `
+    <p class="meta" style="margin-top:18px">Comments${liste.length ? ` · ${liste.length}` : ''}</p>
+    ${liste.length ? `<div class="notionkom">${liste.map((k) => `
+      <div class="notionkom-item">
+        <div class="meta">${esc(k.author || 'Someone')}${k.created ? ` · ${esc(visTid(Math.floor(new Date(k.created).getTime() / 1000)))}` : ''}</div>
+        <div>${linkify(k.text)}</div>
+      </div>`).join('')}</div>` : '<p class="lead">No comments yet.</p>'}
+    <div class="field" style="margin-top:12px">
+      <textarea class="input" id="ntKomTekst" rows="2"
+        placeholder="Write a comment — it goes straight into Notion"></textarea>
+    </div>
+    <button class="btn" id="ntKomSend">Comment</button>`;
+
+  const felt = host.querySelector('#ntKomTekst');
+  const knap = host.querySelector('#ntKomSend');
+  const send = async () => {
+    const t = felt.value.trim();
+    if (!t) return;
+    knap.disabled = true;
+    knap.textContent = 'Sending…';
+    try {
+      const d = await api('POST', '/api/v1/notion/comment', { url: o.link_url, text: t });
+      // Svaret ER kommentaren - den skal ikke hentes igen for at kunne ses.
+      felt.value = '';
+      tegnNotionKommentarer(host, o, liste.concat([d.comment]));
+      toast('Sent to Notion');
+    } catch (ex) {
+      knap.disabled = false;
+      knap.textContent = 'Comment';
+      toast(ex.message);
+    }
+  };
+  knap.addEventListener('click', send);
+  /* Samme genvej som alle andre steder i appen (v31) - men den skal STOPPE
+     her. Detaljeruden binder cmd+enter paa hele ruden til Save, saa uden
+     stopPropagation ville tastetrykket baade sende kommentaren og gemme
+     opgaven, og ruden lukkede foer svaret naaede hjem. Den, der har handlet
+     paa tasten, ejer den (v29). */
+  felt.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || !(e.metaKey || e.ctrlKey)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    send();
+  });
+}
+
+/**
  * Viser en Notion-sides indhold inde i doda.
  *
  * Hentes foerst naar man beder om det: en side kan vaere lang, og Notion er
@@ -4115,10 +4187,12 @@ function notionRude(host, o) {
           <div class="meta" style="margin-bottom:8px">From Notion${d.cached ? ' · cached' : ''}</div>
           ${d.markdown ? markdown(d.markdown) : '<p class="lead">That page is empty.</p>'}
         </div>
+        <div id="ntKom"></div>
         <p class="gate-note" style="text-align:left">Read-only. Images stay in Notion —
         doda only shows content from its own server, so they appear as links.</p>
         <button class="btn ghost" id="ntHide">Hide</button>`;
       host.querySelector('#ntHide').addEventListener('click', () => notionRude(host, o));
+      notionKommentarer(host.querySelector('#ntKom'), o);
     } catch (ex) {
       host.innerHTML = `<p class="lead" style="margin-top:12px">${esc(ex.message)}</p>
         <button class="btn ghost" id="ntAgain" style="margin-top:8px">Try again</button>`;

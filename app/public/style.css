@@ -1103,6 +1103,17 @@ textarea.input { resize: vertical; min-height: 90px; font-family: inherit; }
 
 .offline-mark[hidden] { display: none !important; }
 
+/* Kommentarer fra Notion. Daempede kort, saa de ikke konkurrerer med sidens
+   indhold - men med en kant, saa man kan se hvor én slutter og naeste begynder. */
+.notionkom { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.notionkom-item {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+}
+.notionkom-item .meta { margin-bottom: 4px; }
+
 /* ------------------------------------------------------ vedhaeftninger */
 
 .filedrop {

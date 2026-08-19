@@ -341,6 +341,27 @@ Dette **afviger bevidst** fra handover §5.6, der gjorde »efter fuldførelse« 
 standard. Andreas har valgt Todoist-kompatibilitet, fordi han kender syntaksen —
 og synligheden løses i stedet af preview-chippen, der altid skriver tilstanden ud.
 
+### Kommentarer til Notion — men doda ejer dem aldrig (v34)
+
+Folder man en Notion-side ud, står sidens kommentarer nedenunder med et felt
+til at skrive en ny. Den lander direkte på siden i Notion; doda gemmer intet.
+
+- **Kommentarer er en SÆRSKILT tilladelse på integrationen i Notion.** Et
+  token, der læser sider fint, får 403 på kommentarer, indtil fluebenene er
+  sat. Fejlen skal derfor pege på *afkrydsningen*, ikke på tokenet — ellers
+  fejlsøger man noget, der er i orden. Beskeden står ét sted (`MANGLER_LOV`),
+  så begge veje ind siger det samme.
+- **Kommentarer caches aldrig**, modsat sidens indhold. En gammel
+  kommentarliste er værre end ingen, fordi den ser ud til at være hele
+  samtalen.
+- **Skrivning har lavere rate-limit end læsning** (60 mod 120 i timen): en
+  kommentar går ud i verden og kan ikke tages tilbage fra doda. Den logges i
+  auditsporet.
+- **Forbindelsen tjekkes før linket og teksten.** Ellers får en bruger uden
+  forbindelse at vide, at hans link er forkert. Rækkefølgen er let at bytte om
+  på uden at opdage det, så der er en test på den.
+- Svaret fra Notion **er** kommentaren, så den vises uden at hente listen igen.
+
 ### Titlen er en overskrift, der folder sig ud (v33)
 
 Titelfeltet i detaljeruden var et `input`: en lang titel kunne kun ses gennem

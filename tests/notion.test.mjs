@@ -103,3 +103,79 @@ test('id kan trækkes ud af en Notion-adresse, og kun derfra', () => {
   assert.equal(N.idFraUrl('https://dr.dk/nyheder'), null);
   assert.equal(N.idFraUrl(''), null);
 });
+
+/* ------------------------------------------------- kommentar-ruterne (v34)
+
+   Selve kaldet ud til Notion kan ikke testes uden et rigtigt token, men
+   VAGTERNE kan: rækkefølgen af tjek afgør, hvilken besked brugeren får, og
+   den er let at bytte rundt på uden at opdage det. Uden en forbindelse skal
+   svaret pege på Settings - ikke på linket, og slet ikke på et tomt felt. */
+
+import { spawn } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { before, after } from 'node:test';
+
+const ROD = join(dirname(fileURLToPath(import.meta.url)), '..');
+let server;
+let dataDir;
+let BASE;
+let cookie = '';
+
+async function J(sti, krop, metode) {
+  const r = await fetch(BASE + sti, {
+    method: metode || (krop === undefined ? 'GET' : 'POST'),
+    headers: Object.assign({ 'Content-Type': 'application/json' }, cookie ? { cookie } : {}),
+    body: krop === undefined ? undefined : JSON.stringify(krop),
+  });
+  const saet = r.headers.get('set-cookie');
+  if (saet) cookie = saet.split(';')[0];
+  return { status: r.status, data: await r.json() };
+}
+
+before(async () => {
+  dataDir = mkdtempSync(join(tmpdir(), 'doda-notionkom-'));
+  server = spawn('node', [join(ROD, 'app', 'server.js')], {
+    env: Object.assign({}, process.env, { BIND_PORT: '0', DATA_DIR: dataDir }),
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let stoej = '';
+  await new Promise((ok, fejl) => {
+    const t = setTimeout(() => fejl(new Error(`serveren startede ikke:\n${stoej}`)), 10000);
+    server.stdout.on('data', (b) => {
+      stoej += b;
+      const m = String(b).match(/doda lytter paa port (\d+)/);
+      if (m) { clearTimeout(t); BASE = `http://127.0.0.1:${m[1]}`; ok(); }
+    });
+    server.stderr.on('data', (b) => { stoej += b; });
+  });
+  await J('/api/register', { username: 'test', password: 'testtest123' });
+});
+
+after(() => {
+  if (server) server.kill();
+  if (dataDir) rmSync(dataDir, { recursive: true, force: true });
+});
+
+const NOTION_URL = 'https://www.notion.so/En-side-1234567890abcdef1234567890abcd';
+
+test('uden en Notion-forbindelse peger begge ruter paa Settings', async () => {
+  const laes = await J(`/api/v1/notion/comments?url=${encodeURIComponent(NOTION_URL)}`);
+  assert.equal(laes.status, 400);
+  assert.equal(laes.data.error, 'not_connected');
+
+  const skriv = await J('/api/v1/notion/comment', { url: NOTION_URL, text: 'hej' });
+  assert.equal(skriv.status, 400);
+  assert.equal(skriv.data.error, 'not_connected');
+});
+
+test('forbindelsen tjekkes FOER linket og teksten', async () => {
+  // Ellers ville en bruger uden forbindelse faa at vide, at hans link er
+  // forkert - og lede det helt forkerte sted.
+  const daarligtLink = await J('/api/v1/notion/comment', { url: 'https://dr.dk', text: 'hej' });
+  assert.equal(daarligtLink.data.error, 'not_connected');
+  const udenTekst = await J('/api/v1/notion/comment', { url: NOTION_URL, text: '   ' });
+  assert.equal(udenTekst.data.error, 'not_connected');
+});

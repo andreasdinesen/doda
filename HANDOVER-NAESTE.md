@@ -1,7 +1,7 @@
 # Handover — doda
 
 **Til:** Claude Code i en ny session
-**Skrevet:** 2026-08-18, efter v33
+**Skrevet:** 2026-08-18, efter v34
 
 > **Læs i denne rækkefølge, før du rører noget:**
 > 1. `~/ClaudeMacBook/RUNE-ERFARINGER.md` — fælles lærepenge for alle runer.
@@ -16,12 +16,12 @@
 
 ## Tilstand
 
-**v33 er udgivet. Arbejdsmappen er ren.** Alt er pushet.
+**v34 er udgivet. Arbejdsmappen er ren.** Alt er pushet.
 
 | | |
 |---|---|
-| Tests | **175 grønne** (`node --test tests/*.mjs`) |
-| Install-script | **116.214 / 126.000 tegn (92 %)** — se `PLAN.md` om guidens pris |
+| Tests | **177 grønne** (`node --test tests/*.mjs`) |
+| Install-script | **117.129 / 126.000 tegn (92 %)** — se `PLAN.md` om guidens pris |
 | Kode | `server.js` 3.594 linjer + syv moduler |
 
 Kør altid `python3 build_rune.py` efter en ændring i `app/` — den samler
@@ -85,10 +85,13 @@ Det skete tre gange. Brug Edit-værktøjet, eller skriv filen efter hvert trin.
    worker). På iPhone virker det **kun**, når doda ligger på hjemmeskærmen.
 3. **Bekræfte kalenderpåmindelserne.** På iPhone skal abonnementet have
    »Fjern påmindelser« slået **fra**, ellers stripper iOS `VALARM` uden at sige det.
-4. **Dele sine Notion-sider med integrationen.** Et gyldigt token er ikke nok.
+4. **Sætte comment-fluebenene på Notion-integrationen** (Settings → Connections
+   i Notion). Uden dem svarer Notion 403 paa kommentarer, selv om tokenet er
+   fint — doda siger det med rene ord, men afkrydsningen er hans.
+5. **Dele sine Notion-sider med integrationen.** Et gyldigt token er ikke nok.
    Settings → Notion siger nu, hvor mange sider doda kan se — står der »no pages
    yet«, er delingen ikke gået igennem.
-5. Offline-læsning og hjemmeskærm på telefonen. Todoist-import på en rigtig
+6. Offline-læsning og hjemmeskærm på telefonen. Todoist-import på en rigtig
    eksport. En tingdo-eksport, hvis den import stadig ønskes (formatet er ukendt).
 
 ---
@@ -113,7 +116,7 @@ De to andre blev lukket i **v24**:
 ## Pladsen i runen
 
 Install-scriptet må højst fylde **126.000 tegn** (hævet fra 120.000 i v7).
-Det fylder **116.214 (92 %)**, og build'et **fejler højt** ved loftet.
+Det fylder **117.129 (92 %)**, og build'et **fejler højt** ved loftet.
 Guiden (v25) er den dyreste enkeltside, appen har: dens tekst kostede 6.274 tegn
 og blev trimmet til ~4.700. Dens CSS koster kun 364. Skal der spares mere dér,
 er næste greb at skære hele emner væk — et indholdsvalg, ikke et teknisk.
