@@ -5,7 +5,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 37;
+const APP_VERSION = 38;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -205,6 +205,9 @@ const VIEWS = [
   { id: 'settings', label: 'Settings', icon: 'settings', group: 0 },
   // Guiden naas samme sted som Settings: menuen paa brugerknappen.
   { id: 'guide', label: 'Guide', icon: 'guide', group: 0 },
+  // Fokusskaermen naas fra Focus-knappen paa en opgave. Den hoerer ikke i
+  // navigationen: uden en opgave i fokus er der ingenting at gaa ind til.
+  { id: 'focus', label: 'Focus', icon: 'clock', group: 0 },
 ];
 
 const viewById = (id) => VIEWS.find((v) => v.id === id) || VIEWS[0];

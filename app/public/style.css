@@ -1260,6 +1260,18 @@ textarea.input { resize: vertical; min-height: 90px; font-family: inherit; }
 
 .focustime { font-variant-numeric: tabular-nums; font-weight: 700; font-size: 17px; }
 
+/* Fokusskaermen: alt andet af vejen, saa der kun er uret og opgaven. */
+.focuspage { text-align: center; padding-top: 12vh; max-width: 620px; margin-inline: auto; }
+.focusclock {
+  font-variant-numeric: tabular-nums; font-weight: 700;
+  font-size: clamp(52px, 12vw, 96px); line-height: 1; letter-spacing: -.02em;
+}
+.focusname { font-size: 24px; margin: 18px 0 0; font-weight: 600; }
+.focusnote { margin: 14px auto 0; text-align: left; color: var(--muted); }
+.focusbtns { display: flex; gap: 10px; justify-content: center; margin-top: 28px; flex-wrap: wrap; }
+/* Titlen i linjen er vejen tilbage til skaermen. */
+.focusbar .focustitle { cursor: pointer; }
+
 .focustitle {
   overflow: hidden;
   text-overflow: ellipsis;

@@ -38,6 +38,7 @@ async function tegnSideIndhold() {
   if (view.id === 'notes') { await sideNoter(); return; }
   if (view.id === 'log') { await sideLog(); return; }
   if (view.id === 'review') { await sideReview(); return; }
+  if (view.id === 'focus') { host.innerHTML = sideFokus(); bindFokus(); tegnFokus(); return; }
   if (view.id === 'projects') {
     if (state.openProject) { await sideProjekt(state.openProject); return; }
     host.innerHTML = await sideProjects();
@@ -796,7 +797,7 @@ async function aabnElement(listeItem) {
       });
     });
     const f = host.querySelector('#dFocus');
-    if (f) f.addEventListener('click', () => { luk(); startFokus(it); });
+    if (f) f.addEventListener('click', () => { luk(); startFokus(it); gaaTil('focus'); });
     host.querySelector('#dHelpBtn').addEventListener('click', () => {
       const h = host.querySelector('#dHelp');
       h.hidden = !h.hidden;

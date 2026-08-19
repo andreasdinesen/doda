@@ -341,6 +341,28 @@ Dette **afviger bevidst** fra handover §5.6, der gjorde »efter fuldførelse« 
 standard. Andreas har valgt Todoist-kompatibilitet, fordi han kender syntaksen —
 og synligheden løses i stedet af preview-chippen, der altid skriver tilstanden ud.
 
+### Focus er en skærm, ikke kun en timer (v38)
+
+Hjælpeteksten i detaljeruden har hele tiden lovet: *»Everything else out of the
+way. This task on a screen of its own, with a timer that keeps running.«*
+Knappen gjorde `luk(); startFokus(it)` — den lukkede ruden og satte en linje i
+bunden, så man landede **i listen**. Altså præcis dét, fokus skulle fjerne.
+Teksten var skrevet; funktionen var aldrig bygget færdig.
+
+Det er samme fejl som §v9: **legenden er en kravspecifikation.** Her stod
+kravet endda ordret, og ingen havde læst det op mod koden.
+
+- Skærmen er `view: 'focus'` med `group: 0` — den står ikke i navigationen.
+  Uden en opgave i fokus er der ingenting at gå ind til.
+- **Timerlinjen forsvinder, mens man er på skærmen.** To ure på samme tid er en
+  dublet, ikke en bekræftelse.
+- **Linjens titel er vejen tilbage.** Uden den kunne man ikke finde skærmen
+  igen, når man først havde navigeret væk.
+- »Keep it running« forlader skærmen **uden** at stoppe fokus; »Stop« stopper
+  og fører tilbage til listen, for en fokusskærm uden opgave er en tom skærm.
+- Uret ruller nu minutterne med `% 60`. Det gjorde det ikke før, så efter en
+  time og ét minut stod der `1:61:01`.
+
 ### Kilden og den færdige note er to udgaver — kun én ad gangen (v37)
 
 Beskrivelsen i detaljeruden har både et redigeringsfelt og en renderet

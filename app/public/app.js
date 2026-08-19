@@ -736,7 +736,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 37;
+const APP_VERSION = 38;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -936,6 +936,9 @@ const VIEWS = [
   { id: 'settings', label: 'Settings', icon: 'settings', group: 0 },
   // Guiden naas samme sted som Settings: menuen paa brugerknappen.
   { id: 'guide', label: 'Guide', icon: 'guide', group: 0 },
+  // Fokusskaermen naas fra Focus-knappen paa en opgave. Den hoerer ikke i
+  // navigationen: uden en opgave i fokus er der ingenting at gaa ind til.
+  { id: 'focus', label: 'Focus', icon: 'clock', group: 0 },
 ];
 
 const viewById = (id) => VIEWS.find((v) => v.id === id) || VIEWS[0];
@@ -2328,6 +2331,7 @@ async function tegnSideIndhold() {
   if (view.id === 'notes') { await sideNoter(); return; }
   if (view.id === 'log') { await sideLog(); return; }
   if (view.id === 'review') { await sideReview(); return; }
+  if (view.id === 'focus') { host.innerHTML = sideFokus(); bindFokus(); tegnFokus(); return; }
   if (view.id === 'projects') {
     if (state.openProject) { await sideProjekt(state.openProject); return; }
     host.innerHTML = await sideProjects();
@@ -3086,7 +3090,7 @@ async function aabnElement(listeItem) {
       });
     });
     const f = host.querySelector('#dFocus');
-    if (f) f.addEventListener('click', () => { luk(); startFokus(it); });
+    if (f) f.addEventListener('click', () => { luk(); startFokus(it); gaaTil('focus'); });
     host.querySelector('#dHelpBtn').addEventListener('click', () => {
       const h = host.querySelector('#dHelp');
       h.hidden = !h.hidden;
@@ -5608,19 +5612,25 @@ function startFokus(it) {
   // Titlen skal HOLDES her. state.items indeholder kun den aktuelle skaerms
   // elementer, saa saa snart man navigerer vaek, kan den ikke slaas op.
   fokus.titel = it.title;
+  fokus.note = it.note || '';
   try {
-    localStorage.setItem('doda_focus', JSON.stringify({ id: it.id, start: fokus.start, title: it.title }));
+    localStorage.setItem('doda_focus', JSON.stringify({
+      id: it.id, start: fokus.start, title: it.title, note: fokus.note,
+    }));
   } catch { /* privat tilstand */ }
   tegnFokus();
 }
 
 function stopFokus() {
+  const paaSkaerm = state.view === 'focus';
   fokus.itemId = null;
   clearInterval(fokus.timer);
   fokus.timer = null;
   try { localStorage.removeItem('doda_focus'); } catch { /* ligegyldigt */ }
   const el = document.getElementById('focusBar');
   if (el) el.remove();
+  // Bliver man staaende, ser man paa en skaerm uden en opgave.
+  if (paaSkaerm) gaaTil('next');
 }
 
 function gendanFokus() {
@@ -5630,14 +5640,68 @@ function gendanFokus() {
     fokus.itemId = g.id;
     fokus.start = g.start;
     fokus.titel = g.title;
+    fokus.note = g.note || '';
     tegnFokus();
   } catch { /* ligegyldigt */ }
 }
 
+/** Sekunder som ur. Bruges baade af linjen og af skaermen, saa de ikke driver. */
+function fokusUr(sek) {
+  const m = String(Math.floor(sek / 60) % 60).padStart(2, '0');
+  const s = String(sek % 60).padStart(2, '0');
+  const t = Math.floor(sek / 3600);
+  return `${t ? `${t}:` : ''}${m}:${s}`;
+}
+
+const fokusTitel = () => fokus.titel
+  || (state.items.find((x) => x.id === fokus.itemId) || {}).title || 'Focus';
+
+/**
+ * Fokusskaermen: opgaven alene, som hjaelpeteksten i detaljeruden lover
+ * ("This task on a screen of its own, with a timer that keeps running").
+ *
+ * Indtil v38 fandtes den ikke. Knappen lukkede bare ruden og satte en linje i
+ * bunden - man landede i listen, altsaa netop det, fokus skulle fjerne. Teksten
+ * var skrevet, funktionen var ikke bygget faerdig.
+ */
+function sideFokus() {
+  if (!fokus.itemId) return '<div class="wrap"><p class="empty">Nothing in focus.</p></div>';
+  const sek = Math.floor((Date.now() - fokus.start) / 1000);
+  return `<div class="wrap focuspage">
+    <div class="focusclock" id="focusBig">${esc(fokusUr(sek))}</div>
+    <h1 class="focusname">${esc(fokusTitel())}</h1>
+    ${fokus.note ? `<div class="note-preview focusnote">${markdown(fokus.note)}</div>` : ''}
+    <div class="focusbtns">
+      <button class="btn primary" id="fpDone">Done</button>
+      <button class="btn" id="fpStop">Stop</button>
+      <button class="btn ghost" id="fpBack">Keep it running</button>
+    </div>
+  </div>`;
+}
+
+function bindFokus() {
+  const stop = document.getElementById('fpStop');
+  if (stop) stop.addEventListener('click', stopFokus);
+  const back = document.getElementById('fpBack');
+  // Timeren loeber videre - man forlader kun skaermen, ikke fokus.
+  if (back) back.addEventListener('click', () => gaaTil('next'));
+  const done = document.getElementById('fpDone');
+  if (done) {
+    done.addEventListener('click', async () => {
+      const id = fokus.itemId;
+      stopFokus();
+      await fuldfoer(id);
+    });
+  }
+}
+
 function tegnFokus() {
-  let el = document.getElementById('focusBar');
   if (!fokus.itemId) return;
-  if (!el) {
+  // Paa selve skaermen er linjen en dublet af det, man allerede kigger paa.
+  const paaSkaerm = state.view === 'focus';
+  let el = document.getElementById('focusBar');
+  if (paaSkaerm && el) { el.remove(); el = null; }
+  if (!paaSkaerm && !el) {
     el = document.createElement('div');
     el.className = 'focusbar';
     el.id = 'focusBar';
@@ -5645,15 +5709,19 @@ function tegnFokus() {
   }
   const tegn = () => {
     const sek = Math.floor((Date.now() - fokus.start) / 1000);
-    const m = String(Math.floor(sek / 60)).padStart(2, '0');
-    const s = String(sek % 60).padStart(2, '0');
-    const t = fokus.titel || (state.items.find((x) => x.id === fokus.itemId) || {}).title || 'Focus';
-    el.innerHTML = `<span class="focustime">${Math.floor(sek / 3600) ? `${Math.floor(sek / 3600)}:` : ''}${m}:${s}</span>
-      <span class="focustitle">${esc(t)}</span>
+    const stor = document.getElementById('focusBig');
+    if (stor) stor.textContent = fokusUr(sek);
+    const b = document.getElementById('focusBar');
+    if (!b) return;
+    b.innerHTML = `<span class="focustime">${esc(fokusUr(sek))}</span>
+      <span class="focustitle">${esc(fokusTitel())}</span>
       <button class="btn ghost" id="focusDone">Done</button>
       <button class="btn ghost" id="focusStop">Stop</button>`;
-    el.querySelector('#focusStop').addEventListener('click', stopFokus);
-    el.querySelector('#focusDone').addEventListener('click', async () => {
+    // Titlen foerer tilbage til skaermen - ellers er der ingen vej tilbage,
+    // naar man foerst har navigeret vaek.
+    b.querySelector('.focustitle').addEventListener('click', () => gaaTil('focus'));
+    b.querySelector('#focusStop').addEventListener('click', stopFokus);
+    b.querySelector('#focusDone').addEventListener('click', async () => {
       const id = fokus.itemId;
       stopFokus();
       await fuldfoer(id);
