@@ -736,7 +736,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 41;
+const APP_VERSION = 42;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -4201,6 +4201,10 @@ function spoergOmLink(o, naar, foreslaaetNavn) {
      Tilstanden skifter kun, hvad et klik paa et soegeresultat betyder, saa
      der er ingen ny liste og ingen ny tilstand at holde styr paa. */
   let nyTilstand = false;
+  /* Saettes af soegeblokken nedenfor. Uden den kan skiftet mellem »link« og
+     »opret« ikke gentegne listen - og for Sagu er de to tilstande to HELT
+     forskellige lister: noter, man soeger i, mod notesboeger, man vaelger. */
+  let gentegnListe = null;
   const host = document.createElement('div');
   host.className = 'modal';
   host.innerHTML = `
@@ -4251,6 +4255,10 @@ function spoergOmLink(o, naar, foreslaaetNavn) {
       // Sig hvad et klik nu goer. Uden det ser listen ens ud i begge tilstande.
       const h = host.querySelector('#lkHits');
       if (h) h.classList.toggle('opretter', nyTilstand);
+      // Listen SKAL tegnes forfra. Foer blev den staaende, som den var, og i
+      // Sagu betoed det, at notesboegerne aldrig kom frem: man klikkede
+      // »Create a page inside« og fik den gamle soegeliste at se.
+      if (gentegnListe) gentegnListe();
     });
   });
 
@@ -4351,13 +4359,20 @@ function spoergOmLink(o, naar, foreslaaetNavn) {
        * den RIGTIGE notesbog.
        */
       if (kilde === 'sagu' && nyTilstand) {
+        // Feltet soeger ikke i denne tilstand, saa det skal vaere vaek - et
+        // felt, der ikke goer noget, er en loegn om hvad man kan.
+        q.hidden = true;
         const boeger = saguBoeger.length ? saguBoeger : [{ id: '', name: 'No notebook' }];
-        traf.innerHTML = boeger.map((b) => `<button class="notionhit" data-bog="${esc(b.id)}"
+        traf.innerHTML = `<p class="lead" style="margin:0 0 8px">Pick the notebook
+          “${esc((host.querySelector('#lkName').value.trim() || foreslaaetNavn
+    || 'the note').slice(0, 60))}” should go in.</p>`
+          + boeger.map((b) => `<button class="notionhit" data-bog="${esc(b.id)}"
             data-title="${esc(b.name)}">${icon('note', 13)} ${esc(b.name)}</button>`).join('');
         traf.querySelectorAll('[data-bog]').forEach((el) => el.addEventListener('click',
           () => opretSaguNote(el)));
         return;
       }
+      q.hidden = false;
       timer = setTimeout(async () => {
         traf.innerHTML = `<p class="lead" style="margin:8px 0 0">${v ? 'Searching…' : 'Looking at what doda can see…'}</p>`;
         try {
@@ -4417,6 +4432,8 @@ function spoergOmLink(o, naar, foreslaaetNavn) {
       clearTimeout(timer);
       soeg(q.value.trim(), ++token);
     });
+    // Krogen ud til tilstandsknapperne, der ligger uden for denne blok.
+    gentegnListe = () => { clearTimeout(timer); soeg(q.value.trim(), ++token); };
     // Vis med det samme, hvad der er adgang til - foer der er skrevet noget.
     soeg('', ++token);
   })();
