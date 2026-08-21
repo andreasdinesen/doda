@@ -2194,9 +2194,57 @@ const ROUTES = {
     if (!auth) return;
     const id = saguModul.idFraUrl(ctx.query.get('url') || '');
     if (!id) { apiFejl(res, 400, 'bad_url', 'That is not a Sagu note address.'); return; }
-    const r = await sagu.kommentarer(id);
+    /*
+     * Noten OG kommentarerne i ét kald.
+     *
+     * Ruden viste kun kommentarer, saa man kunne se, at nogen havde sagt
+     * noget om en note, man ikke kunne laese. To kald ville koste en rundtur
+     * mere for noget, der altid vises sammen.
+     *
+     * Selve noten hentes med `read`, som en `link`-noegle har - der kraeves
+     * ikke en bredere noegle for at faa teksten frem.
+     */
+    const [r, n] = await Promise.all([sagu.kommentarer(id), sagu.note(id)]);
     if (r.fejl) { apiFejl(res, 502, 'sagu_failed', r.fejl); return; }
-    sendJson(res, 200, { comments: r.comments });
+    // Fejler noten, men ikke kommentarerne, er kommentarerne stadig bedre end
+    // en fejlbesked - saa `note` udelades bare.
+    sendJson(res, 200, { comments: r.comments, note: n || null });
+  },
+
+  /*
+   * Skriv en kommentar paa en Sagu-note.
+   *
+   * Muligt siden Sagu v8, hvor kravet blev saenket fra `write` til `capture`:
+   * en kommentar aendrer ikke noten. Dodas `link`-noegle kan det derfor.
+   */
+  'POST /api/v1/sagu/comment': async (req, res) => {
+    const auth = godkend(req, res, 'write');
+    if (!auth) return;
+    const body = await readJsonBody(req, auth.viaToken);
+    const id = saguModul.idFraUrl(body.url || '');
+    if (!id) { apiFejl(res, 400, 'bad_url', 'That is not a Sagu note address.'); return; }
+    const tekst = str(body.text, 2000);
+    if (!tekst) { apiFejl(res, 400, 'no_text', 'There is no comment to send.'); return; }
+    // Lavere end laesningen: en kommentar gaar ud i verden og kan ikke tages
+    // tilbage fra doda. Samme graense som Notion-kommentarerne.
+    if (!rateAllow(`saguskriv:${clientIp(req)}`, 60, 3600)) {
+      apiFejl(res, 429, 'rate_limited', 'Too many comments. Try again shortly.');
+      return;
+    }
+    const r = await sagu.skrivKommentar(id, tekst);
+    if (r.fejl) { apiFejl(res, 502, 'sagu_failed', r.fejl); return; }
+    /*
+     * Sagu udelader `comments` for en ren capture-noegle - saa ville
+     * skrive-doeren vaere blevet en laese-kanal. Vores noegle faar listen,
+     * men vi henter den selv, hvis den mangler, frem for at vise en tom rude
+     * og lade det ligne, at kommentaren forsvandt.
+     */
+    let liste = r.comments;
+    if (!liste) {
+      const igen = await sagu.kommentarer(id);
+      liste = igen.fejl ? [] : igen.comments;
+    }
+    sendJson(res, 200, { message: r.besked, comments: liste });
   },
 
   'DELETE /api/v1/notion': async (req, res) => {

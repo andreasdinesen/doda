@@ -20,7 +20,7 @@
 
 | | |
 |---|---|
-| Tests | **199 grønne** (`node --test tests/*.mjs`) |
+| Tests | **206 grønne** (`node --test tests/*.mjs`) |
 | Install-script | **1.586 / 126.000 tegn (1 %)** — siden v40 henter runen koden fra `refs/tags/v<N>` i det offentlige repo, så payloaden ligger ikke længere i scriptet |
 | Kode | `server.js` 3.594 linjer + syv moduler |
 

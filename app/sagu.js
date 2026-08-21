@@ -155,7 +155,19 @@ function opret(srv) {
   async function note(id) {
     const r = await kald('GET', `/api/v1/notes/${encodeURIComponent(id)}`);
     if (r.status !== 200 || !r.data || !r.data.note) return null;
-    return { id: r.data.note.id, title: r.data.note.title || '' };
+    return {
+      id: r.data.note.id,
+      title: r.data.note.title || '',
+      /*
+       * Selve teksten. Markdown ER sandheden i Sagus database (Sagu DESIGN §1),
+       * saa der er intet at konvertere - doda kan tegne den, som den staar.
+       *
+       * Graensen er der, fordi en note kan vaere lang, og ruden i en
+       * opgave er et VINDUE ind til noten, ikke noten. Skal man laese det
+       * hele, er der et link til Sagu ved siden af.
+       */
+      body: String(r.data.note.body || '').slice(0, 20000),
+    };
   }
 
   /**
@@ -202,7 +214,40 @@ function opret(srv) {
     };
   }
 
-  return { proev, soeg, note, opretNote, kommentarer, noteUrl, kald };
+  /**
+   * Skriver en kommentar paa en note.
+   *
+   * Sagu v8 saenkede kravet fra `write` til `capture`: en kommentar AENDRER
+   * ikke noten, og det er samme skel, Sagu allerede traf i F11 - en side delt
+   * til laesning maa gerne kommenteres. En `link`-noegle kan derfor det her.
+   *
+   * Svaret afhaenger af noeglen: en ren `capture`-noegle faar IKKE `comments`
+   * med retur, for saa ville skrive-doeren vaere blevet en laese-kanal. Vores
+   * noegle er capture+read og faar listen - men koden maa ikke bygge paa det,
+   * saa `comments` er `null`, naar den mangler, og kalderen henter selv.
+   *
+   * `message` er en FAERDIG linje fra Sagu og skal vises ordret: er
+   * moderationskoeen slaaet til, er kommentaren ikke synlig endnu, og det er
+   * kun Sagu, der ved det.
+   */
+  async function skrivKommentar(id, tekst) {
+    const r = await kald('POST', `/api/v1/notes/${encodeURIComponent(id)}/comments`,
+      { body: String(tekst || '').slice(0, 2000) });
+    if (r.status !== 200 || !r.data) return { fejl: fejlAf(r) };
+    return {
+      besked: String(r.data.message || 'Comment added.').slice(0, 200),
+      comments: Array.isArray(r.data.comments)
+        ? r.data.comments.slice(0, 50).map((c) => ({
+          author: c.author || 'Unknown',
+          body: String(c.body || '').slice(0, 2000),
+          at: c.createdAt || 0,
+          guest: !!c.guest,
+        }))
+        : null,
+    };
+  }
+
+  return { proev, soeg, note, opretNote, kommentarer, skrivKommentar, noteUrl, kald };
 }
 
 module.exports = { opret, idFraUrl, erSaguUrl };

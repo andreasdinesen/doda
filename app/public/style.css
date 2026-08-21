@@ -1129,6 +1129,10 @@ textarea.input { resize: vertical; min-height: 90px; font-family: inherit; }
   background: var(--bg);
 }
 .notionkom-item .meta { margin-bottom: 4px; }
+/* Feltet til en ny kommentar. Knappen staar UNDER feltet og i hoejre side, saa
+   den ikke klemmer teksten paa en smal skaerm. */
+.komskriv { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; align-items: flex-end; }
+.komskriv textarea { width: 100%; resize: vertical; min-height: 52px; }
 
 /* ------------------------------------------------------ vedhaeftninger */
 
@@ -1370,6 +1374,10 @@ textarea.input { resize: vertical; min-height: 90px; font-family: inherit; }
 }
 
 .detail-note::placeholder { color: var(--muted); font-style: italic; }
+/* Noten fra Sagu staar i opgavens rude - den skal kunne rulles, ikke skubbe
+   knapperne ud af syne, naar noten er lang. */
+.saguindhold { max-height: 340px; overflow-y: auto; margin-top: 6px; }
+
 .detail .note-preview { margin: 6px 0 0 40px; background: transparent; padding: 0; color: var(--text); font-size: 15px; }
 
 /* Felterne som CHIPS. Der er ingen etiketter - chippen siger selv, hvad den er,

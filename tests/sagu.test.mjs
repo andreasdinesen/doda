@@ -58,6 +58,9 @@ function saguAttrap() {
   // Notesboegerne skal kunne aendre sig UNDERVEJS: hele pointen med at hente
   // forfra er, at der er kommet en til i Sagu, siden man forbandt.
   let boeger = [{ id: 'b1', name: 'Handbook' }];
+  const skrevne = [];
+  let kunSkriv = false;      // svarer som en ren capture-noegle
+  let modereres = false;     // moderationskoeen er slaaet til
   const s = createServer(async (req, res) => {
     kald.push(`${req.method} ${req.url.split('?')[0]}`);
     const send = (kode, krop) => {
@@ -84,10 +87,26 @@ function saguAttrap() {
     }
     const m = /^\/api\/v1\/notes\/([a-f0-9]{32})(\/comments)?$/.exec(req.url.split('?')[0]);
     if (m && req.method === 'GET') {
+      // Kun selve noten fejler; kommentarerne svarer som de plejer.
+      if (tilstand === 'note-nede' && !m[2]) { send(500, { error: 'boom', message: 'Nope.' }); return; }
       const note = noter.get(m[1]);
       if (!note) { send(404, { error: 'not_found', message: 'No such note.' }); return; }
       if (m[2]) { send(200, { comments: [{ author: 'Kollega', body: 'Er det rigtigt?', createdAt: 1, guest: true }] }); return; }
       send(200, { note });
+      return;
+    }
+    const km = /^\/api\/v1\/notes\/([a-f0-9]{32})\/comments$/.exec(req.url.split('?')[0]);
+    if (km && req.method === 'POST') {
+      let raa = '';
+      for await (const bid of req) raa += bid;
+      const krop = JSON.parse(raa || '{}');
+      if (!noter.get(km[1])) { send(404, { error: 'not_found', message: 'No such note.' }); return; }
+      skrevne.push({ id: km[1], body: krop.body });
+      /* Sagu v8: `comments` udelades for en ren capture-noegle - ellers ville
+         skrive-doeren vaere blevet en laese-kanal. Attrappen kan begge dele. */
+      const svar = { id: 'k1', message: modereres ? 'Comment added — it is waiting to be approved.' : 'Comment added.' };
+      if (!kunSkriv) svar.comments = [{ author: 'Andreas', body: krop.body, createdAt: 2, guest: false }];
+      send(200, svar);
       return;
     }
     if (req.method === 'POST' && req.url.startsWith('/api/v1/notes')) {
@@ -112,6 +131,9 @@ function saguAttrap() {
     ryd: () => { kald.length = 0; },
     saet: (t) => { tilstand = t; },
     saetBoeger: (b) => { boeger = b; },
+    saetKunSkriv: (v) => { kunSkriv = v; },
+    saetModereres: (v) => { modereres = v; },
+    skrevne,
     noter,
   };
 }
@@ -260,10 +282,53 @@ test('kommentarerne kan LAESES - og kun det', async () => {
   assert.equal(r.data.comments[0].author, 'Kollega');
   assert.equal(r.data.comments[0].guest, true);
 
-  // Der findes ingen vej til at SKRIVE en kommentar herfra: samtalen hoerer
-  // hjemme i Sagu, og noeglen maa ikke kunne mere, end den skal.
-  const skriv = await J('/api/v1/sagu/comment', { url, text: 'nej' });
-  assert.equal(skriv.status, 404);
+});
+
+/* ========================= skriv en kommentar ========================== */
+
+/* Indtil Sagu v8 kraevede kommentar-POST `write`, som kun en `full`-noegle
+   har, saa doda var laese-kun. v8 saenkede det til `capture`: en kommentar
+   AENDRER ikke noten. Andreas bad om det 21-08-2026. */
+
+test('en kommentar kan skrives fra doda - og listen kommer tilbage', async () => {
+  const id = [...attrap.noter.keys()][0];
+  const url = `${attrap.url}/#note-${id}`;
+  attrap.skrevne.length = 0;
+  const r = await J('/api/v1/sagu/comment', { url, text: 'Husk linserne' });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(attrap.skrevne.at(-1).body, 'Husk linserne');
+  assert.equal(r.data.message, 'Comment added.');
+  assert.equal(r.data.comments.at(-1).body, 'Husk linserne');
+});
+
+/* Er moderationskoeen slaaet til, er kommentaren IKKE synlig endnu. Kun Sagu
+   ved det, saa dens egen linje skal frem ordret - ellers ser det ud, som om
+   kommentaren forsvandt. */
+test('Sagus egen besked sendes ordret videre', async () => {
+  attrap.saetModereres(true);
+  const id = [...attrap.noter.keys()][0];
+  const r = await J('/api/v1/sagu/comment', { url: `${attrap.url}/#note-${id}`, text: 'hej' });
+  attrap.saetModereres(false);
+  assert.match(r.data.message, /waiting to be approved/);
+});
+
+/* Sagu udelader `comments` for en ren capture-noegle. Ruden maa ikke vise en
+   tom liste og lade det ligne, at kommentaren forsvandt - doda henter selv. */
+test('mangler listen i svaret, hentes den - i stedet for at vise ingenting', async () => {
+  attrap.saetKunSkriv(true);
+  const id = [...attrap.noter.keys()][0];
+  const r = await J('/api/v1/sagu/comment', { url: `${attrap.url}/#note-${id}`, text: 'noget' });
+  attrap.saetKunSkriv(false);
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.ok(Array.isArray(r.data.comments) && r.data.comments.length > 0,
+    'listen skal vaere hentet bagefter');
+});
+
+test('en tom kommentar sendes ikke', async () => {
+  const id = [...attrap.noter.keys()][0];
+  const r = await J('/api/v1/sagu/comment', { url: `${attrap.url}/#note-${id}`, text: '   ' });
+  assert.equal(r.status, 400);
+  assert.equal(r.data.error, 'no_text');
 });
 
 test('en kommentar fra en GAEST kan ikke blive til et tag i doda', async () => {
@@ -466,4 +531,44 @@ test('er Sagu nede, staar den gamle liste UROERT', async () => {
   const set = await J('/api/v1/sagu');
   assert.deepEqual(set.data.notebooks.map((b) => b.id), ['b1', 'b9'],
     'en fejl mod Sagu maa ikke tage notesboegerne fra brugeren');
+});
+
+/* ============================== notens indhold ========================= */
+
+/* Ruden viste KUN kommentarer. Man kunne altsaa se, at nogen havde sagt noget
+   om en note, man ikke kunne laese - og maatte skifte app for at finde ud af,
+   hvad sagen var. Teksten hentes med `read`, som en link-noegle har. */
+
+test('noten selv foelger med kommentarerne - i ét kald', async () => {
+  attrap.saet('ok');
+  assert.equal((await forbind(attrap.url, 'sagu_rigtig')).status, 200);
+  await J('/api/v1/sagu/note', { title: 'Linsekontrol', notebookId: 'b1' });
+  const lavet = [...attrap.noter.values()].pop();
+
+  const r = await J(`/api/v1/sagu/comments?url=${encodeURIComponent(`${attrap.url}/#note-${lavet.id}`)}`);
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.ok(Array.isArray(r.data.comments), 'kommentarerne skal stadig vaere der');
+  assert.equal(r.data.note.title, 'Linsekontrol');
+  assert.match(r.data.note.body, /# Linsekontrol/, 'selve teksten skal med');
+});
+
+/* Fejler noten, men ikke kommentarerne, er kommentarerne stadig bedre end en
+   fejlbesked - saa `note` udelades i stedet for at vaelte hele ruden. */
+test('en note, der ikke kan hentes, vaelter ikke kommentarerne', async () => {
+  const lavet = [...attrap.noter.values()].pop();
+  const url = `${attrap.url}/#note-${lavet.id}`;
+  attrap.saet('note-nede');
+  const r = await J(`/api/v1/sagu/comments?url=${encodeURIComponent(url)}`);
+  attrap.saet('ok');
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.note, null, 'noten udelades');
+  assert.ok(Array.isArray(r.data.comments), 'men kommentarerne staar der');
+});
+
+/* En adresse, der slet ikke peger paa en note, skal stadig give en LAESBAR
+   fejl - ikke en tom rude, man ikke kan forklare. */
+test('en ukendt note giver en laesbar fejl', async () => {
+  const r = await J(`/api/v1/sagu/comments?url=${encodeURIComponent(`${attrap.url}/#note-${'f'.repeat(32)}`)}`);
+  assert.equal(r.status, 502);
+  assert.match(r.data.message, /No such note/);
 });

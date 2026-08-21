@@ -736,7 +736,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 42;
+const APP_VERSION = 43;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -4598,21 +4598,105 @@ function saguModul_erSaguUrl(url) {
  * skrive. Og noten selv hentes IKKE: den kan vaere lang, Sagu er kilden, og
  * doda skal ikke lave en kopi, der kan blive forkert.
  */
+/**
+ * Feltet, der skriver en kommentar til Sagu.
+ *
+ * Muligt siden Sagu v8. Knappen hedder »Comment« og ikke »Save«: den sender
+ * noget ud i verden, som ikke kan tages tilbage herfra (samme valg som
+ * Notion-kommentarerne, doda v34). Feltet ryddes FOERST, naar Sagu har
+ * kvitteret - ellers ville teksten vaere vaek, hvis kaldet fejlede.
+ */
+function bindSaguKommentar(host, o) {
+  const felt = host.querySelector('#sgKom');
+  const knap = host.querySelector('#sgKomOk');
+  const svar = host.querySelector('#sgKomSvar');
+  if (!felt || !knap) return;
+
+  const send = async () => {
+    const tekst = felt.value.trim();
+    if (!tekst) return;
+    knap.disabled = true;
+    knap.textContent = 'Sending…';
+    try {
+      const d = await api('POST', '/api/v1/sagu/comment', { url: o.link_url, text: tekst });
+      felt.value = '';
+      /*
+       * Sagus egen linje vises ORDRET. Er moderationskoeen slaaet til, er
+       * kommentaren ikke synlig endnu - og det er kun Sagu, der ved det. En
+       * paenere formulering herfra ville skjule netop dét.
+       */
+      svar.textContent = d.message || 'Comment added.';
+      tegnSaguKommentarer(host, o, d.comments || []);
+    } catch (ex) {
+      // Teksten staar der stadig - en fejlet forbindelse maa ikke koste det,
+      // man lige har skrevet.
+      svar.textContent = ex.message;
+    } finally {
+      knap.disabled = false;
+      knap.textContent = 'Comment';
+    }
+  };
+
+  knap.addEventListener('click', send);
+  // Feltet ligger i detaljeruden, som binder Cmd+Enter til Save. Uden at
+  // stoppe tasten ville ét tryk baade sende kommentaren OG lukke ruden
+  // (RUNE-ERFARINGER, doda v29/v31/v34).
+  felt.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || !(e.metaKey || e.ctrlKey)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    send();
+  });
+}
+
+/** Tegner kommentarlisten forfra - efter en ny er kommet til. */
+function tegnSaguKommentarer(host, o, liste) {
+  const vaert = host.querySelector('.notionkom');
+  const html = liste.map((k) => `
+    <div class="notionkom-item">
+      <div class="meta">${esc(k.author)}${k.guest ? ' · guest' : ''}${
+  k.at ? ` · ${esc(visTid(k.at))}` : ''}</div>
+      <div>${markdown(k.body)}</div>
+    </div>`).join('');
+  if (vaert) { vaert.innerHTML = html; return; }
+  // Var der ingen kommentarer foer, findes ruden ikke - saa laves den her,
+  // hvor "No comments on that note yet." staar.
+  const tom = [...host.querySelectorAll('p.lead')].find((el) => /No comments/.test(el.textContent));
+  if (tom && html) tom.outerHTML = `<div class="notionkom">${html}</div>`;
+}
+
 async function saguRude(host, o) {
   host.innerHTML = `<p class="meta" style="margin-top:18px">In Sagu</p>
-    <p class="lead">Loading comments…</p>`;
+    <p class="lead">Loading…</p>`;
   try {
     const d = await api('GET', `/api/v1/sagu/comments?url=${encodeURIComponent(o.link_url)}`);
     const liste = d.comments || [];
+    /*
+     * Selve noten staar oeverst.
+     *
+     * Foer viste ruden kun kommentarerne, saa man kunne se, at nogen havde
+     * sagt noget om en note, man ikke kunne laese - og maatte skifte app for
+     * at finde ud af, hvad sagen var. Det er samme rude som Notions
+     * (DESIGN.md §v19); Sagu-halvdelen manglede den bare.
+     */
+    const tekst = (d.note && d.note.body) ? String(d.note.body).trim() : '';
     host.innerHTML = `<p class="meta" style="margin-top:18px">In Sagu${
   liste.length ? ` · ${liste.length} comment${liste.length === 1 ? '' : 's'}` : ''}</p>
+      ${tekst ? `<div class="note-preview saguindhold">${markdown(tekst)}</div>`
+    : '<p class="lead">That note is empty.</p>'}
       ${liste.length ? `<div class="notionkom">${liste.map((k) => `
         <div class="notionkom-item">
           <div class="meta">${esc(k.author)}${k.guest ? ' · guest' : ''}${
   k.at ? ` · ${esc(visTid(k.at))}` : ''}</div>
           <div>${markdown(k.body)}</div>
         </div>`).join('')}</div>` : '<p class="lead">No comments on that note yet.</p>'}
-      <p class="gate-note" style="text-align:left">Read-only. Open the note in Sagu to reply.</p>`;
+      <div class="komskriv">
+        <textarea class="input" id="sgKom" rows="2" placeholder="Write a comment…"></textarea>
+        <button class="btn" id="sgKomOk">Comment</button>
+      </div>
+      <p class="gate-note" id="sgKomSvar" style="text-align:left">The comment goes straight
+        into the note in Sagu — it cannot be taken back from here.</p>`;
+    bindSaguKommentar(host, o);
   } catch (ex) {
     // En fejlet forbindelse er ikke en fejlet opgave: ruden siger hvad der
     // skete, og resten af opgaven staar uroert.
