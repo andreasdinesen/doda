@@ -192,10 +192,10 @@ test('skjul indtil med ~', () => {
 });
 
 test('e-mail og URL bliver IKKE læst som projekt og kontekst', () => {
-  const r = fangst('skriv til andreas@omlidt.dk om https://dr.dk/nyheder#sport');
+  const r = fangst('skriv til navn@eksempel.dk om https://dr.dk/nyheder#sport');
   assert.equal(r.project, null);
   assert.deepEqual(r.contexts, []);
-  assert.equal(r.title, 'skriv til andreas@omlidt.dk om https://dr.dk/nyheder#sport');
+  assert.equal(r.title, 'skriv til navn@eksempel.dk om https://dr.dk/nyheder#sport');
 });
 
 test('beskrivelse efter " // ", og URL i beskrivelsen overlever', () => {
@@ -315,7 +315,7 @@ test('fjernMarkoer tager kun DEN markør, den bliver bedt om', () => {
 test('fjernMarkoer rører ALDRIG noget uden mellemrum foran — samme regel som fangst', () => {
   // Det her er hele grunden til at den findes: i en titel man REDIGERER,
   // må intet forsvinde, som brugeren ikke har bedt om.
-  assert.equal(P.fjernMarkoer('Send til andreas@omlidt.dk', '@/', 'omlidt.dk'), 'Send til andreas@omlidt.dk');
+  assert.equal(P.fjernMarkoer('Send til navn@eksempel.dk', '@/', 'eksempel.dk'), 'Send til navn@eksempel.dk');
   assert.equal(P.fjernMarkoer('Husk C#-kurset', '#', '-kurset'), 'Husk C#-kurset');
   assert.equal(P.fjernMarkoer('Læs https://dr.dk/nyheder', '@/', 'nyheder'), 'Læs https://dr.dk/nyheder');
   // En værdi, der slet ikke står der, ændrer ingenting.

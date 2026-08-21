@@ -311,7 +311,7 @@ const MIGRATIONS = [
  * listen to steder, glemmer man den ene, naeste gang der kommer en
  * hemmelighed til - og det opdages ikke, for alt ser ud til at virke.
  */
-const HEMMELIGE_SETTINGS = new Set(['ical_token', 'notion_token', 'vapid_private']);
+const HEMMELIGE_SETTINGS = new Set(['ical_token', 'notion_token', 'vapid_private', 'sagu_key']);
 
 // Statusser. Raekkefoelgen er ogsaa den, lister sorteres efter.
 const STATUSSER = ['inbox', 'next', 'queued', 'waiting', 'someday', 'done', 'dropped'];
@@ -2007,6 +2007,157 @@ const ROUTES = {
     sendJson(res, 200, { connected: true, workspace: svar.workspace || '' });
   },
 
+  /* --- Sagu (F8) ------------------------------------------------------ */
+
+  'GET /api/v1/sagu': (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    // Kun OM der er en noegle, aldrig hvad den er.
+    sendJson(res, 200, {
+      connected: saguForbundet(),
+      url: getSetting('sagu_url', ''),
+      notebooks: JSON.parse(getSetting('sagu_notebooks', '[]') || '[]'),
+      // Hvor en note fra PALETTEN skal ligge. Dialogen spoerger hver gang;
+      // paletten er ét tastetryk og kan ikke spoerge om noget.
+      notebook: getSetting('sagu_notebook', ''),
+    });
+  },
+
+  /*
+   * Gem forbindelsen - men proev den FOERST.
+   *
+   * Samme raekkefoelge som Notion: gem, afproev, rul tilbage. Ellers ligger en
+   * forkert noegle og LIGNER en virkende forbindelse, indtil man proever at
+   * bruge den (RUNE-ERFARINGER, doda v16).
+   */
+  'POST /api/v1/sagu': async (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    const body = await readJsonBody(req);
+    const raa = String(body.url || '').trim().replace(/\/+$/, '');
+    let url = '';
+    try {
+      const u = new URL(raa);
+      // Kun en OPRINDELSE: en sti ville lande midt i alle adresser, vi danner.
+      if ((u.protocol === 'http:' || u.protocol === 'https:') && u.pathname === '/'
+          && !u.search && !u.hash) url = u.origin;
+    } catch { url = ''; }
+    if (!url) {
+      apiFejl(res, 400, 'bad_url', 'The Sagu address must be a plain web address like https://sagu.example.com.');
+      return;
+    }
+    const noegle = str(body.key, 200);
+    const gammelUrl = getSetting('sagu_url', '');
+    const gammelKey = getSetting('sagu_key', '');
+    // Tom noegle = behold den, der staar. Ellers kunne man ikke rette
+    // adressen uden ogsaa at finde noeglen frem igen.
+    if (!noegle && !gammelKey) {
+      apiFejl(res, 400, 'no_key', 'Paste a Sagu API key the first time you connect.');
+      return;
+    }
+    setSetting('sagu_url', url);
+    if (noegle) setSetting('sagu_key', noegle);
+
+    const svar = await sagu.proev();
+    if (!svar.ok) {
+      setSetting('sagu_url', gammelUrl);
+      if (gammelKey) setSetting('sagu_key', gammelKey);
+      else db.prepare("DELETE FROM settings WHERE key = 'sagu_key'").run();
+      apiFejl(res, 400, 'bad_key', svar.fejl);
+      return;
+    }
+    // Notesboegerne gemmes, saa »hvor skal noten ligge« ikke koster et kald
+    // hver gang dialogen aabnes.
+    setSetting('sagu_notebooks', JSON.stringify(svar.notebooks || []));
+    // Findes den valgte notesbog ikke laengere, ryddes valget - ellers ville
+    // noterne lande i en bog, der er slettet, og INTET ville fejle.
+    const valgt = getSetting('sagu_notebook', '');
+    if (valgt && !(svar.notebooks || []).some((b) => b.id === valgt)) {
+      db.prepare("DELETE FROM settings WHERE key = 'sagu_notebook'").run();
+    }
+    audit('sagu-forbundet', url, clientIp(req));
+    sendJson(res, 200, {
+      connected: true, url, notes: svar.notes, notebooks: svar.notebooks || [],
+    });
+  },
+
+  /* Hvilken notesbog en note fra paletten skal ligge i. */
+  'POST /api/v1/sagu/notebook': async (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    const body = await readJsonBody(req);
+    const id = str(body.notebookId, 64);
+    const kendte = JSON.parse(getSetting('sagu_notebooks', '[]') || '[]');
+    if (id && !kendte.some((b) => b.id === id)) {
+      apiFejl(res, 400, 'unknown_notebook', 'Sagu does not have a notebook with that id.');
+      return;
+    }
+    if (id) setSetting('sagu_notebook', id);
+    else db.prepare("DELETE FROM settings WHERE key = 'sagu_notebook'").run();
+    sendJson(res, 200, { notebook: id });
+  },
+
+  'DELETE /api/v1/sagu': async (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    await readJsonBody(req);
+    // Linkene paa opgaverne bliver staaende: de er en kendsgerning om
+    // opgaven, ikke en foelge af en indstilling.
+    db.prepare("DELETE FROM settings WHERE key IN "
+      + "('sagu_url','sagu_key','sagu_notebooks','sagu_notebook')").run();
+    audit('sagu-frakoblet', null, clientIp(req));
+    sendJson(res, 200, { connected: false });
+  },
+
+  /* Serveren proxier soegningen - noeglen forlader aldrig maskinen. */
+  'GET /api/v1/sagu/search': async (req, res, ctx) => {
+    const auth = godkend(req, res, 'read');
+    if (!auth) return;
+    if (!saguForbundet()) {
+      apiFejl(res, 400, 'not_connected', 'Connect Sagu under Settings first.');
+      return;
+    }
+    if (!rateAllow(`sagu:${clientIp(req)}`, 120, 3600)) {
+      apiFejl(res, 429, 'rate_limited', 'Too many searches. Try again shortly.');
+      return;
+    }
+    const r = await sagu.soeg(ctx.query.get('q') || '');
+    if (r.fejl) { apiFejl(res, 502, 'sagu_failed', r.fejl); return; }
+    sendJson(res, 200, { pages: r.pages, fallback: !!r.fallback });
+  },
+
+  /* Opretter en note i Sagu og giver adressen tilbage. */
+  'POST /api/v1/sagu/note': async (req, res) => {
+    const auth = godkend(req, res, 'write');
+    if (!auth) return;
+    if (!saguForbundet()) {
+      apiFejl(res, 400, 'not_connected', 'Connect Sagu under Settings first.');
+      return;
+    }
+    const body = await readJsonBody(req, auth.viaToken);
+    const r = await sagu.opretNote(body.title, {
+      // Dialogen sender en bog; paletten goer ikke, og saa gaelder valget
+      // fra Settings. Uden det lander hurtige noter uden for enhver bog.
+      notebookId: str(body.notebookId, 64) || getSetting('sagu_notebook', '') || null,
+      tilbageUrl: str(body.backUrl, 400) || null,
+      tilbageTitel: str(body.backTitle, 200) || null,
+    });
+    if (r.fejl) { apiFejl(res, 502, 'sagu_failed', r.fejl); return; }
+    audit('sagu-note-oprettet', r.page.title, clientIp(req));
+    sendJson(res, 200, { page: r.page });
+  },
+
+  /* Notens kommentarer. Kun LAESNING - svaret hoerer hjemme i Sagu. */
+  'GET /api/v1/sagu/comments': async (req, res, ctx) => {
+    const auth = godkend(req, res, 'read');
+    if (!auth) return;
+    const id = saguModul.idFraUrl(ctx.query.get('url') || '');
+    if (!id) { apiFejl(res, 400, 'bad_url', 'That is not a Sagu note address.'); return; }
+    const r = await sagu.kommentarer(id);
+    if (r.fejl) { apiFejl(res, 502, 'sagu_failed', r.fejl); return; }
+    sendJson(res, 200, { comments: r.comments });
+  },
+
   'DELETE /api/v1/notion': async (req, res) => {
     const user = requireUser(req, res);
     if (!user) return;
@@ -2044,7 +2195,7 @@ const ROUTES = {
    * Svarer {title: null}, naar der ikke var noget at lave - saa kan
    * frontenden kalde den frit uden at skulle vide, hvornaar det giver mening.
    */
-  'POST /api/v1/notion/refresh': async (req, res) => {
+  'POST /api/v1/link/refresh': async (req, res) => {
     const auth = godkend(req, res, 'write');
     if (!auth) return;
     const body = await readJsonBody(req, auth.viaToken);
@@ -2054,18 +2205,38 @@ const ROUTES = {
     if (!id) { apiFejl(res, 400, 'no_id', 'Which one?'); return; }
 
     const r = db.prepare(`SELECT link_url, link_title, link_checked_at FROM ${tabel} WHERE id = ?`).get(id);
-    const sideId = r && notionModul.idFraUrl(r.link_url);
-    // Ikke et Notion-link, intet token, eller tjekket for nylig: gaa hjem.
-    if (!sideId || !getSetting('notion_token', '')
-        || (r.link_checked_at && now() - r.link_checked_at < 86400)) {
+    // Tjekket for nylig: gaa hjem, uanset hvem der ejer linket.
+    if (!r || (r.link_checked_at && now() - r.link_checked_at < 86400)) {
       sendJson(res, 200, { title: null });
       return;
     }
+    /*
+     * To kilder, ét felt.
+     *
+     * `link_url` blev med vilje aldrig doebt `notion_url`, og det er dét, der
+     * goer, at Sagu kan glide ind ved siden af uden en ny kolonne. Adressen
+     * afgoer selv, hvem der skal spoerges - der er ingen tilstand at holde
+     * styr paa.
+     */
+    /*
+     * FORMEN afgoer foerst - ikke om en forbindelse er sat.
+     *
+     * En Sagu-adresse slutter paa `#note-<32 hex>`, og Notions id-genkendelse
+     * leder efter 32 hex i enden. Uden en foerste sortering ville doda derfor
+     * spoerge NOTION om en Sagu-note, saa snart Sagu ikke var forbundet - et
+     * spildt kald mod en fremmed tjeneste med et id, der ikke er dens. En
+     * test fandt det; oejet ville aldrig have set det.
+     */
+    const erSagu = saguModul.idFraUrl(r.link_url) !== null;
+    const saguId = erSagu && saguForbundet() ? saguModul.idFraUrl(r.link_url) : null;
+    const sideId = (!erSagu && getSetting('notion_token', ''))
+      ? notionModul.idFraUrl(r.link_url) : null;
+    if (!saguId && !sideId) { sendJson(res, 200, { title: null }); return; }
 
     // Stemples FOER opslaget. Er siden slettet eller delingen fjernet, skal
     // doda ikke proeve igen ved hver eneste aabning.
     db.prepare(`UPDATE ${tabel} SET link_checked_at = ? WHERE id = ?`).run(now(), id);
-    const side = await notion.side(sideId);
+    const side = saguId ? await sagu.note(saguId) : await notion.side(sideId);
     if (!side || !side.title || side.title === r.link_title) {
       sendJson(res, 200, { title: null });
       return;
@@ -2563,9 +2734,25 @@ function godkendMcp(req) {
    `connected: true` (RUNE-ERFARINGER §6b). Det er en hemmelighed, brugeren
    selv har indtastet, og den skal ikke kunne laeses ud af en browserfane. */
 const notionModul = require('./notion.js');
+const saguModul = require('./sagu.js');
 const notion = notionModul.opret({
   hentToken: () => getSetting('notion_token', ''),
 });
+
+/*
+ * Sagu - soesterappen, der skal afloese Notion som notearkiv (F8).
+ *
+ * Adresse + noegle, som Andreas selv saetter begge steder: der er ingen
+ * navneoploesning mellem to runer, og en URL virker uanset topologi. Peges
+ * den paa serverens LAN-adresse i stedet for paa tunnelen, forsvinder
+ * ~150 ms uden en linje kode.
+ */
+const sagu = saguModul.opret({
+  hentUrl: () => String(getSetting('sagu_url', '')).replace(/\/+$/, ''),
+  hentNoegle: () => getSetting('sagu_key', ''),
+});
+
+const saguForbundet = () => !!(getSetting('sagu_url', '') && getSetting('sagu_key', ''));
 
 /* Sidens indhold i hukommelsen et kvarter. IKKE i databasen: Notion er
    kilden, og en kopi ville kunne blive forkert uden at nogen opdagede det. */

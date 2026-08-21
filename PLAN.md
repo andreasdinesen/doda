@@ -13,9 +13,9 @@
 
 | | |
 |---|---|
-| **Fase** | **v39 udgivet.** Kravbeskrivelsen er bygget; v9–v39 er Andreas' ønsker. |
+| **Fase** | **Sagu-broen bygget 2026-08-21** (Sagus F8, dodas halvdel). v39 er udgivet. |
 | **Næste** | Ingen igangværende opgave. Se `HANDOVER-NAESTE.md`. |
-| **Tilstand** | 178 tests grønne, install-script **119.350 / 126.000 (95 %)** |
+| **Tilstand** | 193 tests grønne. Install-scriptet **henter app-koden fra GitHub** og er **1.753 / 126.000 (1 %)**; payloaden ville indlejret være ~120.600 tegn (96 %). |
 | **Udgivet version** | **36** |
 | **Sidst opdateret** | 2026-08-18 |
 

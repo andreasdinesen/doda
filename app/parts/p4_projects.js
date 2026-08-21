@@ -128,7 +128,7 @@ async function sideProjekt(id) {
   const omr = p.area_id ? (state.areas.find((a) => a.id === p.area_id) || {}).name : null;
   const manglerNaeste = p.status === 'active' && !p.next_count && p.open_count > 0;
 
-  friskNotionTitel('project', p.id, p, () => {
+  friskLinkTitel('project', p.id, p, () => {
     const chip = host.querySelector('.page-head .chip.link');
     if (chip) chip.innerHTML = `${icon('link', 13)} ${esc(linkNavn(p))}`;
   });
@@ -495,7 +495,8 @@ function spoergOmLink(o, naar, foreslaaetNavn) {
     <p class="lead" style="margin:6px 0 16px">Paste the address of the page where this
       really lives — a Notion page, a document, an issue. It becomes a chip you can click.</p>
     <div class="field" id="lkSearchBox" hidden>
-      <span>Search Notion</span>
+      <span id="lkKildeNavn">Search</span>
+      <div class="pills" id="lkKilde" style="margin:2px 0 8px" hidden></div>
       <div class="pills" id="lkMode" style="margin:2px 0 8px">
         <button class="pill on" data-lkmode="link">Link to a page</button>
         <button class="pill" data-lkmode="new">Create a page inside</button>
@@ -543,9 +544,19 @@ function spoergOmLink(o, naar, foreslaaetNavn) {
      vindue og kopiere en adresse. Er den ikke, er feltet der bare ikke -
      resten af dialogen virker uaendret. */
   (async () => {
-    let forbundet = false;
-    try { forbundet = (await api('GET', '/api/v1/notion')).connected; } catch { forbundet = false; }
-    if (!forbundet) { felt.focus(); felt.select(); return; }
+    /*
+     * To mulige kilder, ét felt.
+     *
+     * Notion bliver staaende, indtil migreringen til Sagu er koert faerdig -
+     * og saa laenge begge er forbundet, skal man kunne vaelge. Er kun den ene
+     * forbundet, er der intet at vaelge imellem, og saa staar der ikke en
+     * halv kontrol og fylder.
+     */
+    let kilder = [];
+    try { if ((await api('GET', '/api/v1/sagu')).connected) kilder.push('sagu'); } catch { /* ikke sat op */ }
+    try { if ((await api('GET', '/api/v1/notion')).connected) kilder.push('notion'); } catch { /* ikke sat op */ }
+    if (!kilder.length) { felt.focus(); felt.select(); return; }
+    let kilde = kilder[0];
 
     const boks = host.querySelector('#lkSearchBox');
     const q = host.querySelector('#lkQ');
@@ -553,8 +564,62 @@ function spoergOmLink(o, naar, foreslaaetNavn) {
     boks.hidden = false;
     q.focus();
 
+    const NAVN = { sagu: 'Sagu', notion: 'Notion' };
+    const saetKilde = (ny) => {
+      kilde = ny;
+      host.querySelector('#lkKildeNavn').textContent = `Search ${NAVN[kilde]}`;
+      host.querySelectorAll('[data-kilde]').forEach((x) => x.classList.toggle('on', x.dataset.kilde === kilde));
+      q.placeholder = kilde === 'sagu' ? 'Type part of a note title…' : 'Type part of a page name…';
+    };
+    if (kilder.length > 1) {
+      const raekke = host.querySelector('#lkKilde');
+      raekke.hidden = false;
+      raekke.innerHTML = kilder.map((k) => `<button class="pill" data-kilde="${k}">${NAVN[k]}</button>`).join('');
+      raekke.querySelectorAll('[data-kilde]').forEach((el) => el.addEventListener('click', () => {
+        saetKilde(el.dataset.kilde);
+        clearTimeout(timer);
+        soeg(q.value.trim(), ++token);
+      }));
+    }
+    saetKilde(kilde);
+
     let timer = null;
     let token = 0;
+    let saguBoeger = [];
+    try { saguBoeger = (await api('GET', '/api/v1/sagu')).notebooks || []; } catch { saguBoeger = []; }
+
+    /**
+     * Opretter noten i Sagu og saetter adressen i feltet.
+     *
+     * Knappen siger hvad den GOER, mens den goer det: en note i en fremmed app
+     * kan ikke tages tilbage herfra (RUNE-ERFARINGER, doda v35).
+     */
+    const opretSaguNote = async (el) => {
+      const navn = (host.querySelector('#lkName').value.trim()
+        || foreslaaetNavn || 'Untitled').slice(0, 200);
+      el.disabled = true;
+      const gammelTekst = el.innerHTML;
+      el.textContent = `Creating “${navn}” in ${el.dataset.title}…`;
+      try {
+        const d = await api('POST', '/api/v1/sagu/note', {
+          title: navn,
+          notebookId: el.dataset.bog || undefined,
+          // Link BEGGE veje: noten faar en adresse tilbage til det, den kom fra.
+          backUrl: location.origin,
+          backTitle: navn,
+        });
+        felt.value = d.page.url;
+        host.querySelector('#lkName').value = d.page.title;
+        toast('Note created in Sagu');
+        host.querySelector('#lkOk').focus();
+      } catch (ex) {
+        // En fejlet forbindelse er ikke en fejlet gemning: knappen kommer
+        // tilbage, og beskeden siger hvad der skete.
+        toast(ex.message);
+        el.disabled = false;
+        el.innerHTML = gammelTekst;
+      }
+    };
 
     /* En TOM soegning returnerer alt, integrationen kan se, sorteret efter
        sidst aendret. Det er ikke bare bekvemt - det er svaret paa "hvorfor
@@ -563,23 +628,42 @@ function spoergOmLink(o, naar, foreslaaetNavn) {
     // Ventetiden er kun for tastede soegninger: hvert tastetryk er ellers et
     // kald HELE vejen til Notion. Den foerste visning skal vaere oejeblikkelig.
     const soeg = (v, mit) => {
+      /*
+       * Sagu OPRETTER i en notesbog, ikke inde i en anden note.
+       *
+       * Notions »lav en side inde i denne« findes ikke i Sagu: dér vaelger man
+       * en notesbog. Listen bliver derfor notesboegerne i den tilstand - og
+       * det er praecis planens accept: en note oprettet fra doda skal staa i
+       * den RIGTIGE notesbog.
+       */
+      if (kilde === 'sagu' && nyTilstand) {
+        const boeger = saguBoeger.length ? saguBoeger : [{ id: '', name: 'No notebook' }];
+        traf.innerHTML = boeger.map((b) => `<button class="notionhit" data-bog="${esc(b.id)}"
+            data-title="${esc(b.name)}">${icon('note', 13)} ${esc(b.name)}</button>`).join('');
+        traf.querySelectorAll('[data-bog]').forEach((el) => el.addEventListener('click',
+          () => opretSaguNote(el)));
+        return;
+      }
       timer = setTimeout(async () => {
         traf.innerHTML = `<p class="lead" style="margin:8px 0 0">${v ? 'Searching…' : 'Looking at what doda can see…'}</p>`;
         try {
-          const d = await api('GET', `/api/v1/notion/search?q=${encodeURIComponent(v)}`);
+          const d = await api('GET', `/api/v1/${kilde}/search?q=${encodeURIComponent(v)}`);
           // Et svar, brugeren er holdt op med at vente paa, maa ikke
           // overskrive et nyere (RUNE-ERFARINGER, paletten).
           if (mit !== token) return;
           traf.innerHTML = d.pages.length
             ? d.pages.map((s) => `<button class="notionhit" data-url="${esc(s.url)}"
                  data-title="${esc(s.title)}">${s.icon ? `${esc(s.icon)} ` : ''}${esc(s.title)}${
-  s.kind === 'database' ? '<span class="meta"> · database</span>' : ''}</button>`).join('')
-            : `<p class="lead" style="margin:8px 0 0">${v
-  ? 'Nothing matches that.'
-  : '<strong>doda cannot see any Notion pages.</strong>'} Notion only shows pages
+  s.kind ? `<span class="meta"> · ${esc(s.kind)}</span>` : ''}</button>`).join('')
+            : (kilde === 'sagu'
+              ? `<p class="lead" style="margin:8px 0 0">${v ? 'No note matches that.'
+                : 'Type to search your notes in Sagu.'}</p>`
+              : `<p class="lead" style="margin:8px 0 0">${v
+                ? 'Nothing matches that.'
+                : '<strong>doda cannot see any Notion pages.</strong>'} Notion only shows pages
                <strong>shared with this integration</strong> — open the page in Notion,
                ⋯ → Connections, and add the one you pasted the token from. Sharing a
-               parent page covers everything under it.</p>`;
+               parent page covers everything under it.</p>`);
           traf.querySelectorAll('[data-url]').forEach((el) => {
             el.addEventListener('click', async () => {
               if (!nyTilstand) {
@@ -644,13 +728,18 @@ function spoergOmLink(o, naar, foreslaaetNavn) {
 }
 
 /**
- * Henter en Notion-sides friske titel og opdaterer visningen, hvis den er
- * aendret. Fejler det, sker der ingenting - en gammel titel er bedre end en
- * fejlbesked om en titel.
+ * Henter det linkede dokuments friske titel og opdaterer visningen, hvis den
+ * er aendret. Fejler det, sker der ingenting - en gammel titel er bedre end
+ * en fejlbesked om en titel.
+ *
+ * Baade Notion og Sagu, og adressen afgoer selv hvem: `link_url` blev med
+ * vilje aldrig doebt `notion_url`. Navnet paa funktionen foelger med, for et
+ * navn, der siger Notion om noget, der ogsaa svarer for Sagu, er en
+ * paastand, ingen kan efterproeve.
  */
-async function friskNotionTitel(kind, id, o, naar) {
+async function friskLinkTitel(kind, id, o, naar) {
   try {
-    const d = await api('POST', '/api/v1/notion/refresh', { kind, id });
+    const d = await api('POST', '/api/v1/link/refresh', { kind, id });
     if (!d.title || d.title === o.link_title) return;
     o.link_title = d.title;
     naar();
@@ -750,6 +839,55 @@ function notionFoldet() {
 
 function saetNotionFoldet(fold) {
   try { localStorage.setItem('doda_notion_fold', fold ? '1' : '0'); } catch { /* privat tilstand */ }
+}
+
+/**
+ * Ruden under en opgave: den linkede sides indhold.
+ *
+ * Adressen afgoer, hvem der skal spoerges - ikke en tilstand nogen skal
+ * huske. `link_url` blev med vilje aldrig doebt `notion_url`, og det er
+ * praecis dét, der goer, at Sagu kan glide ind ved siden af.
+ */
+function linkRude(host, o, foldSammen) {
+  if (!host) return;
+  if (saguModul_erSaguUrl(o.link_url)) { saguRude(host, o); return; }
+  notionRude(host, o, foldSammen);
+}
+
+/** `#note-<32 hex>` er den adresse, Sagu selv aabner paa. */
+function saguModul_erSaguUrl(url) {
+  return /#note-[0-9a-f]{32}$/i.test(String(url || ''));
+}
+
+/**
+ * Sagu-noten: kommentarerne, og en vej derhen.
+ *
+ * Kun LAESNING. Skal man svare, hoerer det hjemme i Sagu, hvor samtalen
+ * staar - en opgaveapp, der kigger med, skal ikke ogsaa vaere et sted at
+ * skrive. Og noten selv hentes IKKE: den kan vaere lang, Sagu er kilden, og
+ * doda skal ikke lave en kopi, der kan blive forkert.
+ */
+async function saguRude(host, o) {
+  host.innerHTML = `<p class="meta" style="margin-top:18px">In Sagu</p>
+    <p class="lead">Loading comments…</p>`;
+  try {
+    const d = await api('GET', `/api/v1/sagu/comments?url=${encodeURIComponent(o.link_url)}`);
+    const liste = d.comments || [];
+    host.innerHTML = `<p class="meta" style="margin-top:18px">In Sagu${
+  liste.length ? ` · ${liste.length} comment${liste.length === 1 ? '' : 's'}` : ''}</p>
+      ${liste.length ? `<div class="notionkom">${liste.map((k) => `
+        <div class="notionkom-item">
+          <div class="meta">${esc(k.author)}${k.guest ? ' · guest' : ''}${
+  k.at ? ` · ${esc(visTid(k.at))}` : ''}</div>
+          <div>${markdown(k.body)}</div>
+        </div>`).join('')}</div>` : '<p class="lead">No comments on that note yet.</p>'}
+      <p class="gate-note" style="text-align:left">Read-only. Open the note in Sagu to reply.</p>`;
+  } catch (ex) {
+    // En fejlet forbindelse er ikke en fejlet opgave: ruden siger hvad der
+    // skete, og resten af opgaven staar uroert.
+    host.innerHTML = `<p class="meta" style="margin-top:18px">In Sagu</p>
+      <p class="lead">${esc(ex.message)}</p>`;
+  }
 }
 
 function notionRude(host, o, foldSammen) {

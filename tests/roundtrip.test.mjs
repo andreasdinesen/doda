@@ -343,7 +343,7 @@ test('hemmeligheder forlader ALDRIG serveren — heller ikke med en read-nøgle'
   assert.ok(!JSON.stringify(n).includes('HEMMELIG'), 'tokenet må ikke lækkes gennem status-ruten');
 });
 
-test('Notion-titler: højst ét opslag i døgnet, og kun på Notion-links', async () => {
+test('Linkede titler: højst ét opslag i døgnet, og kun på links vi ejer', async () => {
   const r = await J('/api/v1/capture', { text: 'noget med et link', createNew: true });
   const id = r.item.id;
   const d2 = new DatabaseSync(join(dataDir, 'doda.db'));
@@ -352,24 +352,50 @@ test('Notion-titler: højst ét opslag i døgnet, og kun på Notion-links', asyn
   // Uden Notion-token sker der ingenting - og der stemples ikke.
   d2.prepare("DELETE FROM settings WHERE key = 'notion_token'").run();
   d2.prepare("UPDATE items SET link_url = 'https://www.notion.so/Side-0123456789abcdef0123456789abcdef' WHERE id = ?").run(id);
-  assert.equal((await J('/api/v1/notion/refresh', { kind: 'item', id })).title, null);
+  assert.equal((await J('/api/v1/link/refresh', { kind: 'item', id })).title, null);
   assert.equal(stempel(), null, 'uden token er der intet at tjekke');
 
   // Med token proeves der - og der stemples, OGSAA naar Notion siger nej.
   // Ellers ville en slettet side blive slaaet op ved hver eneste aabning.
   d2.prepare("INSERT INTO settings (key, value) VALUES ('notion_token','ugyldigt') ON CONFLICT(key) DO UPDATE SET value = 'ugyldigt'").run();
-  assert.equal((await J('/api/v1/notion/refresh', { kind: 'item', id })).title, null);
+  assert.equal((await J('/api/v1/link/refresh', { kind: 'item', id })).title, null);
   const foerste = stempel();
   assert.ok(foerste > 0, 'der skal stemples, saa der ikke proeves igen med det samme');
 
   // Andet kald inden for doegnet roerer ikke Notion - stemplet staar stille.
-  await J('/api/v1/notion/refresh', { kind: 'item', id });
+  await J('/api/v1/link/refresh', { kind: 'item', id });
   assert.equal(stempel(), foerste, 'hoejst ét opslag i doegnet');
 
-  // Et link, der IKKE er Notion, roeres aldrig.
+  // Et link, der hverken er Notion eller Sagu, roeres aldrig.
   const r2 = await J('/api/v1/capture', { text: 'et almindeligt link', createNew: true });
   d2.prepare("UPDATE items SET link_url = 'https://dr.dk/nyheder' WHERE id = ?").run(r2.item.id);
-  assert.equal((await J('/api/v1/notion/refresh', { kind: 'item', id: r2.item.id })).title, null);
+  assert.equal((await J('/api/v1/link/refresh', { kind: 'item', id: r2.item.id })).title, null);
   assert.equal(d2.prepare('SELECT link_checked_at FROM items WHERE id = ?').get(r2.item.id).link_checked_at, null);
+
+  /*
+   * Og et SAGU-link roeres kun, naar Sagu er forbundet.
+   *
+   * Ruten hed »notion/refresh«, saa laenge den kun kunne det ene. Nu svarer
+   * den for begge kilder, og saa maa navnet ikke laengere sige Notion - et
+   * navn, der lover noget andet end det, koden goer, er den dyreste slags
+   * fejl (RUNE-ERFARINGER, Sagu).
+   */
+  const r3 = await J('/api/v1/capture', { text: 'en note i Sagu', createNew: true });
+  const saguUrl = 'https://sagu.eksempel.dk/#note-0123456789abcdef0123456789abcdef';
+  d2.prepare('UPDATE items SET link_url = ? WHERE id = ?').run(saguUrl, r3.item.id);
+  // Uden forbindelse: intet opslag, intet stempel.
+  assert.equal((await J('/api/v1/link/refresh', { kind: 'item', id: r3.item.id })).title, null);
+  assert.equal(d2.prepare('SELECT link_checked_at FROM items WHERE id = ?').get(r3.item.id).link_checked_at,
+    null, 'uden en Sagu-forbindelse er der intet at tjekke');
+
+  // Med en (ubrugelig) forbindelse proeves der - og der stemples, saa en
+  // slettet note ikke slaas op ved hver eneste aabning.
+  d2.prepare("INSERT INTO settings (key, value) VALUES ('sagu_url','https://sagu.eksempel.dk') "
+    + "ON CONFLICT(key) DO UPDATE SET value = excluded.value").run();
+  d2.prepare("INSERT INTO settings (key, value) VALUES ('sagu_key','sagu_ugyldig') "
+    + "ON CONFLICT(key) DO UPDATE SET value = excluded.value").run();
+  assert.equal((await J('/api/v1/link/refresh', { kind: 'item', id: r3.item.id })).title, null);
+  assert.ok(d2.prepare('SELECT link_checked_at FROM items WHERE id = ?').get(r3.item.id).link_checked_at > 0,
+    'der skal stemples, ogsaa naar Sagu ikke svarer');
   d2.close();
 });

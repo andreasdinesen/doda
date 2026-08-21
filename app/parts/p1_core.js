@@ -5,7 +5,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 39;
+const APP_VERSION = 40;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -874,6 +874,8 @@ function fortsaetTilConnector() {
     // jeg slet ikke se appen - kun samtykkesiden.
     if (state.user && fortsaetTilConnector()) return;
     if (state.user) await hentState();
+    // Ét ja/nej, hentet én gang: er Sagu forbundet, faar `*` en raekke mere.
+    if (state.user) tjekSagu();
   } catch (ex) {
     document.getElementById('root').innerHTML =
       `<div class="gate"><div class="card"><div class="brand">${icon('logo', 26)} doda</div>

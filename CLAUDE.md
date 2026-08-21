@@ -29,8 +29,23 @@
 - **Bump ALDRIG `APP_VERSION` undervejs** — kun når Andreas har godkendt commit'en.
   Flere ændringer samles i ÉN udgivelse.
 - **Commit og push kræver et udtrykkeligt ja.** Et push er en udgivelse.
-- Repoet er **privat**. Panelets fine-grained GitHub-token skal have doda tilføjet,
-  ellers giver »Browse GitHub« *not found*.
+- Repoet er **offentligt** (Andreas, 2026-08-21), som Sagus. **Hver eneste ændring skal
+  auditeres, før den pushes:** ingen rigtige mailadresser, ingen rigtige værtsnavne, ingen
+  tokens. `navn@eksempel.dk` og `doda.eksempel.dk` er de former, der bruges i tests og docs.
+- **Install-scriptet BÆRER ikke længere app-koden — det henter den** fra
+  `refs/tags/v<N>` (DESIGN.md, »Sagu-broen«). Tre følger:
+  - **En udgivelse er tre trin:** commit → `git tag v<N>` → `git push --tags`.
+    Uden taggen installerer runen ingenting — og siger det højt.
+  - **De genererede filer skal være committet** (`app/public/app.js`, ikonerne).
+    `tjek_git()` i build'et fælder ellers.
+  - Installationen kræver **intet token** — repoet er offentligt. Feltet er fjernet fra
+    runen med vilje: en indstilling, der ikke længere gør noget, ligner en spærring uden
+    at være en, og så leder man efter fejlen det forkerte sted. En 404 fra GitHub betyder
+    nu ét: adressen findes ikke, altså er taggen ikke pushet.
+- **`link_url` er generisk og skal blive ved med at være det.** Både Notion og Sagu
+  bruger feltet, og **adressen** afgør hvem der spørges — ikke en tilstand. En
+  Sagu-note er `…/#note-<32 hex>`, og formen afgøres FØR forbindelsen, ellers spørger
+  doda Notion om et Sagu-id.
 - Kildefiler må ikke indeholde `{{STORE_BOGSTAVER}}` eller `YGG_PAYLOAD_EOF`
   (build'et fejler højt på begge).
 - Echo-linjer i install-scriptet: **ASCII** (æøå → ae/oe/aa).

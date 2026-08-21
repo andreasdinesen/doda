@@ -5,6 +5,19 @@
 
 /* Foerste tegn vaelger en TILSTAND. Pillen inde i feltet og legenden i bunden
    viser hvilken - sa man aldrig er i tvivl om, hvad Enter kommer til at gore. */
+/*
+ * Er Sagu forbundet? Hentes ÉN gang, naar appen er tegnet.
+ *
+ * Ikke pr. tastetryk og ikke pr. optegning: svaret aendrer sig kun, naar man
+ * selv har vaeret i Settings, og et kald pr. bogstav ville vaere en rundtur
+ * for et ja/nej, der stod fast (RUNE-ERFARINGER, doda v27).
+ */
+let saguKlar = false;
+
+async function tjekSagu() {
+  try { saguKlar = !!(await api('GET', '/api/v1/sagu')).connected; } catch { saguKlar = false; }
+}
+
 const MODER = {
   // Legenden skal naevne ALT, parseren kan i den tilstand. Naevner den mindre,
   // findes funktionen i praksis ikke - det var praecis derfor "/projekt" var
@@ -68,7 +81,7 @@ function tolkNu(tekst) {
  * Reglerne foelger parseren (app/shared/parse.js), for ellers ville paletten
  * foreslaa noget, teksten bagefter bliver tolket anderledes:
  *   - markoeren skal staa ved linjestart eller efter et mellemrum
- *     (ellers ville "andreas@omlidt.dk" udloese en projektliste)
+ *     (ellers ville "navn@eksempel.dk" udloese en projektliste)
  *   - navnet er ét ord af bogstaver, tal, _ og -
  *   - der maa ikke vaere naaet et mellemrum efter markoeren
  */
@@ -285,6 +298,26 @@ function byggRaekker() {
       titel: t && t.title ? t.title : raa,
       under: mode === '*' ? 'NEW NOTE' : mode === '+' ? 'NEW TASK' : 'QUICK CAPTURE',
     });
+    /*
+     * Sagu-noten er en raekke MERE, ikke en anden betydning af `*`.
+     *
+     * Planen sagde »`*` opretter en Sagu-note«, men `*` betyder allerede
+     * »ny note i doda« - og dodas egne noter BLIVER i doda (ingen migrering,
+     * ingen synkronisering). At lade markoeren skifte betydning, fordi en
+     * indstilling er sat, ville aendre det, ét Enter goer, uden at nogen bad
+     * om det.
+     *
+     * I stedet: naar Sagu er forbundet, staar der en raekke mere. Foerste
+     * plads er uroert, saa appens aeldste regel holder - ét Enter fanger
+     * stadig det samme som i gaar (handover §5.1).
+     */
+    if (mode === '*' && saguKlar && (t && t.title ? t.title : raa).trim()) {
+      raekker.push({
+        type: 'sagunote',
+        titel: t && t.title ? t.title : raa,
+        under: 'NEW NOTE IN SAGU · linked both ways',
+      });
+    }
   }
 
   // Forslagene staar UNDER oprettelsen. Ét Enter skal stadig fange - det er
@@ -411,7 +444,49 @@ async function aktiver() {
   if (raekke.type === 'goto') { luk(); gaaTilNavigation(raekke.mode, raekke.id); return; }
   if (raekke.type === 'nyt') { await opretNavigation(raekke); return; }
   if (raekke.type === 'forslag') { fuldfoerMarkoer(raekke); return; }
+  if (raekke.type === 'sagunote') { await opretSaguNote(raekke.titel); return; }
   await fangstNu(raekke.type === 'confirm');
+}
+
+/**
+ * Opretter en note i SAGU - og en opgave i doda, der peger paa den.
+ *
+ * »Link begge veje« er ikke pynt: uden opgaven er noten en oe, og uden noten
+ * er opgaven en titel. Raekkefoelgen er valgt: **noten foerst.** Fejler Sagu,
+ * er der ikke oprettet noget, og brugeren kan proeve igen - den modsatte
+ * raekkefoelge ville efterlade en opgave, der lover et link, den ikke har
+ * (RUNE-ERFARINGER, MsGraphBud: vaelg hvilken vej du vil fejle).
+ */
+async function opretSaguNote(raaTitel) {
+  const titel = String(raaTitel || '').trim();
+  if (!titel) return;
+  try {
+    const d = await api('POST', '/api/v1/sagu/note', {
+      title: titel,
+      backUrl: location.origin,
+      backTitle: titel,
+    });
+    // Opgaven i doda peger paa noten. `link_url` er generisk - det er dét,
+    // der goer, at Sagu kan bruge det samme felt som Notion.
+    const svar = await api('POST', '/api/v1/capture', { text: titel, createNew: true });
+    const it = svar.item;
+    if (it) {
+      await api('POST', `/api/v1/items/${it.id}`, {
+        link_url: d.page.url,
+        link_title: d.page.title,
+      });
+    }
+    luk();
+    await genindlaes();
+    toast('Note created in Sagu', {
+      label: 'Open',
+      run: () => window.open(d.page.url, '_blank', 'noopener'),
+    });
+  } catch (ex) {
+    // En fejlet forbindelse er ikke en fejlet fangst: feltet staar uroert,
+    // saa man kan trykke igen eller vaelge den almindelige note ovenover.
+    toast(ex.message);
+  }
 }
 
 function gaaTilNavigation(mode, id) {

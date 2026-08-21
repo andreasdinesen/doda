@@ -45,6 +45,44 @@ OUT = os.path.join(ROOT, 'runes', 'doda.yaml')
 # funktion eller to. Naar den her fejler igen, skal noget UD af payloaden -
 # se PLAN.md for de maalte muligheder.
 MAX_INSTALL = 126_000
+
+# ------------------------------------------------ hvor app-koden kommer fra
+#
+# Indtil 2026-08-21 BAR install-scriptet hele appen som brotli+base85. Med F8
+# (Sagu-broen) naaede den 122.701 af 126.000 tegn - 97 % - og der var stadig
+# tre flader tilbage at bygge. Udvejen er den, Sagu maalte og tog samme dag:
+# et install-script, der HENTER app-koden i stedet for at baere den, er
+# konstant stort, uanset hvor stor appen bliver.
+#
+# **doda-repoet er OFFENTLIGT** (Andreas, 2026-08-21), praecis som Sagus. Det
+# fjernede den ene ting, der var dyrere her end der: et `GITHUB_TOKEN` i en
+# `secret: true`-variabel, som panelet skulle templatere ind i scriptet.
+#
+# Den er vaek nu, og det er ikke bare mindre at fumle med. **En indstilling,
+# der ikke laengere goer noget, ligner en spaerring uden at vaere en** - og
+# den, der en dag ikke kan installere runen, ville lede efter fejlen i et
+# tomt token-felt i stedet for i det, der faktisk er galt.
+#
+# GitHub svarer stadig **404, ikke 403**, naar en adresse ikke findes -
+# typisk fordi taggen ikke er pushet. Fejlbeskeden siger det.
+#
+# Payloaden bygges STADIG: rundturs-tjekket beviser, at kilderne kan pakkes og
+# pakkes ud igen, og tallet staar i loggen. `HENT_FRA_GITHUB = False` giver
+# den indlejrede rune tilbage - den eneste vej, der virker uden net.
+HENT_FRA_GITHUB = True
+GITHUB_EJER = 'andreasdinesen'
+GITHUB_REPO = 'doda'
+
+
+def tarball_url(version):
+    """Runens version N hoerer sammen med taggen vN - ikke med en gren.
+
+    Peger scriptet paa en gren, installerer en gammel rune det, grenen
+    tilfaeldigvis indeholder i dag. Prisen er ét trin mere ved udgivelse:
+    `git tag vN && git push --tags`.
+    """
+    return (f'https://codeload.github.com/{GITHUB_EJER}/{GITHUB_REPO}'
+            f'/tar.gz/refs/tags/v{version}')
 MAX_YAML = 512 * 1024
 
 HEREDOC = 'YGG_PAYLOAD_EOF'
@@ -143,6 +181,33 @@ def indsaml_filer():
         if os.path.isfile(sti) and not navn.startswith('.'):
             filer.append((f'app/public/{navn}', sti))
     return filer
+
+
+def tjek_git(filer):
+    """I hente-tilstand er det, GITHUB har, det der bliver installeret.
+
+    Den nye fejlmulighed er ikke en manglende fil i en liste, men en fil, der
+    ikke er committet: `app/public/app.js` og ikonerne er GENERERET, og ligger
+    de ikke i repoet, stopper containeren paa "Cannot find module". Spoerg
+    derfor git, ikke .gitignore.
+    """
+    if not os.path.isdir(os.path.join(ROOT, '.git')):
+        print('  git: intet repo her - hentningen virker foerst naar app/ er pushet OG tagget')
+        return
+    res = subprocess.run(['git', '-C', ROOT, 'ls-files', '-z'], capture_output=True)
+    if res.returncode != 0:
+        fejl('git ls-files fejlede: ' + res.stderr.decode('utf8', 'replace')[:400])
+    sporet = set(res.stdout.decode('utf8').split('\0'))
+    mangler = [navn for navn, _ in filer if navn not in sporet]
+    if mangler:
+        fejl('disse filer er ikke i git og ville mangle efter en hentning: ' + ', '.join(mangler))
+    beskidt = subprocess.run(['git', '-C', ROOT, 'status', '--porcelain', '--', 'app'],
+                             capture_output=True).stdout.decode('utf8').strip()
+    if beskidt:
+        print(f'  git: {len(beskidt.splitlines())} aendrede filer i app/ - '
+              'husk commit + `git tag v<N>` + `git push --tags`')
+    else:
+        print('  git: app/ er committet')
 
 
 def tjek_kilder(filer):
@@ -303,7 +368,79 @@ def verificer(kodet, forventet):
 
 # -------------------------------------------------------------------- 3. yaml
 
+# Hentningen staar - som dekoderen - i en 'single quoted' sh-streng og maa
+# derfor IKKE indeholde '. Node bruges frem for wget af to grunde: Node ER
+# install-imaget og er garanteret til stede, mens busybox' wget og dens TLS er
+# ubevist - og Nodes zlib pakker gzip'en ud, saa `tar` kun skal kunne det, den
+# allerede goer i den indlejrede variant (`tar x`). Hver ekstra tar-funktion
+# er en antagelse mere om busybox.
+def henter(version):
+    url = tarball_url(version)
+    return (
+        'const https=require("https"),zlib=require("zlib");'
+        f'const U="{url}";'
+        'function d(m){console.error("[fejl] "+m);console.error("Adresse: "+U);'
+        'console.error("Repoet er offentligt, saa en 404 betyder, at adressen ikke findes '
+        '- tjek at taggen er pushet.");'
+        'process.exit(1);}'
+        'function hent(u,n){const h={"user-agent":"doda-installer"};'
+        'https.get(u,{headers:h},(r)=>{'
+        'if(r.statusCode>=300&&r.statusCode<400&&r.headers.location){'
+        'if(n<=0)return d("for mange omdirigeringer");r.resume();'
+        'return hent(new URL(r.headers.location,u).toString(),n-1);}'
+        'if(r.statusCode!==200)return d("GitHub svarede "+r.statusCode);'
+        'const g=zlib.createGunzip();'
+        'g.on("error",(e)=>d("arkivet kunne ikke pakkes ud: "+e.message));'
+        'r.pipe(g).pipe(process.stdout);'
+        '}).on("error",(e)=>d("kunne ikke naa GitHub: "+e.message));}'
+        'hent(U,3);'
+    )
+
+
+def hent_krop(version):
+    """De linjer, install og update har tilfaelles, naar koden hentes.
+
+    `rm -rf app` staar begge steder: tar overskriver, men fjerner ikke filer,
+    der er slettet i en ny version. Og der pakkes ALTID ud i en frisk mappe,
+    som byttes ind - saa en halv hentning aldrig kan efterlade et halvt app/.
+    Alt midlertidigt ligger i /tmp; datamappen roeres ikke.
+
+    Der er ikke laengere et token i spil: repoet er offentligt (2026-08-21).
+    """
+    return (
+        'echo "Henter app-koden fra GitHub ..."\n'
+        'rm -rf /tmp/doda-hent\n'
+        'mkdir -p /tmp/doda-hent\n'
+        f"node -e '{henter(version)}' > /tmp/doda-hent/app.tar\n"
+        'tar x -C /tmp/doda-hent -f /tmp/doda-hent/app.tar\n'
+        '\n'
+        '# Mappenavnet i et GitHub-arkiv er <repo>-<ref uden v>, og arkivet\n'
+        '# begynder med en pax_global_header-post. Ingen af delene gaettes:\n'
+        '# find den app-mappe, der FINDES.\n'
+        'NY=$(find /tmp/doda-hent -maxdepth 2 -type d -name app | head -n 1)\n'
+        'if [ -z "$NY" ] || [ ! -f "$NY/server.js" ]; then\n'
+        '  echo "[fejl] arkivet fra GitHub indeholder ingen app/server.js"\n'
+        '  exit 1\n'
+        'fi\n'
+        'rm -rf app\n'
+        'mv "$NY" app\n'
+        'rm -rf /tmp/doda-hent\n'
+    )
+
+
 def install_script(version, payload):
+    if HENT_FRA_GITHUB:
+        return (
+            'set -eu\n'
+            f'echo "Installerer doda v{version} ..."\n'
+            'echo "Node: $(node --version)"\n'
+            '\n'
+            + hent_krop(version)
+            + '\n'
+            'echo "Filer udpakket:"\n'
+            'ls -1 app app/public\n'
+            'echo "Klar. Start serveren i panelet."\n'
+        )
     linjer = textwrap.wrap(payload, 100)
     return (
         'set -eu\n'
@@ -324,6 +461,17 @@ def install_script(version, payload):
 def opdater_script(version, payload):
     """update:-blokken (ny panelfunktion): skriver app-filerne igen og lader
     /data staa. Bruges til at lukke en CVE uden at geninstallere."""
+    if HENT_FRA_GITHUB:
+        return (
+            'set -eu\n'
+            f'echo "Opdaterer doda til v{version} ..."\n'
+            'echo "Node: $(node --version)"\n'
+            '\n'
+            + hent_krop(version)
+            + '\n'
+            'echo "App-filerne er skiftet ud. Databasen i /data er uroert."\n'
+            'echo "Skemaet opdateres automatisk, naar serveren starter."\n'
+        )
     linjer = textwrap.wrap(payload, 100)
     return (
         'set -eu\n'
@@ -367,6 +515,9 @@ def byg_yaml(version, payload):
              'pattern': r'^node:[0-9][A-Za-z0-9._-]*$',
              'hint': 'Skal vaere et node:-image, fx node:24-alpine eller node:24.9.0-alpine'},
         ],
+        # Der staar ikke et GITHUB_TOKEN her. Repoet er offentligt, saa
+        # hentningen kraever ingen godkendelse - og et felt, der ikke goer
+        # noget, er et sted at lede efter en fejl, der ikke er der.
 
         'install': {'image': '{{NODE_IMAGE}}', 'script': install_script(version, payload)},
         'update': {'image': '{{NODE_IMAGE}}', 'label': 'Opdater doda',
@@ -422,6 +573,8 @@ def main():
 
     filer = indsaml_filer()
     tjek_kilder(filer)
+    if HENT_FRA_GITHUB:
+        tjek_git(filer)
 
     raw = byg_tar(filer)
     komprimeret = brotli(raw)

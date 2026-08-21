@@ -79,7 +79,7 @@ Det skete tre gange. Brug Edit-værktøjet, eller skriv filen efter hvert trin.
 1. **Prøve connectoren mod den rigtige claude.ai.** Flowet er testet ende til
    ende lokalt, men aldrig mod Anthropics klient. Går det galt, er det næsten
    altid opdagelsen:
-   `curl -si https://doda.hjorten.eu/mcp -H 'Content-Type: application/json' -d '{}' | grep -i www-authenticate`
+   `curl -si https://doda.eksempel.dk/mcp -H 'Content-Type: application/json' -d '{}' | grep -i www-authenticate`
 2. **Bekræfte Web Push på telefonen.** Selve leveringen kan ikke testes her (der
    er ingen push-tjeneste, og browser-panelet kan ikke registrere en service
    worker). På iPhone virker det **kun**, når doda ligger på hjemmeskærmen.

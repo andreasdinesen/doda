@@ -876,6 +876,93 @@ async function bindPush() {
 }
 
 /* Notion-kortet i Settings. Tokenet sendes op, aldrig ned. */
+/**
+ * Sagu-forbindelsen i Settings.
+ *
+ * Samme moenster som Notion: adressen og noeglen gaar IND, og kun `connected`
+ * kommer ud. Serveren proever noeglen, FOER den gemmer den, og ruller tilbage
+ * ved fejl - ellers ligger en forkert noegle og ligner en virkende
+ * forbindelse (RUNE-ERFARINGER, doda v16).
+ */
+async function bindSagu() {
+  const boks = document.getElementById('saguBox');
+  if (!boks) return;
+
+  const tegn = (d) => {
+    boks.innerHTML = d.connected
+      ? `<div class="keyrow" style="margin-top:12px">
+           <div class="keyrow-main">
+             <div class="keyrow-name">Connected · ${esc(d.url)}</div>
+             <div class="meta">${(d.notebooks || []).length} notebook${
+  (d.notebooks || []).length === 1 ? '' : 's'} doda can file a note in</div>
+           </div>
+           <button class="btn ghost" id="sgOff">Disconnect</button>
+         </div>
+         <label class="field" style="margin-top:12px"><span>Quick notes go in</span>
+           <select class="input" id="sgBog">
+             <option value="">No notebook</option>
+             ${(d.notebooks || []).map((b) => `<option value="${esc(b.id)}"${
+  b.id === d.notebook ? ' selected' : ''}>${esc(b.name)}</option>`).join('')}
+           </select></label>
+         <p class="gate-note" style="text-align:left">A note made from the palette
+         (<code>*</code>) cannot ask where it should live — one keystroke has no room for a
+         question. This is where those land. Linking a note to a task still lets you pick.</p>`
+      : `<form id="sgForm" class="keyform" style="margin-top:12px">
+           <input class="input" id="sgUrl" placeholder="https://sagu.example.com"
+             autocomplete="off" spellcheck="false" required>
+           <input class="input" id="sgKey" type="password" autocomplete="off"
+             placeholder="sagu_… (a link key)" required>
+           <button class="btn primary" type="submit">Connect</button>
+         </form>
+         <p class="gate-error" id="sgErr" hidden></p>`;
+
+    const fra = boks.querySelector('#sgOff');
+    if (fra) {
+      fra.addEventListener('click', async () => {
+        // Sig hvad der SKER med det, der allerede findes - ellers toer man
+        // ikke trykke (RUNE-ERFARINGER, doda v35).
+        if (!window.confirm('Disconnect Sagu? The links on your tasks stay exactly where '
+          + 'they are — they just stop showing the note.')) return;
+        try { tegn(await api('DELETE', '/api/v1/sagu', {})); } catch (ex) { toast(ex.message); }
+      });
+    }
+    const bog = boks.querySelector('#sgBog');
+    if (bog) {
+      bog.addEventListener('change', async () => {
+        try {
+          await api('POST', '/api/v1/sagu/notebook', { notebookId: bog.value });
+          toast(bog.value ? `Quick notes go in ${bog.options[bog.selectedIndex].text}`
+            : 'Quick notes will not be filed in a notebook.');
+        } catch (ex) { toast(ex.message); }
+      });
+    }
+    const form = boks.querySelector('#sgForm');
+    if (form) {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const fejl = boks.querySelector('#sgErr');
+        fejl.hidden = true;
+        const knap = form.querySelector('button');
+        knap.disabled = true;
+        knap.textContent = 'Testing…';
+        try {
+          tegn(await api('POST', '/api/v1/sagu', {
+            url: boks.querySelector('#sgUrl').value.trim(),
+            key: boks.querySelector('#sgKey').value.trim(),
+          }));
+        } catch (ex) {
+          fejl.textContent = ex.message;
+          fejl.hidden = false;
+          knap.disabled = false;
+          knap.textContent = 'Connect';
+        }
+      });
+    }
+  };
+
+  try { tegn(await api('GET', '/api/v1/sagu')); } catch { boks.innerHTML = ''; }
+}
+
 async function bindNotion() {
   const boks = document.getElementById('notionBox');
   if (!boks) return;

@@ -485,7 +485,7 @@
     }
 
     // Find markoerer, der star ved start eller efter mellemrum. Guarden er
-    // det, der redder "andreas@omlidt.dk" og "https://x.dk/#top" fra at blive
+    // det, der redder "navn@eksempel.dk" og "https://x.dk/#top" fra at blive
     // laest som projekt og kontekst.
     const fundne = [];
     const re = new RegExp(`(^|\\s)([${MARKOERER}])`, 'g');
@@ -570,7 +570,7 @@
     // Vaerdier med mellemrum staar i anfoerselstegn: /"Sommerhus i Rørvig".
     const v = `(?:"${undslip(vaerdi)}"|${undslip(vaerdi)})`;
     // Samme regel som i tolkFangst: en markoer skal have linjestart eller et
-    // mellemrum foran sig, ellers er andreas@omlidt.dk et projekt.
+    // mellemrum foran sig, ellers er navn@eksempel.dk et projekt.
     const re = new RegExp(`(^|\\s)[${undslip(tegn)}]${v}(?=\\s|$)`, 'i');
     return tekst.replace(re, '$1').replace(/\s{2,}/g, ' ').trim();
   }

@@ -20,7 +20,7 @@ findes frem igen — heller ikke af mig. Kopiér den med det samme.
 Skal du bruge både fangst og læsning i samme genvej, så lav to nøgler frem for
 én `Full access` — så kan du spærre den ene uden at røre den anden.
 
-**Din adresse** er den, du åbner doda på, fx `https://doda.hjorten.eu`.
+**Din adresse** er den, du åbner doda på, fx `https://doda.eksempel.dk`.
 Bruger du kun `IP:port` over http, virker det også, men så går nøglen ukrypteret
 over dit netværk.
 

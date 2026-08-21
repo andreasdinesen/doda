@@ -567,7 +567,7 @@ navn at huske det — og bekræftelsen (»Create @dod?«) fangede kun tastefejl
 - **Forslagene følger parserens regler**, ikke sine egne: markøren skal stå ved
   linjestart eller efter et mellemrum, og navnet er ét ord. Ellers ville
   paletten foreslå noget, teksten bagefter blev tolket anderledes — og
-  `andreas@omlidt.dk` ville åbne en projektliste.
+  `navn@eksempel.dk` ville åbne en projektliste.
 - **Det, der begynder med det skrevne, står øverst.** Med ren
   »indeholder«-sortering foreslog `/hus` projektet *Sommerhus* før *Hus og
   have*, og Tab satte det forkerte navn ind.
@@ -835,3 +835,100 @@ brugeren med `LIMIT 1`. Andreas spurgte 2026-08-17, hvad flere brugere ville kos
 undersøgelsen ligger i `PLAN.md` under »Mulige udvidelser«. **Der er ikke truffet
 nogen beslutning** — men rører du de tabeller, så læs den først, så antagelsen ikke
 bliver brudt halvt.
+
+---
+
+## Sagu-broen (2026-08-21)
+
+Sagu er søsterappen, hvor noterne bor — den skal afløse Notion. **`notion.js`
+bliver stående**, indtil migreringen er kørt færdig: to kilder til det samme
+felt er i orden, så længe feltet er *generisk*. Det er `link_url`/`link_title`
+med vilje; de blev aldrig døbt `notion_url`, og det er dét, der gør, at Sagu
+kan glide ind uden en ny kolonne.
+
+### Adressen afgør, hvem der skal spørges
+
+Ikke en tilstand, nogen skal huske. En Sagu-note hedder `…/#note-<32 hex>` —
+den adresse, Sagu selv åbner på. `linkRude()` vælger rude ud fra adressen, og
+`/api/v1/link/refresh` vælger kilde på samme måde.
+
+**Ruten hed `notion/refresh`, indtil den også svarede for Sagu.** Så skulle den
+skifte navn: et navn, der lover noget andet end det, koden gør, er den dyreste
+slags fejl. Det gælder også funktionen bag (`friskLinkTitel`).
+
+**FORMEN afgøres først — ikke om en forbindelse er sat.** En Sagu-adresse
+slutter på 32 hex, og Notions id-genkendelse leder efter præcis det. Uden en
+første sortering ville doda spørge *Notion* om en Sagu-note, så snart Sagu ikke
+var forbundet. **En test fandt det; øjet ville aldrig have set det.**
+
+### Hvad broen må
+
+Nøglen fra Sagu er en **`link`-nøgle**: den kan søge og oprette — og ikke
+slette. Det scope findes, fordi denne bro skulle bruge det; uden det måtte doda
+have en `full`-nøgle til hele notearkivet for at skrive ét link. Der er en test
+mod en rigtig Sagu på, at nøglen får **403 på en sletning**.
+
+Kommentarerne kan kun **læses**. Skal man svare, hører det hjemme i Sagu, hvor
+samtalen står — og en kommentar fra wikien er fremmed indhold, så den går
+gennem den samme renderer som Notion-sider: escape først, match bagefter.
+
+### `*` fik en række mere — ikke en ny betydning
+
+Planen sagde »`*` i fangstfeltet opretter en Sagu-note«. Men `*` betyder
+allerede *ny note i doda*, og dodas egne noter bliver i doda. At lade markøren
+skifte betydning, fordi en indstilling er sat, ville ændre det, ét Enter gør,
+uden at nogen bad om det.
+
+I stedet står der en **række mere**, når Sagu er forbundet. Førstepladsen er
+urørt, så appens ældste regel holder: ét Enter fanger stadig det samme som i
+går. Rækken siger selv, hvad den gør (»NEW NOTE IN SAGU · linked both ways«) —
+før den gør det.
+
+**Rækkefølgen er valgt:** noten oprettes i Sagu *først*. Fejler det, er der
+ikke oprettet noget, og man kan prøve igen. Den modsatte rækkefølge ville
+efterlade en opgave, der lover et link, den ikke har.
+
+**Paletten kan ikke spørge om noget** — ét tastetryk har ikke plads til et
+spørgsmål. Derfor er der et valg i Settings for, hvilken notesbog hurtige noter
+lander i; dialogen spørger stadig hver gang. Uden det landede de uden for
+enhver bog, og planens accept siger *i den rigtige notesbog*.
+
+### Payloaden — doda tog samme udvej som Sagu
+
+Med broen nåede install-scriptet **122.701 / 126.000 tegn (97 %)**, og tre
+flader var ikke bygget endnu. doda henter derfor nu app-koden fra GitHub i
+stedet for at bære den: **1.753 tegn**, konstant. YAML'en gik fra 266.890 til
+5.932 b.
+
+Repoet var **privat**, og det kostede to ting mere end i Sagu: et
+`GITHUB_TOKEN` i en `secret: true`-variabel, og at GitHubs 404 dækkede over
+*to* ting — »findes ikke« og »dit token har ikke dette repo«. Fejlbeskeden
+måtte nævne begge, ellers fejlsøgte man et token, der var helt i orden.
+
+**Begge dele bortfaldt 2026-08-21**, da Andreas gjorde repoet offentligt.
+Install-scriptet gik fra 1.753 til **1.586 tegn**, og token-feltet er fjernet
+fra runen — ikke bare fordi det er overflødigt, men fordi **en indstilling,
+der ikke længere gør noget, ligner en spærring uden at være en.** Den, der en
+dag ikke kan installere runen, ville lede efter fejlen i et tomt token-felt i
+stedet for i det, der faktisk er galt. En 404 betyder nu ét: taggen er ikke
+pushet.
+
+Prisen for at gå offentligt, sagt højt: **historikken kom med.** De 55
+commits, der lå der i forvejen, indeholder Andreas' rigtige adresse og
+værtsnavn — det var hans beslutning, truffet med tallene på bordet. De
+*nuværende* filer blev renset først (`navn@eksempel.dk`, `doda.eksempel.dk`),
+og fra nu af auditeres hver ændring, før den pushes.
+
+**Konsekvens, der ikke må glemmes:** en udgivelse er nu tre trin — commit →
+`git tag v<N>` → `git push --tags`. Runens version N henter `refs/tags/vN`.
+Og de genererede filer (`app/public/app.js`, ikonerne) **skal** være committet:
+det, GitHub har, er det, der installeres. `tjek_git()` i build'et fælder ellers.
+
+### Målt
+
+| | |
+|---|---|
+| Tests | **193 grønne** (+15 i `tests/sagu.test.mjs`) |
+| Hver vagt set fejle | tilbagerulning · `wrong_scope` · linket på sin egen linje · stemplet på titel-opslaget |
+| Mod en RIGTIG Sagu | note oprettet i den rigtige notesbog med link tilbage · fundet igen ved søgning · `link`-nøglen får 403 på en sletning |
+| Install-script | 122.701 → **1.753 tegn** |

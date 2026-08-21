@@ -819,8 +819,8 @@ async function aabnElement(listeItem) {
   // Er linket en Notion-side, tjekkes titlen stille i baggrunden - hoejst
   // én gang i doegnet pr. link, det klarer serveren. Fejler det, sker der
   // ingenting: en gammel titel er bedre end en fejlbesked om en titel.
-  friskNotionTitel('item', it.id, u, () => tegnChipsRow());
-  notionRude(host.querySelector('#dNotion'), u);
+  friskLinkTitel('item', it.id, u, () => tegnChipsRow());
+  linkRude(host.querySelector('#dNotion'), u);
 
   const titelEl = host.querySelector('#dTitle');
   const noteEl = host.querySelector('#dNote');
@@ -1073,6 +1073,19 @@ function sideSettings() {
       the rest by itself and sends you here to approve it.</p>
     </div>
 
+    <div class="card"><h2>Sagu</h2>
+      <p class="lead" style="margin:6px 0 0">Sagu is the sister app where the notes live.
+      Connect it, and you can search your notes when you link one to a task — or create a
+      note in the right notebook without leaving doda. The two are tied together with
+      <strong>links</strong>: nothing is synchronised, so neither can quietly overwrite
+      the other.</p>
+      <div id="saguBox">Loading…</div>
+      <p class="gate-note" style="text-align:left">In Sagu: Settings → Access keys →
+      create a <strong>link</strong> key. That one can search and create notes — and
+      <strong>not delete anything</strong>. The key stays on this server and is never
+      sent back to this browser.</p>
+    </div>
+
     <div class="card"><h2>Notion</h2>
       <p class="lead" style="margin:6px 0 0">Connect Notion, and you can search your
       pages from inside doda when you link one to a task — and the chip gets the page's
@@ -1286,6 +1299,7 @@ function bindSettings() {
   bindNoegler();
   bindData();
   bindPush();
+  bindSagu();
   bindNotion();
   tegnPasskeys();
   tegnForbindelser();
