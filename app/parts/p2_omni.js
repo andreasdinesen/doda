@@ -454,24 +454,39 @@ async function aktiver() {
  * Opretter en note i SAGU - og en opgave i doda, der peger paa den.
  *
  * »Link begge veje« er ikke pynt: uden opgaven er noten en oe, og uden noten
- * er opgaven en titel. Raekkefoelgen er valgt: **noten foerst.** Fejler Sagu,
- * er der ikke oprettet noget, og brugeren kan proeve igen - den modsatte
- * raekkefoelge ville efterlade en opgave, der lover et link, den ikke har
- * (RUNE-ERFARINGER, MsGraphBud: vaelg hvilken vej du vil fejle).
+ * er opgaven en titel.
+ *
+ * RAEKKEFOELGEN ER VENDT (v45). Foer blev noten oprettet foerst, saa der
+ * ingenting var oprettet, hvis Sagu fejlede. Men opgavens id findes ikke paa
+ * det tidspunkt - og saa kunne linket tilbage kun pege paa doda som SAADAN
+ * (`location.origin`). Noten sagde »From doda: [titel](https://doda.dk)«, og
+ * det foerte til forsiden, ikke til opgaven. Halvdelen af »begge veje« var
+ * altsaa aldrig rigtig der.
+ *
+ * Nu: opgaven foerst, saa noten med `?item=<id>` (DESIGN §v23), saa linket
+ * den anden vej.
+ *
+ * Fejler Sagu nu, staar der en opgave uden link tilbage - og den BEHOLDES med
+ * vilje. Siden v44 er `*` den eneste vej til en note, saa »intet oprettet«
+ * ville betyde, at teksten var tabt. En opgave uden link lover ingenting; den
+ * er bare en opgave. Det er den rigtige vej at fejle nu.
  */
 async function opretSaguNote(raaTitel) {
   const titel = String(raaTitel || '').trim();
   if (!titel) return;
+  // Opgaven foerst: dens id skal ind i notens link tilbage.
+  let it = null;
+  try {
+    it = (await api('POST', '/api/v1/capture', { text: titel, createNew: true })).item;
+  } catch (ex) { toast(ex.message); return; }
   try {
     const d = await api('POST', '/api/v1/sagu/note', {
       title: titel,
-      backUrl: location.origin,
+      backUrl: it ? `${location.origin}/?item=${encodeURIComponent(it.id)}` : location.origin,
       backTitle: titel,
     });
     // Opgaven i doda peger paa noten. `link_url` er generisk - det er dét,
     // der goer, at Sagu kan bruge det samme felt som Notion.
-    const svar = await api('POST', '/api/v1/capture', { text: titel, createNew: true });
-    const it = svar.item;
     if (it) {
       await api('POST', `/api/v1/items/${it.id}`, {
         link_url: d.page.url,
@@ -495,17 +510,17 @@ async function opretSaguNote(raaTitel) {
      * ville staa i feltet uden noget sted at gaa hen. Derfor tilbydes doda som
      * det, den nu er: en noedudgang, ikke et valg, man skal traeffe hver gang.
      */
-    toast(ex.message, {
-      label: 'Keep in doda',
-      run: async () => {
-        try {
-          await api('POST', '/api/v1/capture', { text: `* ${titel}`, createNew: true });
-          luk();
-          await genindlaes();
-          toast('Note kept in doda');
-        } catch (e2) { toast(e2.message); }
-      },
-    });
+    /*
+     * Opgaven er allerede oprettet og BLIVER staaende - teksten er reddet,
+     * selv om Sagu ikke svarede. Beskeden skal sige begge dele, ellers ved
+     * man ikke, om man skal skrive den igen.
+     */
+    luk();
+    await genindlaes();
+    toast(`${ex.message} — the task is in your inbox.`, it ? {
+      label: 'Open',
+      run: () => { window.location.href = `/?item=${encodeURIComponent(it.id)}`; },
+    } : undefined);
   }
 }
 

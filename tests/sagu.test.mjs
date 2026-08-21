@@ -230,16 +230,29 @@ test('doda kan soege i Sagu - og traefferne siger hvor noten ligger', async () =
 });
 
 test('en note oprettet fra doda lander i den RIGTIGE notesbog - med link tilbage', async () => {
+  /*
+   * Adressen peger paa den ENKELTE opgave, ikke paa doda som saadan.
+   *
+   * Frem til v45 sendte paletten bare `location.origin`, fordi noten blev
+   * oprettet FOER opgaven og dens id derfor ikke fandtes endnu. Noten sagde
+   * »From doda: [titel](https://doda.dk)«, som foerte til forsiden - halvdelen
+   * af »linked both ways« var aldrig rigtig der.
+   *
+   * `?item=<id>` (DESIGN §v23) skal overleve turen: baade `?` og `=` er tegn,
+   * et markdown-link kan braekke paa.
+   */
   const r = await J('/api/v1/sagu/note', {
     title: 'Nyt afsnit om Mac',
     notebookId: 'b1',
-    backUrl: 'https://doda.eksempel.dk',
+    backUrl: 'https://doda.eksempel.dk/?item=abc123def456',
     backTitle: 'Nyt afsnit om Mac',
   });
   assert.equal(r.status, 200);
   const lavet = [...attrap.noter.values()].pop();
   assert.equal(lavet.notebook, 'b1', 'planens accept: i den rigtige notesbog');
   assert.match(lavet.body, /doda\.eksempel\.dk/, 'og med et link tilbage');
+  assert.match(lavet.body, /\(https:\/\/doda\.eksempel\.dk\/\?item=abc123def456\)/,
+    'hele adressen skal med - ellers peger noten paa forsiden');
   // Linket staar paa sin EGEN linje: et link i enden af en linje med aaben
   // syntaks bliver aedt (RUNE-ERFARINGER, Sagu F8).
   assert.ok(lavet.body.split('\n').some((l) => l.includes('doda.eksempel.dk')

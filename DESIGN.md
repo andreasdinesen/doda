@@ -900,9 +900,23 @@ Så: er Sagu forbundet, er `*` en note **i Sagu**. Legenden siger det nu også
 Rækken siger fortsat selv, hvad den gør (»NEW NOTE IN SAGU · linked both
 ways«) — før den gør det.
 
-**Rækkefølgen er valgt:** noten oprettes i Sagu *først*. Fejler det, er der
-ikke oprettet noget, og man kan prøve igen. Den modsatte rækkefølge ville
-efterlade en opgave, der lover et link, den ikke har.
+**Rækkefølgen var valgt — og blev vendt i v45.** Oprindeligt kom noten først:
+fejlede Sagu, var der ikke oprettet noget, og den modsatte vej ville efterlade
+en opgave, der lover et link, den ikke har.
+
+Men opgavens id findes ikke på det tidspunkt. Linket tilbage kunne derfor kun
+pege på doda **som sådan** (`location.origin`), så noten sagde »From doda:
+[titel](https://doda.dk)« og førte til forsiden. **Halvdelen af »linked both
+ways« var aldrig rigtig der** — og det opdagede ingen, fordi et link, der
+virker, ser rigtigt ud, indtil man klikker.
+
+Nu: opgaven først, så noten med `?item=<id>` (§v23), så linket den anden vej.
+
+Fejler Sagu, står der en opgave uden link tilbage, **og den beholdes med
+vilje.** Siden v44 er `*` den eneste vej til en note, så »intet oprettet«
+ville betyde, at teksten var tabt. En opgave uden link lover ingenting; den er
+bare en opgave. **Hvilken vej man vil fejle, afhænger af, hvad alternativet
+er — og det ændrede sig, da doda-noten forsvandt fra paletten.**
 
 **Paletten kan ikke spørge om noget** — ét tastetryk har ikke plads til et
 spørgsmål. Derfor er der et valg i Settings for, hvilken notesbog hurtige noter
