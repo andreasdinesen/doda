@@ -736,7 +736,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 43;
+const APP_VERSION = 44;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -1675,7 +1675,7 @@ const NAVIGATION = {
 /* Legenden er en kravspecifikation (doda v9): naevner den "* note", skal den
    tilstand findes. Derfor bygges den efter tilstanden, ikke som en konstant. */
 const standardLegend = () => ['+ task']
-  .concat(state.notesEnabled ? ['* note'] : [])
+  .concat(state.notesEnabled ? [saguKlar ? '* note in Sagu' : '* note'] : [])
   .concat(['/ projects', '# contexts', ': areas']);
 
 const omniState = {
@@ -1927,25 +1927,27 @@ function byggRaekker() {
     });
   } else {
     const t = omniState.tolket;
-    raekker.push({
-      type: 'create',
-      titel: t && t.title ? t.title : raa,
-      under: mode === '*' ? 'NEW NOTE' : mode === '+' ? 'NEW TASK' : 'QUICK CAPTURE',
-    });
     /*
-     * Sagu-noten er en raekke MERE, ikke en anden betydning af `*`.
+     * Er Sagu forbundet, er `*` en note I SAGU - ikke et valg mellem to steder.
      *
-     * Planen sagde »`*` opretter en Sagu-note«, men `*` betyder allerede
-     * »ny note i doda« - og dodas egne noter BLIVER i doda (ingen migrering,
-     * ingen synkronisering). At lade markoeren skifte betydning, fordi en
-     * indstilling er sat, ville aendre det, ét Enter goer, uden at nogen bad
-     * om det.
+     * Frem til v43 stod Sagu-noten som en raekke MERE, saa foerste plads var
+     * uroert og ét Enter fangede det samme som i gaar (handover §5.1). Men
+     * naar noterne bor i Sagu, er to raekker to steder at lede efter den
+     * samme note bagefter, og valget skal traeffes forfra hver gang. Andreas
+     * bad om det 21-08-2026: er der koblet en note-app paa, hoerer noterne
+     * DERTIL.
      *
-     * I stedet: naar Sagu er forbundet, staar der en raekke mere. Foerste
-     * plads er uroert, saa appens aeldste regel holder - ét Enter fanger
-     * stadig det samme som i gaar (handover §5.1).
+     * De noter, der allerede ligger i doda, bliver liggende og kan stadig
+     * naas under Notes - det er kun VEJEN IND, der lukkes (DESIGN §v35).
      */
-    if (mode === '*' && saguKlar && (t && t.title ? t.title : raa).trim()) {
+    const iSagu = mode === '*' && saguKlar && (t && t.title ? t.title : raa).trim();
+    if (!iSagu) {
+      raekker.push({
+        type: 'create',
+        titel: t && t.title ? t.title : raa,
+        under: mode === '*' ? 'NEW NOTE' : mode === '+' ? 'NEW TASK' : 'QUICK CAPTURE',
+      });
+    } else {
       raekker.push({
         type: 'sagunote',
         titel: t && t.title ? t.title : raa,
@@ -2117,9 +2119,27 @@ async function opretSaguNote(raaTitel) {
       run: () => window.open(d.page.url, '_blank', 'noopener'),
     });
   } catch (ex) {
-    // En fejlet forbindelse er ikke en fejlet fangst: feltet staar uroert,
-    // saa man kan trykke igen eller vaelge den almindelige note ovenover.
-    toast(ex.message);
+    /*
+     * En fejlet forbindelse er ikke en fejlet fangst: feltet staar uroert, saa
+     * man kan trykke igen.
+     *
+     * Foer v44 stod der ogsaa »eller vaelg den almindelige note ovenover« -
+     * men den raekke findes ikke laengere, naar Sagu er forbundet. Uden en vej
+     * ud ville en note vaere UMULIG at gemme, mens Sagu er nede, og teksten
+     * ville staa i feltet uden noget sted at gaa hen. Derfor tilbydes doda som
+     * det, den nu er: en noedudgang, ikke et valg, man skal traeffe hver gang.
+     */
+    toast(ex.message, {
+      label: 'Keep in doda',
+      run: async () => {
+        try {
+          await api('POST', '/api/v1/capture', { text: `* ${titel}`, createNew: true });
+          luk();
+          await genindlaes();
+          toast('Note kept in doda');
+        } catch (e2) { toast(e2.message); }
+      },
+    });
   }
 }
 

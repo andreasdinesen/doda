@@ -872,17 +872,33 @@ Kommentarerne kan kun **læses**. Skal man svare, hører det hjemme i Sagu, hvor
 samtalen står — og en kommentar fra wikien er fremmed indhold, så den går
 gennem den samme renderer som Notion-sider: escape først, match bagefter.
 
-### `*` fik en række mere — ikke en ny betydning
+### `*` fik en række mere — og blev siden til Sagu alene (v44)
 
-Planen sagde »`*` i fangstfeltet opretter en Sagu-note«. Men `*` betyder
-allerede *ny note i doda*, og dodas egne noter bliver i doda. At lade markøren
+Planen sagde »`*` i fangstfeltet opretter en Sagu-note«. Først blev det en
+**række mere**: `*` betyder allerede *ny note i doda*, og at lade markøren
 skifte betydning, fordi en indstilling er sat, ville ændre det, ét Enter gør,
-uden at nogen bad om det.
+**uden at nogen bad om det**. Førstepladsen var urørt, så appens ældste regel
+holdt.
 
-I stedet står der en **række mere**, når Sagu er forbundet. Førstepladsen er
-urørt, så appens ældste regel holder: ét Enter fanger stadig det samme som i
-går. Rækken siger selv, hvad den gør (»NEW NOTE IN SAGU · linked both ways«) —
-før den gør det.
+**Andreas bad om det den 21-08-2026,** og så faldt den begrundelse væk. Er der
+koblet en note-app på, hører noterne dertil — to rækker er to steder at lede
+efter den samme note bagefter, og et valg, der skal træffes forfra hver gang,
+selv om svaret altid er det samme.
+
+Så: er Sagu forbundet, er `*` en note **i Sagu**. Legenden siger det nu også
+(»`*` note in Sagu«) — den er en kravspecifikation (§v9).
+
+- **Det er vejen ind, der lukkes — ikke dataene** (§v35). De noter, der ligger
+  i doda, bliver liggende, står stadig på deres projekt og kan søges frem.
+- **Nødudgangen skal findes, netop når den bruges.** Før pegede fejlstien på
+  »vælg den almindelige note ovenover« — den række findes ikke længere. Uden
+  en vej ud ville en note være *umulig* at gemme, mens Sagu er nede, og
+  teksten ville stå i feltet uden noget sted at gå hen. Fejler Sagu, tilbyder
+  beskeden derfor **»Keep in doda«**. Det er en nødudgang, ikke et valg, man
+  skal træffe hver gang.
+
+Rækken siger fortsat selv, hvad den gør (»NEW NOTE IN SAGU · linked both
+ways«) — før den gør det.
 
 **Rækkefølgen er valgt:** noten oprettes i Sagu *først*. Fejler det, er der
 ikke oprettet noget, og man kan prøve igen. Den modsatte rækkefølge ville
