@@ -1348,6 +1348,23 @@ function fangst(tekst, opretNye, fra) {
 
 /* --------------------------------------------------------------- ruter */
 
+/*
+ * Notesboegerne gemmes, saa »hvor skal noten ligge« ikke koster et kald hver
+ * gang dialogen aabnes. Bruges af BAADE connect og refresh - de to maa ikke
+ * kunne drive fra hinanden, for den ene halvdel er let at glemme:
+ *
+ * findes den valgte notesbog ikke laengere, ryddes valget. Ellers ville
+ * noterne lande i en bog, der er slettet, og INTET ville fejle.
+ */
+function gemNotesboeger(boeger) {
+  const liste = boeger || [];
+  setSetting('sagu_notebooks', JSON.stringify(liste));
+  const valgt = getSetting('sagu_notebook', '');
+  if (valgt && !liste.some((b) => b.id === valgt)) {
+    db.prepare("DELETE FROM settings WHERE key = 'sagu_notebook'").run();
+  }
+}
+
 const ROUTES = {
   'GET /api/public-config': (req, res) => {
     sendJson(res, 200, {
@@ -2009,6 +2026,7 @@ const ROUTES = {
 
   /* --- Sagu (F8) ------------------------------------------------------ */
 
+
   'GET /api/v1/sagu': (req, res) => {
     const user = requireUser(req, res);
     if (!user) return;
@@ -2066,18 +2084,41 @@ const ROUTES = {
       apiFejl(res, 400, 'bad_key', svar.fejl);
       return;
     }
-    // Notesboegerne gemmes, saa »hvor skal noten ligge« ikke koster et kald
-    // hver gang dialogen aabnes.
-    setSetting('sagu_notebooks', JSON.stringify(svar.notebooks || []));
-    // Findes den valgte notesbog ikke laengere, ryddes valget - ellers ville
-    // noterne lande i en bog, der er slettet, og INTET ville fejle.
-    const valgt = getSetting('sagu_notebook', '');
-    if (valgt && !(svar.notebooks || []).some((b) => b.id === valgt)) {
-      db.prepare("DELETE FROM settings WHERE key = 'sagu_notebook'").run();
-    }
+    gemNotesboeger(svar.notebooks);
     audit('sagu-forbundet', url, clientIp(req));
     sendJson(res, 200, {
       connected: true, url, notes: svar.notes, notebooks: svar.notebooks || [],
+    });
+  },
+
+  /*
+   * Hent notesboegerne forfra.
+   *
+   * Listen blev kun hentet, naar man FORBANDT. Oprettede man en notesbog i
+   * Sagu bagefter, kunne doda aldrig se den - og den eneste udvej var at
+   * koble fra og forbinde igen, hvilket kraever at man finder noeglen frem
+   * paa ny. En cache uden en maade at genopfriske den paa er en blindgyde.
+   *
+   * Noeglen roeres ikke: den staar allerede, og der er intet at gemme.
+   */
+  'POST /api/v1/sagu/refresh': async (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    if (!saguForbundet()) {
+      apiFejl(res, 400, 'not_connected', 'Connect Sagu first.');
+      return;
+    }
+    const svar = await sagu.proev();
+    // En fejl her aendrer INTET. Er Sagu nede, er den gamle liste stadig det
+    // bedste, vi har - at tomme den ville tage notesboegerne fra brugeren,
+    // fordi en fremmed server var utilgaengelig et oejeblik.
+    if (!svar.ok) { apiFejl(res, 400, 'sagu_failed', svar.fejl); return; }
+    gemNotesboeger(svar.notebooks);
+    sendJson(res, 200, {
+      connected: true,
+      url: getSetting('sagu_url', ''),
+      notebooks: JSON.parse(getSetting('sagu_notebooks', '[]') || '[]'),
+      notebook: getSetting('sagu_notebook', ''),
     });
   },
 

@@ -5,7 +5,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 40;
+const APP_VERSION = 41;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -55,6 +55,17 @@ function esc(s) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
+
+/*
+ * Brugernavnet VIST med stort begyndelsesbogstav.
+ *
+ * Selve navnet roeres ikke: det er det, man logger ind med, og det er noeglen
+ * i databasen. Derfor maa denne funktion KUN bruges, hvor der tegnes - aldrig
+ * hvor der sendes eller sammenlignes. Kun foerste bogstav, ikke hvert ord:
+ * et brugernavn er ét ord, og `capitalize` ville lave "anna-lise" om til
+ * noget, ejeren ikke selv har skrevet.
+ */
+const visNavn = (n) => String(n == null ? '' : n).replace(/^./, (c) => c.toUpperCase());
 
 /**
  * Gor URL'er og [tekst](url) klikbare.
@@ -365,7 +376,7 @@ function shellHtml() {
       <div id="navHost">${navHtml()}</div>
       <div class="sidebar-foot">
         <button class="nav-item" id="userBtn"
-          ${state.view === 'settings' ? 'aria-current="page"' : ''}>${icon('settings')}<span>${esc(state.user.username)}</span></button>
+          ${state.view === 'settings' ? 'aria-current="page"' : ''}>${icon('settings')}<span>${esc(visNavn(state.user.username))}</span></button>
         <div class="foot-row" id="footRow">${versionHtml()}${temaKnapHtml()}</div>
       </div>
     </aside>
@@ -689,7 +700,7 @@ function visBrugerMenu() {
   host.id = 'userMenu';
   host.innerHTML = `
     <div class="usermenu-head">
-      <div class="usermenu-name">${esc(state.user.username)}</div>
+      <div class="usermenu-name">${esc(visNavn(state.user.username))}</div>
       <div class="meta">Signed in${state.config.secureContext ? '' : ' · plain http'}</div>
     </div>
     <button class="usermenu-item" data-go="guide">${icon('guide', 17)}<span>Guide</span></button>

@@ -169,7 +169,7 @@ async function sideReview() {
       </blockquote>
 
       <div class="page-head" style="margin:32px 0 18px">
-        <h1>Hi ${esc(state.user.username)}.</h1>
+        <h1>Hi ${esc(visNavn(state.user.username))}.</h1>
         <p class="lead">A quick look at your week before you start.</p>
       </div>
 
@@ -896,7 +896,10 @@ async function bindSagu() {
              <div class="meta">${(d.notebooks || []).length} notebook${
   (d.notebooks || []).length === 1 ? '' : 's'} doda can file a note in</div>
            </div>
-           <button class="btn ghost" id="sgOff">Disconnect</button>
+           <div class="keyrow-btns">
+             <button class="btn ghost" id="sgNy">Refresh</button>
+             <button class="btn ghost" id="sgOff">Disconnect</button>
+           </div>
          </div>
          <label class="field" style="margin-top:12px"><span>Quick notes go in</span>
            <select class="input" id="sgBog">
@@ -916,6 +919,31 @@ async function bindSagu() {
          </form>
          <p class="gate-error" id="sgErr" hidden></p>`;
 
+    const ny = boks.querySelector('#sgNy');
+    if (ny) {
+      ny.addEventListener('click', async () => {
+        const foer = (d.notebooks || []).length;
+        ny.disabled = true;
+        ny.textContent = 'Refreshing…';
+        try {
+          const frisk = await api('POST', '/api/v1/sagu/refresh', {});
+          const efter = (frisk.notebooks || []).length;
+          tegn(frisk);
+          // Sig hvad der SKETE. "Refreshed" alene lader brugeren gaette, om
+          // knappen overhovedet gjorde noget (RUNE-ERFARINGER, MsGraphBud v8).
+          const d2 = efter - foer;
+          toast(d2 > 0 ? `${d2} new notebook${d2 === 1 ? '' : 's'} — ${efter} in total`
+            : d2 < 0 ? `${-d2} notebook${d2 === -1 ? '' : 's'} gone — ${efter} left`
+              : `No change — still ${efter} notebook${efter === 1 ? '' : 's'}`);
+        } catch (ex) {
+          // Listen staar uroert: en fejl her maa ikke tage notesboegerne fra
+          // brugeren, fordi Sagu var nede et oejeblik.
+          ny.disabled = false;
+          ny.textContent = 'Refresh';
+          toast(ex.message);
+        }
+      });
+    }
     const fra = boks.querySelector('#sgOff');
     if (fra) {
       fra.addEventListener('click', async () => {

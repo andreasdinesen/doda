@@ -55,6 +55,9 @@ function saguAttrap() {
   let tilstand = 'ok';
   const noter = new Map();
   let n = 0;
+  // Notesboegerne skal kunne aendre sig UNDERVEJS: hele pointen med at hente
+  // forfra er, at der er kommet en til i Sagu, siden man forbandt.
+  let boeger = [{ id: 'b1', name: 'Handbook' }];
   const s = createServer(async (req, res) => {
     kald.push(`${req.method} ${req.url.split('?')[0]}`);
     const send = (kode, krop) => {
@@ -72,7 +75,7 @@ function saguAttrap() {
       return;
     }
     if (req.url.startsWith('/api/v1/state')) {
-      send(200, { counts: { notes: 7 }, notebooks: [{ id: 'b1', name: 'Handbook' }] });
+      send(200, { counts: { notes: 7 }, notebooks: boeger });
       return;
     }
     if (req.url.startsWith('/api/v1/search')) {
@@ -108,6 +111,7 @@ function saguAttrap() {
     kald,
     ryd: () => { kald.length = 0; },
     saet: (t) => { tilstand = t; },
+    saetBoeger: (b) => { boeger = b; },
     noter,
   };
 }
@@ -411,3 +415,55 @@ test('MOD DEN RIGTIGE SAGU: en note oprettes, findes og kan laeses tilbage',
       await J('/api/v1/sagu', {}, 'DELETE');
     }
   });
+
+/* ======================================= hent notesboegerne forfra ===== */
+
+/* Listen blev kun hentet, naar man FORBANDT. Oprettede man en notesbog i Sagu
+   bagefter, kunne doda aldrig se den, og den eneste udvej var at koble fra og
+   forbinde igen - hvilket kraever noeglen paa ny. En cache uden en maade at
+   genopfriske den paa er en blindgyde. */
+
+test('en ny notesbog i Sagu kommer med, naar der hentes forfra', async () => {
+  // Proeven mod den rigtige Sagu kobler fra til sidst, saa forbindelsen
+  // skal staa igen her.
+  attrap.saet('ok');
+  attrap.saetBoeger([{ id: 'b1', name: 'Handbook' }]);
+  assert.equal((await forbind(attrap.url, 'sagu_rigtig')).status, 200);
+
+  attrap.saetBoeger([{ id: 'b1', name: 'Handbook' }, { id: 'b2', name: 'Rejser' }]);
+  const r = await J('/api/v1/sagu/refresh', {});
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.deepEqual(r.data.notebooks.map((b) => b.id), ['b1', 'b2']);
+
+  // Og den er GEMT - ikke bare returneret denne ene gang.
+  const set = await J('/api/v1/sagu');
+  assert.deepEqual(set.data.notebooks.map((b) => b.id), ['b1', 'b2']);
+});
+
+test('forsvinder den valgte notesbog, ryddes valget - ellers laa noterne i en slettet bog', async () => {
+  await J('/api/v1/sagu/notebook', { notebookId: 'b2' });
+  assert.equal((await J('/api/v1/sagu')).data.notebook, 'b2');
+
+  attrap.saetBoeger([{ id: 'b1', name: 'Handbook' }]);
+  await J('/api/v1/sagu/refresh', {});
+  const set = await J('/api/v1/sagu');
+  assert.equal(set.data.notebook, '', 'valget skal vaere ryddet');
+  assert.deepEqual(set.data.notebooks.map((b) => b.id), ['b1']);
+});
+
+/* Den vigtigste: en fejl maa ikke koste brugeren hans liste. Var Sagu nede et
+   oejeblik, ville en tom liste se ud, som om notesboegerne var slettet. */
+test('er Sagu nede, staar den gamle liste UROERT', async () => {
+  attrap.saetBoeger([{ id: 'b1', name: 'Handbook' }, { id: 'b9', name: 'Opskrifter' }]);
+  await J('/api/v1/sagu/refresh', {});
+  assert.equal((await J('/api/v1/sagu')).data.notebooks.length, 2);
+
+  attrap.saet('nede');
+  const r = await J('/api/v1/sagu/refresh', {});
+  assert.equal(r.status, 400);
+  attrap.saet('ok');
+
+  const set = await J('/api/v1/sagu');
+  assert.deepEqual(set.data.notebooks.map((b) => b.id), ['b1', 'b9'],
+    'en fejl mod Sagu maa ikke tage notesboegerne fra brugeren');
+});

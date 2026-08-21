@@ -1143,7 +1143,7 @@ function sideSettings() {
     </div>
 
     <div class="card"><h2>Account</h2>
-      <p class="lead" style="margin:6px 0 14px">Signed in as <strong>${esc(state.user.username)}</strong>.</p>
+      <p class="lead" style="margin:6px 0 14px">Signed in as <strong>${esc(visNavn(state.user.username))}</strong>.</p>
       <button class="btn" id="logoutBtn">Sign out</button></div>
 
     <div class="card"><h2>About</h2>

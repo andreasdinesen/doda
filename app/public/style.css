@@ -761,6 +761,8 @@ textarea.input { resize: vertical; min-height: 90px; font-family: inherit; }
 .keyrow-main { min-width: 0; flex: 1; }
 .keyrow-name { font-weight: 600; }
 .keyrow .meta { text-transform: none; letter-spacing: 0; font-size: 12.5px; margin-top: 2px; }
+/* To knapper i samme raekke - de maa ikke klemmes sammen paa en smal skaerm. */
+.keyrow-btns { display: flex; gap: 8px; flex: none; flex-wrap: wrap; justify-content: flex-end; }
 
 .keyform { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; margin-top: 14px; }
 

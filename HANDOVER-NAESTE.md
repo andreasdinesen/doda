@@ -20,9 +20,13 @@
 
 | | |
 |---|---|
-| Tests | **178 grønne** (`node --test tests/*.mjs`) |
-| Install-script | **120.062 / 126.000 tegn (95 %)** — **5.938 tegn tilbage** — se `PLAN.md` om guidens pris |
+| Tests | **199 grønne** (`node --test tests/*.mjs`) |
+| Install-script | **1.586 / 126.000 tegn (1 %)** — siden v40 henter runen koden fra `refs/tags/v<N>` i det offentlige repo, så payloaden ligger ikke længere i scriptet |
 | Kode | `server.js` 3.594 linjer + syv moduler |
+
+**Udgivelse kræver et git-tag.** Install-scriptet henter `refs/tags/v<N>`, så efter
+commit skal der køres `git tag v<N>` og `git push --tags` — uden det svarer GitHub
+404, og runen kan ikke installeres. `build_rune.py` minder om det.
 
 Kør altid `python3 build_rune.py` efter en ændring i `app/` — den samler
 frontenden, stempler versionen, bygger payloaden og verificerer rundturen.
