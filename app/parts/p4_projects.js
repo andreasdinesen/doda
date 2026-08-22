@@ -165,10 +165,22 @@ async function sideProjekt(id) {
         ${d.tasks.map((it, i) => projektOpgave(it, i, d.tasks.length)).join('')}</div>`
     : '<p class="lead" style="padding:8px 14px">Nothing here yet.</p>'}
 
-    ${d.notes.length || state.notesEnabled ? `
+    ${/*
+      * Overskriften skal ikke love en tom kasse.
+      *
+      * Er Sagu forbundet, laver `*` noten DÉR (§v44), og den haenger paa den
+      * opgave, den oprettede - ikke paa projektet. Saa staar der »No notes.
+      * Capture one with * text @Navn«, mens netop dét ikke laengere lagde
+      * noget her. Er der ingen gamle doda-noter, er hele afsnittet vaek, og i
+      * stedet siger opgavelisten sandheden: noterne hænger paa opgaverne.
+      */ ''}
+    ${d.notes.length ? `
       <h2 class="group meta">Notes <span class="group-count">${d.notes.length}</span></h2>
-      ${d.notes.length ? `<div class="notes">${d.notes.map(noteKort).join('')}</div>`
-    : '<p class="lead" style="padding:8px 14px">No notes. Capture one with <code>* text @' + esc(p.name) + '</code>.</p>'}` : ''}
+      <div class="notes">${d.notes.map(noteKort).join('')}</div>`
+    : (state.notesEnabled && !saguKlar ? `
+      <h2 class="group meta">Notes <span class="group-count">0</span></h2>
+      <p class="lead" style="padding:8px 14px">No notes. Capture one with
+        <code>* text @${esc(p.name)}</code>.</p>` : '')}
   </section>`;
 
   bindProjektvisning(p, d);

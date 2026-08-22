@@ -317,6 +317,10 @@ function byggRaekker() {
       raekker.push({
         type: 'sagunote',
         titel: t && t.title ? t.title : raa,
+        // Hele linjen, som den blev skrevet. Noten i Sagu skal hedde det
+        // tolkede (uden markoerer), men OPGAVEN i doda skal have @projekt,
+        // #kontekst og !dato med - de gaar tabt, hvis kun titlen sendes.
+        linje: raa,
         under: 'NEW NOTE IN SAGU · linked both ways',
       });
     }
@@ -446,7 +450,7 @@ async function aktiver() {
   if (raekke.type === 'goto') { luk(); gaaTilNavigation(raekke.mode, raekke.id); return; }
   if (raekke.type === 'nyt') { await opretNavigation(raekke); return; }
   if (raekke.type === 'forslag') { fuldfoerMarkoer(raekke); return; }
-  if (raekke.type === 'sagunote') { await opretSaguNote(raekke.titel); return; }
+  if (raekke.type === 'sagunote') { await opretSaguNote(raekke.titel, raekke.linje); return; }
   await fangstNu(raekke.type === 'confirm');
 }
 
@@ -471,13 +475,22 @@ async function aktiver() {
  * ville betyde, at teksten var tabt. En opgave uden link lover ingenting; den
  * er bare en opgave. Det er den rigtige vej at fejle nu.
  */
-async function opretSaguNote(raaTitel) {
+async function opretSaguNote(raaTitel, raaLinje) {
   const titel = String(raaTitel || '').trim();
   if (!titel) return;
-  // Opgaven foerst: dens id skal ind i notens link tilbage.
+  /*
+   * Opgaven foerst: dens id skal ind i notens link tilbage.
+   *
+   * Og den faar HELE linjen, ikke bare titlen. Foer v46 blev kun den tolkede
+   * titel sendt, saa `* Blodprover @Doda #helbred !i morgen` gav en opgave
+   * uden projekt, uden kontekst og uden dato - markoererne var pillet fra i
+   * tolkningen og kom aldrig med videre. Noten i Sagu skal hedde det rene
+   * (den har hverken projekter eller datoer), men opgaven skal have det hele.
+   */
+  const linje = String(raaLinje || '').trim() || titel;
   let it = null;
   try {
-    it = (await api('POST', '/api/v1/capture', { text: titel, createNew: true })).item;
+    it = (await api('POST', '/api/v1/capture', { text: linje, createNew: true })).item;
   } catch (ex) { toast(ex.message); return; }
   try {
     const d = await api('POST', '/api/v1/sagu/note', {

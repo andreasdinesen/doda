@@ -270,6 +270,88 @@ function lytPaaForbindelse() {
   opdaterOfflineMaerke();
   tegnSynkMaerke();
   tomOutbox();
+  traekForNyt();
+}
+
+/*
+ * Traek ned for at hente nyt - paa telefonen.
+ *
+ * Appen henter selv, naar den kommer frem igen (§v26), men staar den aaben,
+ * mens noget aendrer sig et andet sted - en mail fra MsGraphBud, en note fra
+ * en anden enhed - er der ingen maade at bede om det paa. Paa skrivebordet er
+ * der synk-maerket oeverst at trykke paa; paa telefonen er det for lille og
+ * for langt oppe.
+ *
+ * Ingen `preventDefault`: lytterne er passive, og vi rykker aldrig i selve
+ * rulningen. Vi reagerer kun, naar siden ALLEREDE er i top og fingeren gaar
+ * nedad - saa er der ikke noget at rulle, og browserens egen bounce er den
+ * eneste bevaegelse, vi laegger os oven paa.
+ */
+function traekForNyt() {
+  // En mus har ingen »traek ned fra toppen«. Kun touch.
+  if (!('ontouchstart' in window)) return;
+
+  const TAERSKEL = 72;      // hvor langt der skal traekkes
+  const MAKS = 110;         // hvor langt maerket foelger med
+  let startY = 0;
+  let aktiv = false;
+  let afstand = 0;
+  let el = null;
+
+  const maerke = () => {
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'traekny';
+      el.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(el);
+    }
+    return el;
+  };
+
+  const vis = (d, tekst) => {
+    const m = maerke();
+    m.textContent = tekst;
+    m.style.transform = `translate(-50%, ${Math.min(d, MAKS)}px)`;
+    m.classList.add('paa');
+  };
+
+  const skjul = () => {
+    if (!el) return;
+    el.classList.remove('paa');
+    el.style.transform = 'translate(-50%, 0)';
+  };
+
+  /* En aaben rude eller menu ejer skaermen. Traekker man dér, er det
+     indholdet i ruden, man vil rulle - ikke appen, man vil genindlaese. */
+  const optaget = () => document.body.classList.contains('navopen')
+    || !!(document.getElementById('modalHost') || {}).firstChild;
+
+  window.addEventListener('touchstart', (e) => {
+    aktiv = !optaget() && window.scrollY <= 0 && e.touches.length === 1;
+    startY = aktiv ? e.touches[0].clientY : 0;
+    afstand = 0;
+  }, { passive: true });
+
+  window.addEventListener('touchmove', (e) => {
+    if (!aktiv) return;
+    // Ruller siden alligevel, er det ikke et traek - saa slip det.
+    if (window.scrollY > 0) { aktiv = false; skjul(); return; }
+    afstand = e.touches[0].clientY - startY;
+    if (afstand <= 0) { skjul(); return; }
+    vis(afstand, afstand >= TAERSKEL ? 'Release to refresh' : 'Pull to refresh');
+  }, { passive: true });
+
+  window.addEventListener('touchend', () => {
+    if (!aktiv) return;
+    aktiv = false;
+    if (afstand < TAERSKEL) { skjul(); return; }
+    // Maerket bliver staaende, mens der hentes - ellers ser det ud, som om
+    // traekket ikke gjorde noget.
+    vis(TAERSKEL, 'Refreshing…');
+    Promise.resolve(synk(true)).finally(skjul);
+  }, { passive: true });
+
+  window.addEventListener('touchcancel', () => { aktiv = false; skjul(); }, { passive: true });
 }
 
 /* ------------------------------------------------------------ passkeys */

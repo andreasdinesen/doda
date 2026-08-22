@@ -736,7 +736,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 45;
+const APP_VERSION = 46;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -1951,6 +1951,10 @@ function byggRaekker() {
       raekker.push({
         type: 'sagunote',
         titel: t && t.title ? t.title : raa,
+        // Hele linjen, som den blev skrevet. Noten i Sagu skal hedde det
+        // tolkede (uden markoerer), men OPGAVEN i doda skal have @projekt,
+        // #kontekst og !dato med - de gaar tabt, hvis kun titlen sendes.
+        linje: raa,
         under: 'NEW NOTE IN SAGU · linked both ways',
       });
     }
@@ -2080,7 +2084,7 @@ async function aktiver() {
   if (raekke.type === 'goto') { luk(); gaaTilNavigation(raekke.mode, raekke.id); return; }
   if (raekke.type === 'nyt') { await opretNavigation(raekke); return; }
   if (raekke.type === 'forslag') { fuldfoerMarkoer(raekke); return; }
-  if (raekke.type === 'sagunote') { await opretSaguNote(raekke.titel); return; }
+  if (raekke.type === 'sagunote') { await opretSaguNote(raekke.titel, raekke.linje); return; }
   await fangstNu(raekke.type === 'confirm');
 }
 
@@ -2105,13 +2109,22 @@ async function aktiver() {
  * ville betyde, at teksten var tabt. En opgave uden link lover ingenting; den
  * er bare en opgave. Det er den rigtige vej at fejle nu.
  */
-async function opretSaguNote(raaTitel) {
+async function opretSaguNote(raaTitel, raaLinje) {
   const titel = String(raaTitel || '').trim();
   if (!titel) return;
-  // Opgaven foerst: dens id skal ind i notens link tilbage.
+  /*
+   * Opgaven foerst: dens id skal ind i notens link tilbage.
+   *
+   * Og den faar HELE linjen, ikke bare titlen. Foer v46 blev kun den tolkede
+   * titel sendt, saa `* Blodprover @Doda #helbred !i morgen` gav en opgave
+   * uden projekt, uden kontekst og uden dato - markoererne var pillet fra i
+   * tolkningen og kom aldrig med videre. Noten i Sagu skal hedde det rene
+   * (den har hverken projekter eller datoer), men opgaven skal have det hele.
+   */
+  const linje = String(raaLinje || '').trim() || titel;
   let it = null;
   try {
-    it = (await api('POST', '/api/v1/capture', { text: titel, createNew: true })).item;
+    it = (await api('POST', '/api/v1/capture', { text: linje, createNew: true })).item;
   } catch (ex) { toast(ex.message); return; }
   try {
     const d = await api('POST', '/api/v1/sagu/note', {
@@ -3914,10 +3927,22 @@ async function sideProjekt(id) {
         ${d.tasks.map((it, i) => projektOpgave(it, i, d.tasks.length)).join('')}</div>`
     : '<p class="lead" style="padding:8px 14px">Nothing here yet.</p>'}
 
-    ${d.notes.length || state.notesEnabled ? `
+    ${/*
+      * Overskriften skal ikke love en tom kasse.
+      *
+      * Er Sagu forbundet, laver `*` noten DÉR (§v44), og den haenger paa den
+      * opgave, den oprettede - ikke paa projektet. Saa staar der »No notes.
+      * Capture one with * text @Navn«, mens netop dét ikke laengere lagde
+      * noget her. Er der ingen gamle doda-noter, er hele afsnittet vaek, og i
+      * stedet siger opgavelisten sandheden: noterne hænger paa opgaverne.
+      */ ''}
+    ${d.notes.length ? `
       <h2 class="group meta">Notes <span class="group-count">${d.notes.length}</span></h2>
-      ${d.notes.length ? `<div class="notes">${d.notes.map(noteKort).join('')}</div>`
-    : '<p class="lead" style="padding:8px 14px">No notes. Capture one with <code>* text @' + esc(p.name) + '</code>.</p>'}` : ''}
+      <div class="notes">${d.notes.map(noteKort).join('')}</div>`
+    : (state.notesEnabled && !saguKlar ? `
+      <h2 class="group meta">Notes <span class="group-count">0</span></h2>
+      <p class="lead" style="padding:8px 14px">No notes. Capture one with
+        <code>* text @${esc(p.name)}</code>.</p>` : '')}
   </section>`;
 
   bindProjektvisning(p, d);
@@ -5355,6 +5380,88 @@ function lytPaaForbindelse() {
   opdaterOfflineMaerke();
   tegnSynkMaerke();
   tomOutbox();
+  traekForNyt();
+}
+
+/*
+ * Traek ned for at hente nyt - paa telefonen.
+ *
+ * Appen henter selv, naar den kommer frem igen (§v26), men staar den aaben,
+ * mens noget aendrer sig et andet sted - en mail fra MsGraphBud, en note fra
+ * en anden enhed - er der ingen maade at bede om det paa. Paa skrivebordet er
+ * der synk-maerket oeverst at trykke paa; paa telefonen er det for lille og
+ * for langt oppe.
+ *
+ * Ingen `preventDefault`: lytterne er passive, og vi rykker aldrig i selve
+ * rulningen. Vi reagerer kun, naar siden ALLEREDE er i top og fingeren gaar
+ * nedad - saa er der ikke noget at rulle, og browserens egen bounce er den
+ * eneste bevaegelse, vi laegger os oven paa.
+ */
+function traekForNyt() {
+  // En mus har ingen »traek ned fra toppen«. Kun touch.
+  if (!('ontouchstart' in window)) return;
+
+  const TAERSKEL = 72;      // hvor langt der skal traekkes
+  const MAKS = 110;         // hvor langt maerket foelger med
+  let startY = 0;
+  let aktiv = false;
+  let afstand = 0;
+  let el = null;
+
+  const maerke = () => {
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'traekny';
+      el.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(el);
+    }
+    return el;
+  };
+
+  const vis = (d, tekst) => {
+    const m = maerke();
+    m.textContent = tekst;
+    m.style.transform = `translate(-50%, ${Math.min(d, MAKS)}px)`;
+    m.classList.add('paa');
+  };
+
+  const skjul = () => {
+    if (!el) return;
+    el.classList.remove('paa');
+    el.style.transform = 'translate(-50%, 0)';
+  };
+
+  /* En aaben rude eller menu ejer skaermen. Traekker man dér, er det
+     indholdet i ruden, man vil rulle - ikke appen, man vil genindlaese. */
+  const optaget = () => document.body.classList.contains('navopen')
+    || !!(document.getElementById('modalHost') || {}).firstChild;
+
+  window.addEventListener('touchstart', (e) => {
+    aktiv = !optaget() && window.scrollY <= 0 && e.touches.length === 1;
+    startY = aktiv ? e.touches[0].clientY : 0;
+    afstand = 0;
+  }, { passive: true });
+
+  window.addEventListener('touchmove', (e) => {
+    if (!aktiv) return;
+    // Ruller siden alligevel, er det ikke et traek - saa slip det.
+    if (window.scrollY > 0) { aktiv = false; skjul(); return; }
+    afstand = e.touches[0].clientY - startY;
+    if (afstand <= 0) { skjul(); return; }
+    vis(afstand, afstand >= TAERSKEL ? 'Release to refresh' : 'Pull to refresh');
+  }, { passive: true });
+
+  window.addEventListener('touchend', () => {
+    if (!aktiv) return;
+    aktiv = false;
+    if (afstand < TAERSKEL) { skjul(); return; }
+    // Maerket bliver staaende, mens der hentes - ellers ser det ud, som om
+    // traekket ikke gjorde noget.
+    vis(TAERSKEL, 'Refreshing…');
+    Promise.resolve(synk(true)).finally(skjul);
+  }, { passive: true });
+
+  window.addEventListener('touchcancel', () => { aktiv = false; skjul(); }, { passive: true });
 }
 
 /* ------------------------------------------------------------ passkeys */
