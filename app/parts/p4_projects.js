@@ -997,6 +997,7 @@ function tegnSaguKommentarer(host, o, liste) {
   const html = liste.map((k) => `
     <div class="notionkom-item">
       <div class="meta">${esc(k.author)}${k.guest ? ' · guest' : ''}${
+  k.via ? ` · from ${esc(k.via)}` : ''}${
   k.at ? ` · ${esc(visTid(k.at))}` : ''}</div>
       <div>${markdown(k.body)}</div>
     </div>`).join('');
@@ -1029,6 +1030,7 @@ async function saguRude(host, o) {
       ${liste.length ? `<div class="notionkom">${liste.map((k) => `
         <div class="notionkom-item">
           <div class="meta">${esc(k.author)}${k.guest ? ' · guest' : ''}${
+  k.via ? ` · from ${esc(k.via)}` : ''}${
   k.at ? ` · ${esc(visTid(k.at))}` : ''}</div>
           <div>${markdown(k.body)}</div>
         </div>`).join('')}</div>` : '<p class="lead">No comments on that note yet.</p>'}
