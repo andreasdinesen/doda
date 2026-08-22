@@ -1131,6 +1131,29 @@ textarea.input { resize: vertical; min-height: 90px; font-family: inherit; }
 .notionkom-item .meta { margin-bottom: 4px; }
 /* Feltet til en ny kommentar. Knappen staar UNDER feltet og i hoejre side, saa
    den ikke klemmer teksten paa en smal skaerm. */
+/* Et notekort, der foerer UD af doda - til noten i Sagu. */
+.sagukort { display: block; text-decoration: none; color: inherit; }
+.sagukort:hover { background: var(--card-hover); }
+.sagukort .notecard-title { display: flex; align-items: center; gap: 7px; }
+
+/* »Der er kommet en ny version«. Staar i toppen af indholdet - paa en telefon
+   er sidebarens fod bag hamburgeren, og saa ser man den aldrig. */
+.opdater-baand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  background: var(--accent-soft, var(--card-hover));
+  border: 1px solid var(--accent);
+  color: var(--text);
+  font-size: 13.5px;
+}
+.opdater-baand .baand-tekst { flex: 1; min-width: 180px; }
+.opdater-baand .btn { flex: none; }
+
 /* Traek ned for at hente nyt. Maerket ligger over indholdet og foelger
    fingeren; det er kun paa telefonen, at det overhovedet oprettes. */
 .traekny {

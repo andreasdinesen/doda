@@ -127,6 +127,21 @@ async function sideProjekt(id) {
   const p = d.project;
   const omr = p.area_id ? (state.areas.find((a) => a.id === p.area_id) || {}).name : null;
   const manglerNaeste = p.status === 'active' && !p.next_count && p.open_count > 0;
+  /*
+   * Sagu-noterne, der hoerer til projektet.
+   *
+   * To slags: den note, PROJEKTET selv er linket til, og de noter, der
+   * haenger paa projektets opgaver. Den foerste staar ogsaa som chip oeverst,
+   * men chippen siger kun »Doda« med et link-ikon - den siger ikke, at det er
+   * en note, og den staar ikke sammen med de andre. Her er de samlet, og
+   * projektets egen kommer foerst, fordi den hoerer til HELE projektet.
+   */
+  const saguNoter = [
+    ...(saguModul_erSaguUrl(p.link_url)
+      ? [{ title: p.name, link_title: p.link_title, link_url: p.link_url, paaProjektet: true }]
+      : []),
+    ...(d.tasks || []).filter((t) => saguModul_erSaguUrl(t.link_url)),
+  ];
 
   friskLinkTitel('project', p.id, p, () => {
     const chip = host.querySelector('.page-head .chip.link');
@@ -181,6 +196,27 @@ async function sideProjekt(id) {
       <h2 class="group meta">Notes <span class="group-count">0</span></h2>
       <p class="lead" style="padding:8px 14px">No notes. Capture one with
         <code>* text @${esc(p.name)}</code>.</p>` : '')}
+
+    ${/*
+      * Noterne i Sagu, der hoerer til projektet.
+      *
+      * En Sagu-note haenger paa den OPGAVE, den blev oprettet sammen med -
+      * ikke paa projektet. Noterne var derfor kun at finde ved at aabne
+      * opgaverne én for én og se efter et link. Her staar de samlet.
+      *
+      * Det er ikke en gentagelse af opgavelisten ovenfor: raekken foerer til
+      * NOTEN i Sagu, mens opgaven ovenfor foerer til opgaven. Derfor staar
+      * notens eget navn foerst - det er tit et andet end opgavens.
+      */ ''}
+    ${saguNoter.length ? `
+      <h2 class="group meta">Notes in Sagu <span class="group-count">${saguNoter.length}</span></h2>
+      <div class="notes">${saguNoter.map((t) => `
+        <a class="notecard sagukort" href="${esc(t.link_url)}" target="_blank" rel="noopener noreferrer">
+          <div class="notecard-title">${icon('note', 14)} ${esc(t.link_title || t.title)}</div>
+          ${t.paaProjektet ? '<div class="meta">on this project</div>'
+    : ((t.link_title && t.link_title !== t.title)
+      ? `<div class="meta">on “${esc(t.title)}”</div>` : '')}
+        </a>`).join('')}</div>` : ''}
   </section>`;
 
   bindProjektvisning(p, d);
@@ -214,10 +250,18 @@ function noteKort(it) {
 }
 
 function bindProjektvisning(p, d) {
-  // Samme udfoldning som paa en opgave - ét sted, saa de to ikke kan drive
-  // fra hinanden. Projektet HAR haft et link siden v17; det manglede bare
-  // vejen til at se siden uden at forlade doda.
-  notionRude(document.getElementById('pNotion'), p);
+  /*
+   * Samme rude som paa en opgave - ét sted, saa de to ikke kan drive fra
+   * hinanden. Projektet HAR haft et link siden v17; det manglede bare vejen
+   * til at se siden uden at forlade doda.
+   *
+   * Her stod `notionRude` direkte, og saa var de netop drevet fra hinanden:
+   * en opgave gik gennem `linkRude`, der vaelger ud fra ADRESSEN, mens et
+   * projekt altid fik Notion-ruden. Var projektet linket til en Sagu-note,
+   * kunne man hverken se den eller kommentere den - modsat den samme note
+   * paa en opgave. Kommentaren ovenfor lovede det, koden ikke gjorde.
+   */
+  linkRude(document.getElementById('pNotion'), p);
   document.getElementById('backToProjects').addEventListener('click', () => gaaTil('projects'));
   document.getElementById('editProject').addEventListener('click', () => redigerProjekt(p));
 

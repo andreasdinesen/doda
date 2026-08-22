@@ -256,6 +256,9 @@ function lytPaaForbindelse() {
      en hentning - ikke at spare kald. */
   const naarSynlig = () => {
     if (document.visibilityState !== 'visible') return;
+    // Er der kommet en ny udgave, mens appen laa i baggrunden? Det er netop
+    // dét oejeblik, en telefon vender tilbage efter en opdatering.
+    if (state.user) tjekVersion();
     if (Date.now() - synkState.sidst < 3000) { tegnSynkMaerke(); return; }
     synk(false);
   };
@@ -271,6 +274,7 @@ function lytPaaForbindelse() {
   tegnSynkMaerke();
   tomOutbox();
   traekForNyt();
+  visOpdaterBaand();
 }
 
 /*

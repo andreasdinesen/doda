@@ -736,7 +736,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 46;
+const APP_VERSION = 47;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -1113,6 +1113,14 @@ function shellHtml() {
     </aside>
     <main class="main">
       <div class="topbar">
+        <!-- Versionslinjen i sidebarens fod har kunnet sige det hele tiden,
+             men paa en telefon staar foden BAG hamburgeren, saa man ser den
+             aldrig. Beskeden hoerer dér, hvor man er. -->
+        <div class="opdater-baand" id="opdaterBaand" hidden>
+          ${icon('sync', 15)}
+          <span class="baand-tekst"></span>
+          <button class="btn" id="opdaterNu">Update</button>
+        </div>
         <div class="offline-mark meta" id="offlineMark" hidden></div>
         <div class="toprow">
           <button class="syncbtn meta" id="syncBtn" title="Sync now" aria-label="Sync now">
@@ -1159,9 +1167,53 @@ function shellHtml() {
  * er app.js i browserens cache aeldre end den, serveren udleverer, og sa er
  * det dét, brugeren skal vide - ikke versionsnummeret alene.
  */
+/**
+ * Baandet »der er kommet en ny version«.
+ *
+ * Samme kilde som versionslinjen: serverens tal fra `/api/public-config` mod
+ * den `APP_VERSION`, der er bagt ind i den app.js, browseren koerer. Er de
+ * forskellige, sidder der en gammel fil i cachen.
+ */
+function visOpdaterBaand() {
+  const b = document.getElementById('opdaterBaand');
+  if (!b) return;
+  const server = state.config && state.config.version;
+  const ny = server && server > APP_VERSION;
+  b.hidden = !ny;
+  if (!ny) return;
+  const t = b.querySelector('.baand-tekst');
+  if (t) {
+    t.innerHTML = `<strong>doda v${esc(String(server))} is ready.</strong> `
+      + `You are running v${esc(String(APP_VERSION))}. Updating reloads the app.`;
+  }
+}
+
+/**
+ * Spoerger serveren, om der er kommet noget nyt.
+ *
+ * Kaldes naar fanen kommer FREM igen - det er dét oejeblik, en telefon vender
+ * tilbage til appen efter en opdatering paa serveren. Uden det ville beskeden
+ * foerst dukke op ved naeste genindlaesning, og saa er den overfloedig.
+ *
+ * Fejler kaldet, sker der ingenting: man er formentlig offline, og saa er en
+ * ny version det mindste af det.
+ */
+async function tjekVersion() {
+  try {
+    const c = await api('GET', '/api/public-config');
+    if (!state.config) state.config = {};
+    state.config.version = c.version;
+    visOpdaterBaand();
+  } catch { /* offline - offline-maerket siger det selv */ }
+}
+
 function versionHtml() {
   const server = state.config.version;
-  const gammel = server && server !== APP_VERSION;
+  /* Kun NYERE taeller. `!==` var forkert den ene vej: er serverens tal
+     LAVERE end det, browseren koerer - en rullet udgivelse, eller en
+     serverproces, der ikke er genstartet - stod der »v45 available« ved
+     siden af v46, og det er vaas (samme fejl fandt Sagu i sin F17). */
+  const gammel = server && server > APP_VERSION;
   if (gammel) {
     return `<button class="version-line meta version-old" id="versionBtn"
       title="Your browser is running v${APP_VERSION}, but the server has v${server}. Click to reload.">
@@ -1285,6 +1337,24 @@ function bindShell() {
   // app.js i service workerens cache. Ryd den FOER genindlaesningen -
   // ellers serverer den bare den samme gamle fil igen.
   bindTemaKnap();
+  const bNu = document.getElementById('opdaterNu');
+  if (bNu) {
+    bNu.addEventListener('click', async () => {
+      bNu.disabled = true;
+      bNu.textContent = 'Updating…';
+      // Samme oprydning som versionslinjen: uden den serverer service
+      // workeren bare den samme gamle app.js igen.
+      try {
+        if (navigator.serviceWorker) {
+          const alle = await navigator.serviceWorker.getRegistrations();
+          for (const r of alle) await r.update();
+        }
+        if (window.caches) await Promise.all((await caches.keys()).map((n2) => caches.delete(n2)));
+      } catch { /* uden cache-api er der ikke noget at rydde */ }
+      location.reload();
+    });
+  }
+
   const vBtn = document.getElementById('versionBtn');
   if (vBtn) {
     vBtn.addEventListener('click', async () => {
@@ -3889,6 +3959,21 @@ async function sideProjekt(id) {
   const p = d.project;
   const omr = p.area_id ? (state.areas.find((a) => a.id === p.area_id) || {}).name : null;
   const manglerNaeste = p.status === 'active' && !p.next_count && p.open_count > 0;
+  /*
+   * Sagu-noterne, der hoerer til projektet.
+   *
+   * To slags: den note, PROJEKTET selv er linket til, og de noter, der
+   * haenger paa projektets opgaver. Den foerste staar ogsaa som chip oeverst,
+   * men chippen siger kun »Doda« med et link-ikon - den siger ikke, at det er
+   * en note, og den staar ikke sammen med de andre. Her er de samlet, og
+   * projektets egen kommer foerst, fordi den hoerer til HELE projektet.
+   */
+  const saguNoter = [
+    ...(saguModul_erSaguUrl(p.link_url)
+      ? [{ title: p.name, link_title: p.link_title, link_url: p.link_url, paaProjektet: true }]
+      : []),
+    ...(d.tasks || []).filter((t) => saguModul_erSaguUrl(t.link_url)),
+  ];
 
   friskLinkTitel('project', p.id, p, () => {
     const chip = host.querySelector('.page-head .chip.link');
@@ -3943,6 +4028,27 @@ async function sideProjekt(id) {
       <h2 class="group meta">Notes <span class="group-count">0</span></h2>
       <p class="lead" style="padding:8px 14px">No notes. Capture one with
         <code>* text @${esc(p.name)}</code>.</p>` : '')}
+
+    ${/*
+      * Noterne i Sagu, der hoerer til projektet.
+      *
+      * En Sagu-note haenger paa den OPGAVE, den blev oprettet sammen med -
+      * ikke paa projektet. Noterne var derfor kun at finde ved at aabne
+      * opgaverne én for én og se efter et link. Her staar de samlet.
+      *
+      * Det er ikke en gentagelse af opgavelisten ovenfor: raekken foerer til
+      * NOTEN i Sagu, mens opgaven ovenfor foerer til opgaven. Derfor staar
+      * notens eget navn foerst - det er tit et andet end opgavens.
+      */ ''}
+    ${saguNoter.length ? `
+      <h2 class="group meta">Notes in Sagu <span class="group-count">${saguNoter.length}</span></h2>
+      <div class="notes">${saguNoter.map((t) => `
+        <a class="notecard sagukort" href="${esc(t.link_url)}" target="_blank" rel="noopener noreferrer">
+          <div class="notecard-title">${icon('note', 14)} ${esc(t.link_title || t.title)}</div>
+          ${t.paaProjektet ? '<div class="meta">on this project</div>'
+    : ((t.link_title && t.link_title !== t.title)
+      ? `<div class="meta">on “${esc(t.title)}”</div>` : '')}
+        </a>`).join('')}</div>` : ''}
   </section>`;
 
   bindProjektvisning(p, d);
@@ -3976,10 +4082,18 @@ function noteKort(it) {
 }
 
 function bindProjektvisning(p, d) {
-  // Samme udfoldning som paa en opgave - ét sted, saa de to ikke kan drive
-  // fra hinanden. Projektet HAR haft et link siden v17; det manglede bare
-  // vejen til at se siden uden at forlade doda.
-  notionRude(document.getElementById('pNotion'), p);
+  /*
+   * Samme rude som paa en opgave - ét sted, saa de to ikke kan drive fra
+   * hinanden. Projektet HAR haft et link siden v17; det manglede bare vejen
+   * til at se siden uden at forlade doda.
+   *
+   * Her stod `notionRude` direkte, og saa var de netop drevet fra hinanden:
+   * en opgave gik gennem `linkRude`, der vaelger ud fra ADRESSEN, mens et
+   * projekt altid fik Notion-ruden. Var projektet linket til en Sagu-note,
+   * kunne man hverken se den eller kommentere den - modsat den samme note
+   * paa en opgave. Kommentaren ovenfor lovede det, koden ikke gjorde.
+   */
+  linkRude(document.getElementById('pNotion'), p);
   document.getElementById('backToProjects').addEventListener('click', () => gaaTil('projects'));
   document.getElementById('editProject').addEventListener('click', () => redigerProjekt(p));
 
@@ -5366,6 +5480,9 @@ function lytPaaForbindelse() {
      en hentning - ikke at spare kald. */
   const naarSynlig = () => {
     if (document.visibilityState !== 'visible') return;
+    // Er der kommet en ny udgave, mens appen laa i baggrunden? Det er netop
+    // dét oejeblik, en telefon vender tilbage efter en opdatering.
+    if (state.user) tjekVersion();
     if (Date.now() - synkState.sidst < 3000) { tegnSynkMaerke(); return; }
     synk(false);
   };
@@ -5381,6 +5498,7 @@ function lytPaaForbindelse() {
   tegnSynkMaerke();
   tomOutbox();
   traekForNyt();
+  visOpdaterBaand();
 }
 
 /*

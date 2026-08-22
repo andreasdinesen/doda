@@ -476,6 +476,29 @@ let INLINE_SCRIPT_TEXT = '';
 // ?v=, i sw.js og i runens version:). Serveren har den derfor uden at skulle
 // have et tal, der kan komme ud af trit med frontendens.
 let APP_VERSION_FIL = '1';
+/* Hvornaar index.html sidst blev laest. Se `friskVersion()`. */
+let INDEX_MTIME = 0;
+
+/**
+ * Genlaeser index.html, HVIS den er skiftet siden sidst.
+ *
+ * Versionen blev laest én gang ved opstart. Men panelets »Opdatér app«
+ * skriver app-filerne igen UDEN at genstarte containeren, og saa blev
+ * serveren ved med at melde det gamle tal - beskeden »der er kommet en ny
+ * version« ville aldrig dukke op, selv om der laa en ny app.js paa disken.
+ * (Samme fejl fandt Sagu i sin F17.)
+ *
+ * Et `stat` pr. kald er billigt; at laese hele filen er det ikke - derfor kun
+ * naar mtime er aendret.
+ */
+function friskVersion() {
+  try {
+    const m = fs.statSync(path.join(PUBLIC_DIR, 'index.html')).mtimeMs;
+    if (m === INDEX_MTIME) return;
+    INDEX_MTIME = m;
+    computeInlineHash();
+  } catch { /* mangler filen, staar det gamle tal - bedre end at vaelte */ }
+}
 
 function computeInlineHash() {
   try {
@@ -1373,7 +1396,8 @@ const ROUTES = {
       // APP_VERSION, browseren koerer, sidder der en gammel app.js i cachen
       // - og sa skal brugeren vide det frem for at lede efter en funktion,
       // der ikke er indlaest.
-      version: Number(APP_VERSION_FIL),
+      // Frisk fra disken, hvis app-filerne er skiftet under os.
+      version: (friskVersion(), Number(APP_VERSION_FIL)),
       // Naar der ingen bruger er, skal foerste-gangs-opsaetningen vises.
       needsSetup: userCount() === 0,
       secureContext: isHttps(req),
