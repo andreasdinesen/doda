@@ -16,7 +16,7 @@
 
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { mkdtempSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -369,7 +369,11 @@ test('en adresse, der ikke er en Sagu-note, afvises', async () => {
 
 /* ============================================== rundturen ============== */
 
-test('titel-opfriskningen spoerger Sagu ÉN gang i doegnet - ikke pr. opslag', async () => {
+/* Vinduet var et doegn, saa en omdoebt note viste sit gamle navn indtil i
+   morgen. Det er 60 sekunder nu - kort nok til at »skift app, ret, skift
+   tilbage« virker, langt nok til at en optegning ikke koster et kald.
+   Tallet er PINNET her: saettes det op igen, skal det vaere et valg. */
+test('titel-opfriskningen spoerger Sagu højst én gang i minuttet - ikke pr. opslag', async () => {
   const lavet = await J('/api/v1/sagu/note', { title: 'Skal doebes om' });
   const url = lavet.data.page.url;
   const opg = await J('/api/v1/capture', { text: 'en opgave med en note', createNew: true });
@@ -387,7 +391,13 @@ test('titel-opfriskningen spoerger Sagu ÉN gang i doegnet - ikke pr. opslag', a
   // Og anden gang inden for doegnet roeres Sagu ikke.
   attrap.ryd();
   await J('/api/v1/link/refresh', { kind: 'item', id: opg.data.item.id });
-  assert.deepEqual(attrap.kald, [], 'hoejst ét opslag i doegnet');
+  assert.deepEqual(attrap.kald, [], 'hoejst ét opslag i vinduet');
+
+  // Og vinduet er 60 sekunder - ikke et doegn. Uden den her kunne tallet
+  // krybe op igen, uden at nogen opdagede det.
+  const kilde = readFileSync(join(ROD, 'app', 'server.js'), 'utf8');
+  assert.match(kilde, /now\(\) - r\.link_checked_at < 60\b/,
+    'vinduet for titel-opfriskningen skal vaere 60 sekunder');
 });
 
 test('en noegle kan ikke saette forbindelsen', async () => {

@@ -5,7 +5,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 49;
+const APP_VERSION = 50;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -56,16 +56,12 @@ function esc(s) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-/*
- * Brugernavnet VIST med stort begyndelsesbogstav.
- *
- * Selve navnet roeres ikke: det er det, man logger ind med, og det er noeglen
- * i databasen. Derfor maa denne funktion KUN bruges, hvor der tegnes - aldrig
- * hvor der sendes eller sammenlignes. Kun foerste bogstav, ikke hvert ord:
- * et brugernavn er ét ord, og `capitalize` ville lave "anna-lise" om til
- * noget, ejeren ikke selv har skrevet.
- */
-const visNavn = (n) => String(n == null ? '' : n).replace(/^./, (c) => c.toUpperCase());
+/* Brugernavnet vises med stort - reglen bor i shared/parse.js, fordi ogsaa
+   SERVEREN tegner sider, hvor navnet staar (samtykkesiden til en connector).
+   Stod den kun her, ville de to flader sige hvert sit om samme konto. */
+const visNavn = (n) => (typeof dodaParse !== 'undefined'
+  ? dodaParse.visNavn(n)
+  : String(n == null ? '' : n).replace(/^./, (c) => c.toUpperCase()));
 
 /**
  * Gor URL'er og [tekst](url) klikbare.

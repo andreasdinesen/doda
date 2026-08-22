@@ -2318,8 +2318,22 @@ const ROUTES = {
     if (!id) { apiFejl(res, 400, 'no_id', 'Which one?'); return; }
 
     const r = db.prepare(`SELECT link_url, link_title, link_checked_at FROM ${tabel} WHERE id = ?`).get(id);
-    // Tjekket for nylig: gaa hjem, uanset hvem der ejer linket.
-    if (!r || (r.link_checked_at && now() - r.link_checked_at < 86400)) {
+    /*
+     * Tjekket for nylig: gaa hjem, uanset hvem der ejer linket.
+     *
+     * Vinduet var et DOEGN. Doeber man en note om i Sagu, viste doda derfor
+     * det gamle navn indtil i morgen - og den almindelige gang er »skift app,
+     * ret noget, skift tilbage«, som tager to minutter. Sagu ramte det samme
+     * paa opgavestatus (deres §33) og gik til 60 sekunder; her er reglen den
+     * samme, saa de to tvillinger ikke opfoerer sig forskelligt.
+     *
+     * 60 sekunder er billigt, fordi kaldet sker ved optegning af ÉN opgave
+     * eller ÉT projekt - ikke pr. raekke i en liste. Naar fanen kommer frem,
+     * genindlaeser appen i forvejen, og saa er titlen frisk med det samme.
+     *
+     * Tallet er pinnet af en test. Saettes det op igen, skal det vaere et valg.
+     */
+    if (!r || (r.link_checked_at && now() - r.link_checked_at < 60)) {
       sendJson(res, 200, { title: null });
       return;
     }
@@ -3141,7 +3155,7 @@ function samtykkeHtml(req, q, o) {
       <button class="btn" type="submit" name="godkend" value="nej" style="width:100%;margin-top:8px">Cancel</button>
     </form>
     <p class="gate-note">You can revoke this again under Settings → Connected apps.
-      Signed in as <strong>${escHtml(o.bruger)}</strong>.</p>`);
+      Signed in as <strong>${escHtml(parse.visNavn(o.bruger))}</strong>.</p>`);
 }
 
 /* CORS. De her fire endepunkter er offentlige opdagelses- og

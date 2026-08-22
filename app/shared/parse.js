@@ -588,6 +588,20 @@
     return tekst.replace(re, '$1').replace(/\s{2,}/g, ' ').trim();
   }
 
+  /*
+   * Brugernavnet VIST med stort begyndelsesbogstav.
+   *
+   * Bor her og ikke i frontenden, fordi ogsaa SERVEREN tegner sider, hvor
+   * navnet staar - samtykkesiden til en connector. Stod reglen kun ét sted,
+   * ville den ene flade sige »Andreas« og den anden »andreas« om samme konto.
+   *
+   * Selve navnet roeres aldrig: det er det, man logger ind med, og noeglen i
+   * databasen. Funktionen maa KUN bruges, hvor der tegnes - aldrig hvor der
+   * sendes eller sammenlignes. Kun foerste tegn: »anna-lise« skal ikke blive
+   * til noget, ejeren ikke selv har skrevet.
+   */
+  const visNavn = (n) => String(n == null ? '' : n).replace(/^./, (c) => c.toUpperCase());
+
   return {
     tolkFangst,
     fjernMarkoer,
@@ -603,5 +617,6 @@
     sidsteIMaaned,
     UGEDAGE,
     MAANEDER,
+    visNavn,
   };
 }));

@@ -856,6 +856,23 @@ den adresse, Sagu selv åbner på. `linkRude()` vælger rude ud fra adressen, og
 skifte navn: et navn, der lover noget andet end det, koden gør, er den dyreste
 slags fejl. Det gælder også funktionen bag (`friskLinkTitel`).
 
+### Titlen opfriskes hvert minut, ikke hvert døgn (v50)
+
+Vinduet i `/api/v1/link/refresh` var **86.400 sekunder**. Døber man en note om
+i Sagu, viste doda derfor det gamle navn indtil i morgen — mens den almindelige
+gang er »skift app, ret noget, skift tilbage« og tager to minutter.
+
+Sagu ramte nøjagtig det samme på opgavestatus (deres §33) og gik til 60
+sekunder. Her gælder samme tal, så de to tvillinger ikke opfører sig
+forskelligt om det samme.
+
+Det er billigt, fordi kaldet sker ved optegning af **én** opgave eller **ét**
+projekt — ikke pr. række i en liste. Og »kig efter, når fanen kommer frem«
+kræver ingen ny kode: appen genindlæser i forvejen ved `visibilitychange`, og
+projektsiden tegnes om, så titlen er frisk med det samme.
+
+**Tallet er pinnet af en test.** Sættes det op igen, skal det være et valg.
+
 **FORMEN afgøres først — ikke om en forbindelse er sat.** En Sagu-adresse
 slutter på 32 hex, og Notions id-genkendelse leder efter præcis det. Uden en
 første sortering ville doda spørge *Notion* om en Sagu-note, så snart Sagu ikke
