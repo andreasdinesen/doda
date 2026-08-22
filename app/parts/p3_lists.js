@@ -1061,6 +1061,14 @@ function sideSettings() {
       </form>
       <p class="gate-note" style="text-align:left">A lost phone should not be able to
       read your whole system — prefer <strong>capture only</strong> unless you need more.</p>
+      <!-- Vejledningen ligger i repoet, ikke paa serveren: den skal kunne
+           rettes uden en udgivelse, og install-scriptet skal ikke baere den.
+           Repoet er offentligt siden v40, saa linket virker for alle. -->
+      <p class="gate-note" style="text-align:left">Setting up a Shortcut or Siri?
+      <a href="https://github.com/andreasdinesen/doda/blob/main/docs/SHORTCUTS.md"
+         target="_blank" rel="noopener noreferrer">The step-by-step guide</a>
+      has the exact values to copy — including which <em>request body</em> to pick,
+      and what to do when you get <code>invalid_key</code>.</p>
     </div>
 
     <div class="card"><h2>Connected apps</h2>

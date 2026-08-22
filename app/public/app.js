@@ -80,6 +80,30 @@
     // "at 8", "at 8pm", "kl 8", "kl. 8.30", eller et bart "14:30".
     let m = tekst.match(/\b(?:at|kl\.?)\s*(\d{1,2})(?:[.:](\d{2}))?\s*(am|pm)?\b/i);
     if (!m) m = tekst.match(/\b(\d{1,2}):(\d{2})\s*(am|pm)?\b/);
+    if (!m) {
+      /*
+       * Dansk klokkeslaet med PUNKTUM: "21.36".
+       *
+       * Det er formatet, en dansk iPhone selv skriver, saa en genvej, der
+       * indsaetter et klokkeslaet, rammer det uden at vide det. Men `3.10` er
+       * ogsaa dansk for den 3. oktober - og datoen bliver tolket af resten af
+       * frasen bagefter.
+       *
+       * Reglen: staar tallet ALENE, er det en dato. Staar der noget andet i
+       * frasen - typisk »i dag« - er datoen allerede givet, og saa kan tallet
+       * kun vaere et klokkeslaet. Derfor virker `!3.10` fortsat som
+       * 3. oktober, mens `!i dag 3.10` er kl. 03:10.
+       */
+      // Lookahead/behind: `3.10.2026` er ÉN dato, ikke et klokkeslaet med en
+      // hale. Uden dem blev "3.10" revet ud, og resten ".2026" var ikke en
+      // dato laengere.
+      const punktum = tekst.match(/(?<![\d.])(\d{1,2})\.(\d{2})(?![\d.])/);
+      if (punktum) {
+        const uden = (tekst.slice(0, punktum.index)
+          + tekst.slice(punktum.index + punktum[0].length)).trim();
+        if (uden) m = punktum;
+      }
+    }
     if (!m) return { tid: null, rest: tekst };
     let t = parseInt(m[1], 10);
     const min = m[2] ? parseInt(m[2], 10) : 0;
@@ -736,7 +760,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 47;
+const APP_VERSION = 48;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -3560,6 +3584,14 @@ function sideSettings() {
       </form>
       <p class="gate-note" style="text-align:left">A lost phone should not be able to
       read your whole system — prefer <strong>capture only</strong> unless you need more.</p>
+      <!-- Vejledningen ligger i repoet, ikke paa serveren: den skal kunne
+           rettes uden en udgivelse, og install-scriptet skal ikke baere den.
+           Repoet er offentligt siden v40, saa linket virker for alle. -->
+      <p class="gate-note" style="text-align:left">Setting up a Shortcut or Siri?
+      <a href="https://github.com/andreasdinesen/doda/blob/main/docs/SHORTCUTS.md"
+         target="_blank" rel="noopener noreferrer">The step-by-step guide</a>
+      has the exact values to copy — including which <em>request body</em> to pick,
+      and what to do when you get <code>invalid_key</code>.</p>
     </div>
 
     <div class="card"><h2>Connected apps</h2>

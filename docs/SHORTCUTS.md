@@ -42,11 +42,27 @@ handlingen *Bed om input* → Tekst.)
 | URL | `https://DIN-ADRESSE/api/v1/capture` |
 | Metode | `POST` |
 | Headers | `Authorization` = `Bearer doda_DIN-NØGLE` |
-| Anmodningstekst | `Fil` → vælg `Tekst` fra handling 1 |
+| Anmodningstekst | `JSON` → nøgle `text`, værdi = `Tekst` fra handling 1 |
 
-Det er hele opsætningen. Der skal **ikke** sættes Content-Type, og du behøver
-ikke bygge JSON — API'et tager imod en ren tekststreng, netop for at en genvej
-kan nøjes med ét felt.
+Der skal **ikke** sættes Content-Type.
+
+> **Hvilken »anmodningstekst«?** Menuen har tre valg: `JSON`, `Formular` og
+> `Arkiv`. **`JSON` er nemmest** — du får en nøgle/værdi-tabel, sætter nøglen
+> til `text` og trækker din Tekst-variabel ind som værdi.
+>
+> `Arkiv` virker også: det er Apples danske navn for »File«, og så udpeger du
+> Tekst-variablen i et filfelt. Begge dele når frem — API'et tager teksten som
+> JSON-felt (`text`, `title` eller `note`), som formularfelt, som ren krop
+> eller som `?text=` i adressen. En genvej med ét felt skal bare virke.
+
+> **Klokkeslæt:** både `!i dag 21:36` og `!i dag 21.36` virker — det danske
+> punktum forstås, når datoen allerede er givet. Sæt evt. variablens
+> klokkeslæt-format til `HH:mm`, så afhænger det ikke af telefonens sprog.
+> Bemærk at et tal **alene** er en dato: `!3.10` er den 3. oktober.
+
+> **Får du `invalid_key`?** Så står der næsten altid kun `Bearer` i
+> Authorization-værdien. Hele nøglen skal med: `Bearer doda_…`. Og nøglen kan
+> **ikke** slås op igen — vises den kun afkortet i listen, skal du lave en ny.
 
 ### Siri
 
