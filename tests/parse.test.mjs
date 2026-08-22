@@ -326,43 +326,44 @@ test('fjernMarkoer rører ALDRIG noget uden mellemrum foran — samme regel som 
 });
 
 /*
- * Dansk klokkeslaet med PUNKTUM - og datoerne, der ligner det.
+ * Punktum: en DATO, medmindre der staar `kl` foran.
  *
- * En dansk iPhone skriver selv "21.36", saa en iOS-genvej, der indsaetter et
- * klokkeslaet, rammer det uden at vide det. Men `3.10` er ogsaa dansk for den
- * 3. oktober, og den betydning maa ikke gaa tabt.
- *
- * Reglen: staar tallet ALENE, er det en dato. Er der noget andet i frasen -
- * typisk »i dag« - er datoen allerede givet, og tallet er et klokkeslaet.
+ * `3.10` er dansk for den 3. oktober. v48 lod konteksten afgoere det - stod
+ * der noget andet i feltet, blev tallet et klokkeslaet - men saa betoed den
+ * samme skrivemaade to ting afhaengigt af naboordene. Andreas valgte det fra:
+ * ét krav (`kl`) er bedre end et gaet.
  */
 const forfald = (s) => P.tolkFangst(`x !${s}`).due;
 
-test('punktum er et klokkeslaet, NAAR datoen allerede er givet', () => {
-  assert.deepEqual(forfald('i dag 21.36'), { dato: P.fmtDato(new Date()), tid: '21:36' });
-  assert.equal(forfald('i dag 3.10').tid, '03:10');
-  assert.equal(forfald('i morgen 8.05').tid, '08:05');
-  // Med `kl` foran har det virket hele tiden - det skal det blive ved med.
-  assert.equal(forfald('i dag kl 21.36').tid, '21:36');
-  // Og kolon er stadig kolon.
-  assert.equal(forfald('i dag 21:36').tid, '21:36');
-});
-
-test('et tal ALENE med punktum er en DATO - ikke et klokkeslaet', () => {
-  // 3. oktober, ikke kl. 03:10.
+test('et tal med punktum er en DATO - ogsaa naar der staar andet i feltet', () => {
   assert.equal(forfald('3.10').dato.slice(5), '10-03');
   assert.equal(forfald('3.10').tid, null);
   assert.equal(forfald('22.8').dato.slice(5), '08-22');
   assert.equal(forfald('1.12').dato.slice(5), '12-01');
+  // Det var netop DEN her, v48 lavede om til kl. 03:10.
+  assert.equal(forfald('i dag 3.10'), null, 'ingen dato - og en advarsel om hvorfor');
+});
+
+test('`kl` foran goer punktummet til et klokkeslaet', () => {
+  assert.equal(forfald('i dag kl 3.10').tid, '03:10');
+  assert.equal(forfald('i dag kl 21.36').tid, '21:36');
+  assert.equal(forfald('i dag kl 21:36').tid, '21:36');
+});
+
+test('kolon er entydigt og behoever ikke `kl`', () => {
+  assert.equal(forfald('i dag 21:36').tid, '21:36');
+  assert.equal(forfald('21:36').tid, '21:36');
 });
 
 test('en dato med aar rives ikke midt over', () => {
-  // Uden en lookahead blev "3.10" plukket ud som tid, og ".2026" var ikke en
-  // dato laengere - saa hele forfaldet forsvandt.
   const d = forfald('3.10.2026');
   assert.equal(d.dato, '2026-10-03');
   assert.equal(d.tid, null);
 });
 
-test('et umuligt klokkeslaet er ikke et klokkeslaet', () => {
-  assert.equal(forfald('24.60'), null);
+test('brugeren faar at VIDE, at datoen ikke blev forstaaet', () => {
+  // Uden advarslen ville forfaldet bare mangle, og man ville tro, det var sat.
+  const r = P.tolkFangst('x !i dag 21.36');
+  assert.equal(r.due, null);
+  assert.match(r.warnings[0], /forstod ikke datoen/);
 });

@@ -79,30 +79,19 @@
     // "at 8", "at 8pm", "kl 8", "kl. 8.30", eller et bart "14:30".
     let m = tekst.match(/\b(?:at|kl\.?)\s*(\d{1,2})(?:[.:](\d{2}))?\s*(am|pm)?\b/i);
     if (!m) m = tekst.match(/\b(\d{1,2}):(\d{2})\s*(am|pm)?\b/);
-    if (!m) {
-      /*
-       * Dansk klokkeslaet med PUNKTUM: "21.36".
-       *
-       * Det er formatet, en dansk iPhone selv skriver, saa en genvej, der
-       * indsaetter et klokkeslaet, rammer det uden at vide det. Men `3.10` er
-       * ogsaa dansk for den 3. oktober - og datoen bliver tolket af resten af
-       * frasen bagefter.
-       *
-       * Reglen: staar tallet ALENE, er det en dato. Staar der noget andet i
-       * frasen - typisk »i dag« - er datoen allerede givet, og saa kan tallet
-       * kun vaere et klokkeslaet. Derfor virker `!3.10` fortsat som
-       * 3. oktober, mens `!i dag 3.10` er kl. 03:10.
-       */
-      // Lookahead/behind: `3.10.2026` er ÉN dato, ikke et klokkeslaet med en
-      // hale. Uden dem blev "3.10" revet ud, og resten ".2026" var ikke en
-      // dato laengere.
-      const punktum = tekst.match(/(?<![\d.])(\d{1,2})\.(\d{2})(?![\d.])/);
-      if (punktum) {
-        const uden = (tekst.slice(0, punktum.index)
-          + tekst.slice(punktum.index + punktum[0].length)).trim();
-        if (uden) m = punktum;
-      }
-    }
+    /*
+     * Et bart tal med PUNKTUM er en DATO - aldrig et klokkeslaet.
+     *
+     * `3.10` er dansk for den 3. oktober, og det er den betydning, der
+     * gaelder. v48 proevede at lade konteksten afgoere det (»staar der noget
+     * andet i frasen, er tallet et klokkeslaet«), saa `!i dag 3.10` blev
+     * kl. 03:10. Andreas valgte det fra igen 22-08-2026: én notation skal
+     * betyde ét, og et gaet er vaerre end et krav.
+     *
+     * Skal punktummet vaere et klokkeslaet, skriver man `kl` foran -
+     * `kl 3.10` - og dét fanger den foerste regex ovenfor. Kolon er stadig
+     * entydigt og virker uden noget foran: `3:10`.
+     */
     if (!m) return { tid: null, rest: tekst };
     let t = parseInt(m[1], 10);
     const min = m[2] ? parseInt(m[2], 10) : 0;

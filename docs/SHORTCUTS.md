@@ -55,10 +55,12 @@ Der skal **ikke** sættes Content-Type.
 > JSON-felt (`text`, `title` eller `note`), som formularfelt, som ren krop
 > eller som `?text=` i adressen. En genvej med ét felt skal bare virke.
 
-> **Klokkeslæt:** både `!i dag 21:36` og `!i dag 21.36` virker — det danske
-> punktum forstås, når datoen allerede er givet. Sæt evt. variablens
-> klokkeslæt-format til `HH:mm`, så afhænger det ikke af telefonens sprog.
-> Bemærk at et tal **alene** er en dato: `!3.10` er den 3. oktober.
+> **Klokkeslæt:** `!i dag 21:36` virker. Med **punktum** skal der stå `kl`
+> foran — `!i dag kl 21.36` — for et tal med punktum er ellers en *dato*:
+> `!3.10` er den 3. oktober.
+>
+> I Genveje er det nemmeste at sætte variablens klokkeslæt-format til
+> `HH:mm`. Så bliver det til `21:36`, og du behøver ikke `kl`.
 
 > **Får du `invalid_key`?** Så står der næsten altid kun `Bearer` i
 > Authorization-værdien. Hele nøglen skal med: `Bearer doda_…`. Og nøglen kan
