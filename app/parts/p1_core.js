@@ -5,7 +5,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 55;
+const APP_VERSION = 56;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -290,6 +290,13 @@ function gateHtml() {
         <label class="field"><span>Password</span>
           <input class="input" id="gatePass" type="password"
             autocomplete="${setup ? 'new-password' : 'current-password'}" required></label>
+        <!-- Andet trin. Skjult, indtil serveren siger, at der er ét mere:
+             de fleste logins har det ikke, og et tomt felt, man skal springe
+             over, er en gaade hver gang. -->
+        <label class="field" id="gateCodeField" hidden><span>Code from your app
+          <span class="hint">Six digits — or one of your recovery codes.</span></span>
+          <input class="input" id="gateCode" inputmode="text" autocomplete="one-time-code"
+            autocapitalize="characters" spellcheck="false"></label>
         <button class="btn primary" type="submit" style="width:100%">
           ${setup ? 'Create account' : 'Sign in'}</button>
       </form>
@@ -308,10 +315,25 @@ function bindGate() {
     const err = document.getElementById('gateError');
     err.hidden = true;
     try {
+      const kodeFelt = document.getElementById('gateCodeField');
+      const kode = document.getElementById('gateCode');
       const data = await api('POST', state.config.needsSetup ? '/api/register' : '/api/login', {
         username: document.getElementById('gateUser').value,
         password: document.getElementById('gatePass').value,
+        code: kode && !kodeFelt.hidden ? kode.value.trim() : undefined,
       });
+      /*
+       * Kodeordet passede, men der mangler ét trin.
+       *
+       * Serveren svarer 200 med `needsCode` - ikke en fejl, for der er intet
+       * galt. Feltet foldes ud, og markoeren staar i det: den, der lige har
+       * tastet sit kodeord, skal ikke ogsaa lede efter, hvor koden skal hen.
+       */
+      if (data && data.needsCode) {
+        kodeFelt.hidden = false;
+        kode.focus();
+        return;
+      }
       state.user = data.user;
       state.config.needsSetup = false;
       if (fortsaetTilConnector()) return;
@@ -323,6 +345,12 @@ function bindGate() {
     } catch (ex) {
       err.textContent = ex.message;
       err.hidden = false;
+      // Var det KODEN, der var forkert, skal feltet blive staaende - ellers
+      // ser det ud, som om kodeordet var galt, og man taster det om.
+      if (ex.code === 'bad_code') {
+        const kf = document.getElementById('gateCodeField');
+        if (kf) { kf.hidden = false; document.getElementById('gateCode').select(); }
+      }
     }
   });
   const pk = document.getElementById('gatePasskey');

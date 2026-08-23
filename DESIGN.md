@@ -875,6 +875,47 @@ rulles tilbage samlet, hvis projektet genåbnes. Allerede udførte opgaver røre
 (logbogen skal blive ved med at være sand). Noter beholdes urørt; de er reference,
 ikke forpligtelse.
 
+## 6b · Totrinsbekræftelse og QR (v56)
+
+Passkeys er stærkere, hvor de virker — de kan ikke phishes. Men §10 slår fast,
+at **kodeordet altid skal virke**, fordi panelet nås på `IP:port` over http,
+hvor WebAuthn ikke findes. Passkeyen er derfor et *alternativ*, ikke et ekstra
+lag: har nogen kodeordet, er de inde. TOTP lukker netop dét hul.
+
+- **Slået fra som standard.** §5.12 gælder: en frisk installation begynder
+  ikke at kræve noget, ingen har bedt om.
+- **Det slås først til, når en kode er set.** Ellers kunne man låse sig selv
+  ude ved at lukke fanen midt i opsætningen — der er ingen supportafdeling.
+- **Ti nødudgangskoder**, hashet som kodeord. Uden dem er en mistet telefon
+  det samme som en mistet konto.
+- **Den samme kode kan ikke bruges to gange.** Vinduet er 30 sekunder; uden
+  spærren kunne en opsnappet kode genbruges inden for det halve minut.
+- **Kun kodeordet kan slå den fra.** En åben session er ikke nok — en ulåst
+  skærm skal ikke kunne fjerne låget med ét klik.
+
+### Det, QR-koden lærte os om at teste sin egen kode
+
+QR-encoderen er håndskrevet (ingen pakker, ingen CDN — hemmeligheden skal ikke
+forbi et fremmed domæne for at blive tegnet). Undervejs var den **ulæselig for
+enhver scanner**, mens alle mine tests var grønne:
+
+- Reed-Solomon passede mod standardens generator-polynomier.
+- Strukturen var korrekt — finder-mønstre, timing, alignment.
+- Og min egen **afkoder læste koden tilbage** til den præcise adresse.
+
+Fejlen var, at format-informationen stod i **omvendt bit-rækkefølge**. Min
+afkoder læste forkert på nøjagtig samme måde, som koderen skrev, så de var
+enige om noget forkert.
+
+**En test, hvor du selv har skrevet begge sider, kan bekræfte at du er
+konsekvent — aldrig at du har ret.** Fejlen blev fundet ved at lade macOS
+generere en reference med samme data: funktionsmønstrene var identiske, men
+niveaubitsene gav `3/2/0/2` mod standardens `1/0/3/2`.
+
+`tests/hjaelp/qrlaes.swift` er derfor en del af suiten: macOS' egen afkoder
+læser fem koder fra version 1 til 10. Findes `swift` ikke, **springes testen
+over med en besked** — en test, der stiltiende ikke kører, er værre end ingen.
+
 ## 7 · Uden for scope
 
 Handover §10 gælder uændret: ingen flere brugere, ingen

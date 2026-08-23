@@ -786,7 +786,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 55;
+const APP_VERSION = 56;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -1071,6 +1071,13 @@ function gateHtml() {
         <label class="field"><span>Password</span>
           <input class="input" id="gatePass" type="password"
             autocomplete="${setup ? 'new-password' : 'current-password'}" required></label>
+        <!-- Andet trin. Skjult, indtil serveren siger, at der er ét mere:
+             de fleste logins har det ikke, og et tomt felt, man skal springe
+             over, er en gaade hver gang. -->
+        <label class="field" id="gateCodeField" hidden><span>Code from your app
+          <span class="hint">Six digits — or one of your recovery codes.</span></span>
+          <input class="input" id="gateCode" inputmode="text" autocomplete="one-time-code"
+            autocapitalize="characters" spellcheck="false"></label>
         <button class="btn primary" type="submit" style="width:100%">
           ${setup ? 'Create account' : 'Sign in'}</button>
       </form>
@@ -1089,10 +1096,25 @@ function bindGate() {
     const err = document.getElementById('gateError');
     err.hidden = true;
     try {
+      const kodeFelt = document.getElementById('gateCodeField');
+      const kode = document.getElementById('gateCode');
       const data = await api('POST', state.config.needsSetup ? '/api/register' : '/api/login', {
         username: document.getElementById('gateUser').value,
         password: document.getElementById('gatePass').value,
+        code: kode && !kodeFelt.hidden ? kode.value.trim() : undefined,
       });
+      /*
+       * Kodeordet passede, men der mangler ét trin.
+       *
+       * Serveren svarer 200 med `needsCode` - ikke en fejl, for der er intet
+       * galt. Feltet foldes ud, og markoeren staar i det: den, der lige har
+       * tastet sit kodeord, skal ikke ogsaa lede efter, hvor koden skal hen.
+       */
+      if (data && data.needsCode) {
+        kodeFelt.hidden = false;
+        kode.focus();
+        return;
+      }
       state.user = data.user;
       state.config.needsSetup = false;
       if (fortsaetTilConnector()) return;
@@ -1104,6 +1126,12 @@ function bindGate() {
     } catch (ex) {
       err.textContent = ex.message;
       err.hidden = false;
+      // Var det KODEN, der var forkert, skal feltet blive staaende - ellers
+      // ser det ud, som om kodeordet var galt, og man taster det om.
+      if (ex.code === 'bad_code') {
+        const kf = document.getElementById('gateCodeField');
+        if (kf) { kf.hidden = false; document.getElementById('gateCode').select(); }
+      }
     }
   });
   const pk = document.getElementById('gatePasskey');
@@ -3662,6 +3690,13 @@ function sideSettings() {
       where passkeys do not exist at all — so doda never lets one replace it.</p>
     </div>
 
+    <div class="card"><h2>Two-step sign-in</h2>
+      <p class="lead" style="margin:6px 0 0">A six-digit code from an authenticator app,
+      on top of your password. A passkey is stronger where it works — but it needs https,
+      and the panel is reached over plain http. This covers that gap.</p>
+      <div id="totpBox">Loading…</div>
+    </div>
+
     <div class="card"><h2>Access keys</h2>
       <p class="lead" style="margin:6px 0 0">For iOS Shortcuts, Siri and anything else
       that talks to doda from outside. One key per device or purpose, so you can revoke
@@ -3924,6 +3959,7 @@ function bindSettings() {
   bindNoegler();
   bindData();
   bindPush();
+  bindTotp();
   bindSagu();
   bindNotion();
   tegnPasskeys();
@@ -6938,6 +6974,149 @@ async function bindPush() {
   } catch (ex) {
     boks.innerHTML = `<p class="lead" style="margin:12px 0 0">${esc(ex.message)}</p>`;
   }
+}
+
+/**
+ * Totrinsbekraeftelse i Settings.
+ *
+ * Tre tilstande: slaaet fra, midt i en opsaetning, og slaaet til. Den midterste
+ * er den vigtige - hemmeligheden er lavet, men den er IKKE i brug, foer en kode
+ * er set. Ellers kunne man laase sig selv ude ved at lukke fanen.
+ */
+async function bindTotp() {
+  const boks = document.getElementById('totpBox');
+  if (!boks) return;
+
+  const tegn = (d) => {
+    if (d.enabled) {
+      boks.innerHTML = `
+        <div class="keyrow" style="margin-top:12px">
+          <div class="keyrow-main">
+            <div class="keyrow-name">On</div>
+            <div class="meta">${d.recoveryLeft} recovery code${d.recoveryLeft === 1 ? '' : 's'} left</div>
+          </div>
+          <button class="btn ghost" id="ttOff">Turn off</button>
+        </div>
+        ${d.recoveryLeft <= 2 ? `<p class="gate-note" style="text-align:left"><strong>Few
+          recovery codes left.</strong> Turn two-step off and on again to get a new set —
+          a lost phone with no codes left locks you out of your own server.</p>` : ''}`;
+      boks.querySelector('#ttOff').addEventListener('click', async () => {
+        // Kodeordet kraeves - en aaben skaerm maa ikke kunne fjerne laaget.
+        const kode = window.prompt('Enter your password to turn two-step off:');
+        if (kode === null) return;
+        try {
+          tegn(await api('POST', '/api/v1/totp/disable', { password: kode }));
+          toast('Two-step is off');
+        } catch (ex) { toast(ex.message); }
+      });
+      return;
+    }
+
+    boks.innerHTML = `
+      <div style="margin-top:12px">
+        <button class="btn primary" id="ttOn">Set it up</button>
+      </div>`;
+    boks.querySelector('#ttOn').addEventListener('click', async () => {
+      try { visTotpOpsaetning(await api('POST', '/api/v1/totp/setup', {})); }
+      catch (ex) { toast(ex.message); }
+    });
+  };
+
+  try { tegn(await api('GET', '/api/v1/totp')); }
+  catch (ex) { boks.innerHTML = `<p class="lead" style="margin:12px 0 0">${esc(ex.message)}</p>`; }
+}
+
+/**
+ * Opsaetningen i en rude - og bagefter noedudgangene i en anden.
+ *
+ * Ruden ligger UDEN for siden, saa en optegning ikke kan tegne den vaek. Det
+ * er samme fejl, Sagu ramte med sin noegle: den blinkede og var vaek for altid
+ * (Sagu §26). Hemmeligheden vises kun her, kun én gang.
+ */
+function visTotpOpsaetning(d) {
+  const host = document.createElement('div');
+  host.className = 'modal';
+  host.innerHTML = `
+  <div class="modal-card" role="dialog" aria-modal="true">
+    <h2>Set up two-step</h2>
+    <p class="lead" style="margin:6px 0 16px">Scan this with your authenticator app —
+    1Password, Google Authenticator, Aegis, whichever you use. Then type the six digits
+    it shows, so we know it works before it is switched on.</p>
+    ${d.qr ? `<div class="qrboks">${d.qr}</div>` : ''}
+    <details style="margin-top:10px">
+      <summary class="meta" style="cursor:pointer">Can't scan? Type the key instead</summary>
+      <div class="keyshow" id="ttSecret" style="margin-top:8px">${esc(d.secret)}</div>
+    </details>
+    <label class="field" style="margin-top:14px"><span>The six digits</span>
+      <input class="input" id="ttCode" inputmode="numeric" autocomplete="one-time-code"
+        maxlength="6" placeholder="000000"></label>
+    <p class="gate-error" id="ttErr" hidden></p>
+    <div class="modal-foot">
+      <span style="flex:1"></span>
+      <button class="btn" id="ttCancel">Cancel</button>
+      <button class="btn primary" id="ttVerify">Turn it on</button>
+    </div>
+  </div>`;
+  document.body.appendChild(host);
+  const luk = () => host.remove();
+  host.querySelector('#ttCancel').addEventListener('click', luk);
+  host.querySelector('#ttCode').focus();
+
+  host.querySelector('#ttVerify').addEventListener('click', async () => {
+    const fejl = host.querySelector('#ttErr');
+    fejl.hidden = true;
+    try {
+      const svar = await api('POST', '/api/v1/totp/enable',
+        { code: host.querySelector('#ttCode').value });
+      luk();
+      visGenoprettelseskoder(svar.recovery);
+      bindTotp();
+    } catch (ex) { fejl.textContent = ex.message; fejl.hidden = false; }
+  });
+}
+
+/**
+ * Noedudgangene - vist ÉN gang, i en rude man skal lukke selv.
+ *
+ * Den lukker IKKE paa et klik ved siden af, selv om alle andre ruder i appen
+ * goer: de kan aabnes igen, det kan denne ikke. Reglen boejes netop dér, hvor
+ * den ellers ville goere skade.
+ */
+function visGenoprettelseskoder(koder) {
+  const host = document.createElement('div');
+  host.className = 'modal';
+  host.innerHTML = `
+  <div class="modal-card" role="dialog" aria-modal="true">
+    <h2>Two-step is on — save these</h2>
+    <p class="lead" style="margin:6px 0 16px">Each one works <strong>once</strong>, in place
+    of a code from your app. This is the only time they are shown; only a hash is stored.
+    Print them or put them somewhere that is not your phone — if your phone is gone and
+    these are too, nobody can let you back in.</p>
+    <div class="keyshow" id="ttCodes" style="line-height:1.9">${koder.map(esc).join('<br>')}</div>
+    <div class="modal-foot">
+      <span style="flex:1"></span>
+      <button class="btn" id="ttCopy">Copy</button>
+      <button class="btn primary" id="ttDone">I have saved them</button>
+    </div>
+  </div>`;
+  document.body.appendChild(host);
+  host.querySelector('#ttDone').addEventListener('click', () => host.remove());
+  host.querySelector('#ttCopy').addEventListener('click', async () => {
+    try {
+      // Samme forbehold som adgangsnoeglen: clipboard kraever secure context,
+      // og panelet naas over http paa IP:port.
+      if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(koder.join('\n'));
+      else {
+        const r = document.createRange();
+        r.selectNodeContents(host.querySelector('#ttCodes'));
+        const sel = getSelection();
+        sel.removeAllRanges();
+        sel.addRange(r);
+        document.execCommand('copy');
+      }
+      toast('Copied');
+    } catch { toast('Could not copy — select them by hand.'); }
+  });
 }
 
 /* Notion-kortet i Settings. Tokenet sendes op, aldrig ned. */

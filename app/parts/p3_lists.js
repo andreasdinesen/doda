@@ -1070,6 +1070,13 @@ function sideSettings() {
       where passkeys do not exist at all — so doda never lets one replace it.</p>
     </div>
 
+    <div class="card"><h2>Two-step sign-in</h2>
+      <p class="lead" style="margin:6px 0 0">A six-digit code from an authenticator app,
+      on top of your password. A passkey is stronger where it works — but it needs https,
+      and the panel is reached over plain http. This covers that gap.</p>
+      <div id="totpBox">Loading…</div>
+    </div>
+
     <div class="card"><h2>Access keys</h2>
       <p class="lead" style="margin:6px 0 0">For iOS Shortcuts, Siri and anything else
       that talks to doda from outside. One key per device or purpose, so you can revoke
@@ -1332,6 +1339,7 @@ function bindSettings() {
   bindNoegler();
   bindData();
   bindPush();
+  bindTotp();
   bindSagu();
   bindNotion();
   tegnPasskeys();
