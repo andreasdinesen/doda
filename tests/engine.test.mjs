@@ -258,3 +258,54 @@ test('kontekster på en gentagelse følger med til hver ny forekomst', async () 
   assert.ok(naeste, 'der skal komme en ny forekomst');
   assert.deepEqual(naeste.contexts.map((c) => c.name), ['vaerksted']);
 });
+
+/*
+ * »Fra fuldfoerelse« skal ogsaa flytte den DAG, reglen haenger paa.
+ *
+ * `every! month` har ingen dag i teksten, saa maanedsdagen udledes af ankeret
+ * - datoen da reglen blev skrevet. Blev reglen lavet den 22., stod der
+ * `monthday: 22` i den for altid, og selv om serveren regnede FRA i dag, gav
+ * naesteForekomst den 22. i naeste maaned. Andreas fuldfoerte den 23. og fik
+ * den 22. tilbage.
+ */
+test('fra fuldførelse: en månedlig regel flytter sig til den dag, jeg blev færdig', async () => {
+  const r = await J('/api/v1/capture', { text: 'skift linser !every! month', createNew: true });
+
+  // Sæt scenen: reglen blev skrevet en ANDEN dag i måneden end i dag.
+  const iDag = new Date();
+  const enAndenDag = iDag.getDate() === 1 ? 28 : iDag.getDate() - 1;
+  medDb((db) => {
+    const raekke = db.prepare('SELECT rule FROM recurrences WHERE id = ?').get(r.recurrence.id);
+    const regel = JSON.parse(raekke.rule);
+    regel.monthday = enAndenDag;
+    db.prepare('UPDATE recurrences SET rule = ? WHERE id = ?')
+      .run(JSON.stringify(regel), r.recurrence.id);
+  });
+
+  const svar = await J(`/api/v1/items/${r.item.id}/complete`, {});
+  const dag = Number(svar.recurrence.next_due.slice(8, 10));
+  assert.equal(dag, iDag.getDate(),
+    `naeste skal falde paa den dag, jeg blev faerdig (${iDag.getDate()}), fik ${svar.recurrence.next_due}`);
+
+  // Og reglen SELV skal vaere flyttet - ellers ville overskriften blive ved
+  // med at sige "on the 22nd", mens forfaldet laa den 23.
+  assert.equal(svar.recurrence.rule.monthday, iDag.getDate(),
+    'reglen skal gemme den nye maanedsdag');
+});
+
+test('en fast plan flytter IKKE sin dag, selv om jeg blev færdig en anden dag', async () => {
+  const r = await J('/api/v1/capture', { text: 'husleje !every month', createNew: true });
+  const foer = r.recurrence.rule.monthday;
+  medDb((db) => {
+    const raekke = db.prepare('SELECT rule FROM recurrences WHERE id = ?').get(r.recurrence.id);
+    const regel = JSON.parse(raekke.rule);
+    regel.monthday = foer === 1 ? 28 : 1;
+    db.prepare('UPDATE recurrences SET rule = ? WHERE id = ?')
+      .run(JSON.stringify(regel), r.recurrence.id);
+  });
+  const svar = await J(`/api/v1/items/${r.item.id}/complete`, {});
+  // Fast plan haenger paa sin egen dato - den maa ikke rykke sig, fordi nogen
+  // blev faerdig paa et andet tidspunkt.
+  assert.equal(svar.recurrence.rule.monthday, foer === 1 ? 28 : 1,
+    'en fast plan gentolkes ikke');
+});

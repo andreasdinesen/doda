@@ -1207,11 +1207,32 @@ function opretGentagelse(regel, skabelon) {
 
 /** Lukker en forekomst og aabner den naeste. */
 function rykGentagelse(r, fraDato, taelSomSprunget) {
-  const naeste = parse.naesteForekomst(r.rule, fraDato);
+  /*
+   * »Fra fuldfoerelse« skal ogsaa flytte den DAG, reglen haenger paa.
+   *
+   * `every! month` har ingen dag i teksten, saa maanedsdagen udledes af
+   * ankeret - datoen da reglen blev skrevet. Blev den lavet den 22., stod der
+   * `monthday: 22` i reglen for altid, og selv om serveren regnede FRA i dag,
+   * gav `naesteForekomst` den 22. i naeste maaned. Andreas fuldfoerte den 23.
+   * og fik den 22. tilbage.
+   *
+   * Derfor gentolkes reglen med fuldfoerelsesdatoen som anker. TEKSTEN er
+   * uaendret; kun de felter, der ER udledt af ankeret, flytter sig - og siger
+   * frasen selv en dag (»every! month on the 22nd«), bliver den staaende.
+   *
+   * Den gentolkede regel GEMMES, ellers ville overskriften blive ved med at
+   * sige »on the 22nd«, mens forfaldet laa den 23.
+   */
+  let regel = r.rule;
+  if (regel && regel.mode === 'completion' && regel.text) {
+    const paany = parse.tolkGentagelse(regel.text, fraDato);
+    if (paany) regel = paany;
+  }
+  const naeste = parse.naesteForekomst(regel, fraDato);
   if (!naeste) return null;
   db.prepare(`
-    UPDATE recurrences SET next_due = ?, skips = skips + ?, last_completed_at = ?, updated_at = ?
-     WHERE id = ?`).run(naeste, taelSomSprunget ? 1 : 0, taelSomSprunget ? r.last_completed_at : now(), now(), r.id);
+    UPDATE recurrences SET rule = ?, next_due = ?, skips = skips + ?, last_completed_at = ?, updated_at = ?
+     WHERE id = ?`).run(JSON.stringify(regel), naeste, taelSomSprunget ? 1 : 0, taelSomSprunget ? r.last_completed_at : now(), now(), r.id);
   const opdateret = hentGentagelse(r.id);
   // Sat pa pause: reglen bevares, men der laves ingen ny forekomst.
   if (opdateret.paused) return null;

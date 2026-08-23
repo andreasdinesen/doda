@@ -337,6 +337,21 @@ Kan ikke teksten tolkes, **oprettes opgaven alligevel** uden dato, og chippen si
 !sidste hverdag i måneden
 ```
 
+**Fra fuldførelse flytter også den DAG, reglen hænger på (v52).** `every! month`
+har ingen dag i teksten, så månedsdagen udledes af *ankeret* — datoen, reglen
+blev skrevet. Blev den lavet den 22., stod der `monthday: 22` i den for altid,
+og selv om serveren regnede fra i dag, gav `naesteForekomst` den 22. i næste
+måned: markér udført den 23., få den 22. tilbage.
+
+`rykGentagelse()` gentolker derfor reglen med **fuldførelsesdatoen** som anker.
+Teksten er uændret; kun de felter, der *er* udledt af ankeret, flytter sig — og
+siger frasen selv en dag (`every! month on the 22nd`), bliver den stående. Den
+gentolkede regel gemmes, ellers ville overskriften blive ved med at sige »on
+the 22nd«, mens forfaldet lå den 23.
+
+**En fast plan gentolkes ikke.** Den hænger på sin egen dato, og den må ikke
+rykke sig, fordi nogen blev færdig på et andet tidspunkt. Der er test på begge.
+
 Dette **afviger bevidst** fra handover §5.6, der gjorde »efter fuldførelse« til
 standard. Andreas har valgt Todoist-kompatibilitet, fordi han kender syntaksen —
 og synligheden løses i stedet af preview-chippen, der altid skriver tilstanden ud.
