@@ -188,7 +188,8 @@ function elementRaekke(it, i) {
     : `<button class="tick${it.status === 'done' || (venter && venter.type === 'complete') ? ' on' : ''}" data-done="${esc(it.id)}"
       aria-label="Mark done" title="Mark done"></button>`}
     <div class="item-main">
-      <div class="item-title">${linkify(it.title)}</div>
+      <div class="item-title">${it.starred
+    ? `<span class="stjerne" title="Starred — kept at the top">${icon('star', 14)}</span> ` : ''}${linkify(it.title)}</div>
       ${meta.length ? `<div class="item-meta meta">${meta.join(' · ')}</div>` : ''}
     </div>
     ${it.link_url ? `<a class="item-flag" href="${esc(it.link_url)}" target="_blank" rel="noopener noreferrer"
@@ -614,6 +615,8 @@ async function aabnElement(listeItem) {
     note: it.note,
     status: it.status,
     project_id: it.project_id,
+    area_id: it.area_id || null,
+    starred: it.starred ? 1 : 0,
     due_date: it.due_date,
     due_time: it.due_time,
     defer_date: it.defer_date,
@@ -708,8 +711,17 @@ async function aabnElement(listeItem) {
     const kontekster = state.contexts.filter((c) => u.contexts.includes(c.id));
     // Nye navne vises som chips med det samme, saa man kan se hvad Save laver.
     const nye = u.nyeKontekster.map((n) => `<span class="chip">#${esc(n)}</span>`).join('');
+    const omraade = u.area_id ? (state.areas.find((a) => a.id === u.area_id) || {}).name : null;
     host.querySelector('#dChips').innerHTML = `
+      ${it.kind === 'task' ? `<button class="chip flat${u.starred ? ' set' : ''}" data-edit="star"
+        title="${u.starred ? 'Starred — kept at the top' : 'Star it to keep it at the top'}">${
+  icon('star', 13)} ${u.starred ? 'starred' : 'star'}</button>` : ''}
       <button class="chip flat" data-edit="project">${esc(projekt || 'no project')}</button>
+      <!-- Omraadet staar ved siden af projektet, fordi det er samme slags valg:
+           hvor hoerer det her hjemme. Er der et projekt, arver opgaven dets
+           omraade, og saa er chippen kun til at OVERSTYRE. -->
+      <button class="chip flat${u.area_id ? ' set' : ''}" data-edit="area">${
+  esc(omraade || 'no area')}</button>
       <button class="chip flat" data-edit="status">${esc(statusNavn(u.status))}</button>
       <button class="chip flat${u.due_date ? ' set' : ''}" data-edit="due">${esc(visDatoKort(u.due_date) || 'no date')}</button>
       ${u.defer_date ? `<button class="chip flat set" data-edit="defer">hidden until ${esc(visDatoKort(u.defer_date))}</button>`
@@ -746,7 +758,18 @@ async function aabnElement(listeItem) {
     host.querySelectorAll('[data-edit]').forEach((knap) => {
       knap.addEventListener('click', () => {
         const hvad = knap.dataset.edit;
-        if (hvad === 'project') {
+        if (hvad === 'star') {
+          // En kontakt, ikke et valg fra en liste: der er kun to tilstande.
+          u.starred = u.starred ? 0 : 1;
+          tegnChipsRow();
+        } else if (hvad === 'area') {
+          redigerInline(knap, {
+            tag: 'select',
+            options: `<option value="">— no area —</option>${state.areas.map((a) =>
+              `<option value="${esc(a.id)}"${a.id === u.area_id ? ' selected' : ''}>${esc(a.name)}</option>`).join('')}`,
+            onchange: (v) => { u.area_id = v || null; },
+          });
+        } else if (hvad === 'project') {
           redigerInline(knap, {
             tag: 'select',
             options: `<option value="">— no project —</option>${state.projects.map((p) =>
@@ -940,6 +963,8 @@ async function aabnElement(listeItem) {
     note: u.note,
     status: u.status,
     project_id: u.project_id,
+    area_id: u.area_id,
+    starred: u.starred,
     due_date: u.due_date,
     due_time: u.due_time,
     defer_date: u.defer_date,

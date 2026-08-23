@@ -309,3 +309,103 @@ test('en fast plan flytter IKKE sin dag, selv om jeg blev færdig en anden dag',
   assert.equal(svar.recurrence.rule.monthday, foer === 1 ? 28 : 1,
     'en fast plan gentolkes ikke');
 });
+
+/* ================== push om den ugentlige gennemgang ================== */
+
+/*
+ * Baandet i appen er stadig den primaere vej (§5.12), og pushen er slaaet FRA
+ * som standard.
+ *
+ * `due-now` er det, service workeren spoerger om, naar en TOM push vaekker
+ * den - saa det er dér, man kan se, hvad den ville vise.
+ *
+ * BEMAERK hvad der IKKE er daekket: selve gaten (`gennemgangSkalMindes`)
+ * koeres kun af paamindelseskoeren, og den kraever et rigtigt
+ * push-abonnement med en VAPID-noegle og en endpoint, der svarer. Det, der
+ * proeves her, er standardvaerdien, opbevaringen og det svar, service
+ * workeren faar - ikke afsendelsen selv.
+ */
+
+const saetIndstilling = (n, v) => medDb((db) => {
+  db.prepare('INSERT INTO settings (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value = ?')
+    .run(n, String(v), String(v));
+});
+
+test('en frisk installation har gennemgangs-push slået FRA', async () => {
+  // §5.12: saa faa notifikationer som muligt, standard ingen.
+  const r = await J('/api/v1/review');
+  assert.equal(r.push, false, 'ingen maa begynde at sende af sig selv');
+  assert.equal(r.time, '10:00', 'men et klokkeslaet skal der staa noget i');
+});
+
+test('due-now varsler ikke noget af sig selv', async () => {
+  const d = await J('/api/v1/due-now');
+  assert.equal(d.review, false);
+});
+
+test('due-now fortæller service workeren, at det var gennemgangen', async () => {
+  // Saadan ser det ud lige efter, koeren har sendt.
+  saetIndstilling('review_notified', Math.floor(Date.now() / 1000));
+  const d = await J('/api/v1/due-now');
+  assert.equal(d.review, true, 'service workeren skal kunne se det');
+});
+
+test('et gammelt varsel vises ikke igen', async () => {
+  // Ti minutter siden: vinduet er fem, saa den er forbi.
+  saetIndstilling('review_notified', Math.floor(Date.now() / 1000) - 600);
+  const d = await J('/api/v1/due-now');
+  assert.equal(d.review, false,
+    'ellers ville en push om en forfalden OPGAVE vise gennemgangen i stedet');
+});
+
+test('gennemgangens klokkeslæt og kontakt kan gemmes og læses tilbage', async () => {
+  await J('/api/v1/settings', { settings: { review_weekday: '7', review_time: '19:00', review_push: '1' } });
+  const r = await J('/api/v1/review');
+  assert.equal(r.time, '19:00');
+  assert.equal(r.push, true);
+  assert.equal(r.weekday, 7);
+});
+
+/* ==================== stjerne og område på en opgave =================== */
+
+/*
+ * Stjernen er ÉT flag, ikke niveauer - og pointen er, at den LOEFTER opgaven
+ * i Next Actions. Et maerkat, der ikke flytter noget, ville bare vaere pynt.
+ */
+test('en stjernet opgave ligger øverst i Next Actions', async () => {
+  const a = await J('/api/v1/capture', { text: 'foerst oprettet', createNew: true });
+  const b = await J('/api/v1/capture', { text: 'sidst oprettet', createNew: true });
+  for (const x of [a, b]) await J(`/api/v1/items/${x.item.id}`, { status: 'next' });
+
+  const foer = (await J('/api/v1/items?status=next')).items.map((i) => i.title);
+  assert.ok(foer.indexOf('foerst oprettet') < foer.indexOf('sidst oprettet'),
+    'uden stjerne staar de i oprettelsesraekkefoelge');
+
+  await J(`/api/v1/items/${b.item.id}`, { starred: true });
+  const efter = (await J('/api/v1/items?status=next')).items.map((i) => i.title);
+  assert.equal(efter[0], 'sidst oprettet', 'den stjernede skal loeftes til toppen');
+});
+
+test('stjernen kan tages af igen', async () => {
+  const r = await J('/api/v1/capture', { text: 'en opgave med stjerne', createNew: true });
+  await J(`/api/v1/items/${r.item.id}`, { starred: true });
+  assert.equal((await J(`/api/v1/items/${r.item.id}`)).item.starred, 1);
+  await J(`/api/v1/items/${r.item.id}`, { starred: false });
+  assert.equal((await J(`/api/v1/items/${r.item.id}`)).item.starred, 0);
+});
+
+/* Kolonnen har vaeret i skemaet siden F1, men der var ingen vej til at saette
+   den - hverken i brugerfladen eller i API'et. */
+test('en opgave kan få et område - og få det taget af igen', async () => {
+  const omr = await J('/api/v1/areas', { name: 'Privat' });
+  const id = (omr.area || omr.areas?.at(-1) || {}).id;
+  assert.ok(id, `kunne ikke oprette omraade: ${JSON.stringify(omr)}`);
+
+  const r = await J('/api/v1/capture', { text: 'en opgave med omraade', createNew: true });
+  await J(`/api/v1/items/${r.item.id}`, { area_id: id });
+  assert.equal((await J(`/api/v1/items/${r.item.id}`)).item.area_id, id);
+
+  await J(`/api/v1/items/${r.item.id}`, { area_id: null });
+  assert.equal((await J(`/api/v1/items/${r.item.id}`)).item.area_id, null,
+    'null er et gyldigt valg: »intet omraade«');
+});

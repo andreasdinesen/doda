@@ -6,7 +6,7 @@
  * browserens cache, og SW'en kan servere en gammel app.js i det uendelige
  * (RUNE-ERFARINGER §5). */
 
-const VERSION = 52;
+const VERSION = 54;
 const CACHE = `doda-v${VERSION}`;
 
 // Praecis de samme URL'er som index.html henter - ellers ligger der to
@@ -125,11 +125,26 @@ self.addEventListener('fetch', (e) => {
 self.addEventListener('push', (e) => {
   e.waitUntil((async () => {
     let items = [];
+    let review = false;
     try {
       // fetch i en service worker sender selv cookies til samme oprindelse.
       const r = await fetch('./api/v1/due-now', { credentials: 'same-origin' });
-      if (r.ok) items = (await r.json()).items || [];
+      if (r.ok) {
+        const d = await r.json();
+        items = d.items || [];
+        review = !!d.review;
+      }
     } catch { /* uden svar viser vi det generelle */ }
+
+    /* Gennemgangen har sin egen besked og sit eget `tag`: den handler ikke om
+       en bestemt opgave, og den maa ikke skubbe en forfalden opgave vaek. */
+    if (review) {
+      return self.registration.showNotification('Weekly review', {
+        body: 'It is the day you set aside for it. Open doda to start.',
+        tag: 'doda-review', icon: './icon-192.png', badge: './icon-192.png',
+        data: { url: './?view=review' },
+      });
+    }
 
     if (items.length === 1) {
       const it = items[0];

@@ -764,7 +764,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 52;
+const APP_VERSION = 54;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -934,6 +934,9 @@ const ICONS = {
   plus: '<path d="M12 5.5v13M5.5 12h13"/>',
   note: '<path d="M6 4.5h8.5L19 9v10.5H6z"/><path d="M14 4.5V9h5"/><path d="M9 13h7M9 16h4"/>',
   clock: '<circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 1.8"/>',
+  // Stjernen. Samme stregtykkelse som resten - den skal loefte opgaven i
+  // listen, ikke raabe fra den.
+  star: '<path d="M12 4.2l2.35 4.76 5.25.77-3.8 3.7.9 5.23L12 16.19l-4.7 2.47.9-5.23-3.8-3.7 5.25-.77z"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 3.5v2M12 18.5v2M20.5 12h-2M5.5 12h-2M17.8 6.2l-1.4 1.4M7.6 16.4l-1.4 1.4M17.8 17.8l-1.4-1.4M7.6 7.6L6.2 6.2"/>',
   moon: '<path d="M20 14.6A8.6 8.6 0 019.4 4 8.6 8.6 0 1020 14.6z"/>',
   pin: '<path d="M9 3.5h6l-1 5 3 3.5H7l3-3.5z"/><path d="M12 12v8.5"/>',
@@ -1674,7 +1677,26 @@ function oauthNaeste() {
  */
 async function aabnFraAdressen() {
   let id = null;
-  try { id = new URLSearchParams(location.search).get('item'); } catch { id = null; }
+  let visning = null;
+  try {
+    const q = new URLSearchParams(location.search);
+    id = q.get('item');
+    visning = q.get('view');
+  } catch { id = null; }
+
+  /*
+   * `?view=review` - dét, en push om den ugentlige gennemgang lander paa.
+   *
+   * Uden den ville notifikationen aabne forsiden, og saa skulle man klikke
+   * »Start« i baandet bagefter. En besked, der beder om en handling, skal
+   * lande dér, hvor handlingen sker.
+   */
+  if (visning === 'review' && state.user) {
+    try { history.replaceState(null, '', location.pathname); } catch { /* ligegyldigt */ }
+    gaaTil('review');
+    return;
+  }
+
   if (!id || !state.user) return;
   try { history.replaceState(null, '', location.pathname); } catch { /* ligegyldigt */ }
   try {
@@ -2426,10 +2448,20 @@ function bindOmniFiler() {
     stop(e);
     kort.classList.remove('draaber');
     omniState.filer = omniState.filer.concat(filer);
-    // Filnavnet UDEN endelse er et bedre forslag end intet - men det maa
-    // aldrig overskrive noget, brugeren allerede har skrevet.
-    if (!el.value.trim()) el.value = filer[0].name.replace(/\.[^.]+$/, '');
+    /*
+     * Filnavnet UDEN endelse er et bedre forslag end intet - men det maa
+     * aldrig overskrive noget, brugeren allerede har skrevet.
+     *
+     * Og det MARKERES. Foer stod det som almindelig tekst, saa den, der ville
+     * skrive sin egen titel, fik »min titel C3FF4A37-F58E-4B70…« og skulle
+     * slette et navn, han aldrig havde skrevet. Et forslag, man skal rydde op
+     * efter, er ikke et forslag. Markeret forsvinder det ved foerste
+     * tastetryk - og vil man beholde det, er Enter eller en piletast nok.
+     */
+    const tomt = !el.value.trim();
+    if (tomt) el.value = filer[0].name.replace(/\.[^.]+$/, '');
     el.focus();
+    if (tomt) el.select();
     opdaterOmni();
   });
 }
@@ -2711,7 +2743,8 @@ function elementRaekke(it, i) {
     : `<button class="tick${it.status === 'done' || (venter && venter.type === 'complete') ? ' on' : ''}" data-done="${esc(it.id)}"
       aria-label="Mark done" title="Mark done"></button>`}
     <div class="item-main">
-      <div class="item-title">${linkify(it.title)}</div>
+      <div class="item-title">${it.starred
+    ? `<span class="stjerne" title="Starred — kept at the top">${icon('star', 14)}</span> ` : ''}${linkify(it.title)}</div>
       ${meta.length ? `<div class="item-meta meta">${meta.join(' · ')}</div>` : ''}
     </div>
     ${it.link_url ? `<a class="item-flag" href="${esc(it.link_url)}" target="_blank" rel="noopener noreferrer"
@@ -3137,6 +3170,8 @@ async function aabnElement(listeItem) {
     note: it.note,
     status: it.status,
     project_id: it.project_id,
+    area_id: it.area_id || null,
+    starred: it.starred ? 1 : 0,
     due_date: it.due_date,
     due_time: it.due_time,
     defer_date: it.defer_date,
@@ -3231,8 +3266,17 @@ async function aabnElement(listeItem) {
     const kontekster = state.contexts.filter((c) => u.contexts.includes(c.id));
     // Nye navne vises som chips med det samme, saa man kan se hvad Save laver.
     const nye = u.nyeKontekster.map((n) => `<span class="chip">#${esc(n)}</span>`).join('');
+    const omraade = u.area_id ? (state.areas.find((a) => a.id === u.area_id) || {}).name : null;
     host.querySelector('#dChips').innerHTML = `
+      ${it.kind === 'task' ? `<button class="chip flat${u.starred ? ' set' : ''}" data-edit="star"
+        title="${u.starred ? 'Starred — kept at the top' : 'Star it to keep it at the top'}">${
+  icon('star', 13)} ${u.starred ? 'starred' : 'star'}</button>` : ''}
       <button class="chip flat" data-edit="project">${esc(projekt || 'no project')}</button>
+      <!-- Omraadet staar ved siden af projektet, fordi det er samme slags valg:
+           hvor hoerer det her hjemme. Er der et projekt, arver opgaven dets
+           omraade, og saa er chippen kun til at OVERSTYRE. -->
+      <button class="chip flat${u.area_id ? ' set' : ''}" data-edit="area">${
+  esc(omraade || 'no area')}</button>
       <button class="chip flat" data-edit="status">${esc(statusNavn(u.status))}</button>
       <button class="chip flat${u.due_date ? ' set' : ''}" data-edit="due">${esc(visDatoKort(u.due_date) || 'no date')}</button>
       ${u.defer_date ? `<button class="chip flat set" data-edit="defer">hidden until ${esc(visDatoKort(u.defer_date))}</button>`
@@ -3269,7 +3313,18 @@ async function aabnElement(listeItem) {
     host.querySelectorAll('[data-edit]').forEach((knap) => {
       knap.addEventListener('click', () => {
         const hvad = knap.dataset.edit;
-        if (hvad === 'project') {
+        if (hvad === 'star') {
+          // En kontakt, ikke et valg fra en liste: der er kun to tilstande.
+          u.starred = u.starred ? 0 : 1;
+          tegnChipsRow();
+        } else if (hvad === 'area') {
+          redigerInline(knap, {
+            tag: 'select',
+            options: `<option value="">— no area —</option>${state.areas.map((a) =>
+              `<option value="${esc(a.id)}"${a.id === u.area_id ? ' selected' : ''}>${esc(a.name)}</option>`).join('')}`,
+            onchange: (v) => { u.area_id = v || null; },
+          });
+        } else if (hvad === 'project') {
           redigerInline(knap, {
             tag: 'select',
             options: `<option value="">— no project —</option>${state.projects.map((p) =>
@@ -3463,6 +3518,8 @@ async function aabnElement(listeItem) {
     note: u.note,
     status: u.status,
     project_id: u.project_id,
+    area_id: u.area_id,
+    starred: u.starred,
     due_date: u.due_date,
     due_time: u.due_time,
     defer_date: u.defer_date,
@@ -6133,11 +6190,28 @@ async function sideReview() {
       </div>
       <div class="card">
         <h2>Reminder</h2>
-        <p class="lead" style="margin:6px 0 12px">A quiet nudge on the day you choose.
-        Nothing else in doda will ever notify you.</p>
+        <p class="lead" style="margin:6px 0 12px">A quiet nudge on the day you choose —
+        a banner when you open doda.</p>
         <select class="input" id="revDay" style="max-width:240px">
           ${dage.map((n, i) => `<option value="${i}"${i === d.weekday ? ' selected' : ''}>${n}</option>`).join('')}
         </select>
+        ${d.weekday ? `
+          <!-- Kun naar der ER en dag: en paamindelse uden en dag at minde om
+               er en kontakt, der ikke kan goere noget. -->
+          <label class="field" style="margin-top:16px">
+            <span>Also push me a notification
+              <span class="hint">The banner needs you to open doda — and the review is
+              the one thing you forget to open anything for. Off unless you turn it on.</span></span>
+            <span style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <button class="btn ${d.push ? 'primary' : ''}" id="revPush">
+                ${d.push ? 'Notification on' : 'Notification off'}</button>
+              <select class="input" id="revTime" style="max-width:140px"${d.push ? '' : ' disabled'}>
+                ${['08:00', '09:00', '10:00', '12:00', '17:00', '19:00', '20:00']
+    .map((t) => `<option value="${t}"${t === d.time ? ' selected' : ''}>${t}</option>`).join('')}
+              </select>
+            </span></label>
+          <p class="gate-note" style="text-align:left">Needs notifications turned on for
+          this device under <strong>Settings → Notifications</strong>.</p>` : ''}
       </div>
     </section>`;
     document.querySelectorAll('[data-mode]').forEach((el) => {
@@ -6149,7 +6223,25 @@ async function sideReview() {
     document.getElementById('revDay').addEventListener('change', async (e) => {
       await api('POST', '/api/v1/settings', { settings: { review_weekday: e.target.value } });
       toast(e.target.value === '0' ? 'Reminder off' : 'Reminder set');
+      // Dagen aabner og lukker for resten af kortet - tegn det forfra.
+      tegnSide();
     });
+    const revPush = document.getElementById('revPush');
+    if (revPush) {
+      revPush.addEventListener('click', async () => {
+        const til = !d.push;
+        await api('POST', '/api/v1/settings', { settings: { review_push: til ? '1' : '0' } });
+        toast(til ? 'You will be notified on the day' : 'Notification off — the banner stays');
+        tegnSide();
+      });
+    }
+    const revTime = document.getElementById('revTime');
+    if (revTime) {
+      revTime.addEventListener('change', async (e) => {
+        await api('POST', '/api/v1/settings', { settings: { review_time: e.target.value } });
+        toast('Saved');
+      });
+    }
     return;
   }
 

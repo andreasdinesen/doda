@@ -302,6 +302,21 @@ const MIGRATIONS = [
       ALTER TABLE projects ADD COLUMN link_checked_at INTEGER;
     `);
   },
+
+  function m12(d) {
+    /*
+     * Stjernen. ÉT flag, ikke niveauer.
+     *
+     * Andreas bad om prioritet 23-08-2026, og det, han ville, var at loefte
+     * en opgave i Next Actions - ikke at maerke den. Med hoej/normal/lav skal
+     * man tage stilling tre gange, og »lav« bliver et sted at gemme det, man
+     * alligevel ikke laver. Ét flag har én betydning og én virkning.
+     *
+     * DESIGN §7 sagde »ingen prioritetsniveauer«; omgoerelsen staar samme
+     * sted med begge begrundelser.
+     */
+    d.exec('ALTER TABLE items ADD COLUMN starred INTEGER NOT NULL DEFAULT 0');
+  },
 ];
 
 /*
@@ -867,7 +882,7 @@ const ITEM_FELTER = `
   i.id, i.kind, i.status, i.title, i.note, i.project_id, i.area_id,
   i.due_date, i.due_time, i.defer_date, i.waiting_for, i.seq,
   i.recurrence_id, i.skipped, i.created_at, i.updated_at, i.completed_at,
-  i.link_url, i.link_title`;
+  i.link_url, i.link_title, i.starred`;
 
 /** Haenger konteksterne pa en raekke elementer i ÉT opslag, ikke ét pr. element. */
 function medKontekster(raekker) {
@@ -915,7 +930,12 @@ function hentItems(filter) {
   const raekker = db.prepare(`
     SELECT ${ITEM_FELTER} FROM items i ${join}
      WHERE ${hvor.join(' AND ')}
-     ORDER BY ${filter.nyesteFoerst ? 'i.completed_at DESC, i.created_at DESC' : 'i.seq, i.created_at'}
+     ORDER BY ${filter.nyesteFoerst
+    ? 'i.completed_at DESC, i.created_at DESC'
+    /* Stjernede foerst. Det er hele pointen med stjernen: den skal LOEFTE
+       opgaven, ikke bare maerke den. Inden for hver gruppe er raekkefoelgen
+       uaendret, saa den, man selv har traekket paa plads, bliver staaende. */
+    : 'i.starred DESC, i.seq, i.created_at'}
      LIMIT ?`).all(...arg, Math.min(Number(filter.limit) || 500, 2000));
 
   return medVedhaeftningsantal(medKontekster(raekker));
@@ -962,6 +982,13 @@ function renseItem(raa) {
   if (typeof raa.title === 'string') ud.title = raa.title.trim().slice(0, GRAENSER.title);
   if (typeof raa.note === 'string') ud.note = raa.note.slice(0, GRAENSER.note);
   if (typeof raa.waiting_for === 'string') ud.waiting_for = raa.waiting_for.trim().slice(0, GRAENSER.waiting_for);
+  // Stjernen. Gemmes som 0/1, saa den kan sorteres paa direkte i SQL.
+  if (raa.starred !== undefined) ud.starred = raa.starred ? 1 : 0;
+  /* Omraadet paa en OPGAVE. Kolonnen har vaeret der siden F1, men der var
+     ingen vej til at saette den - hverken i brugerfladen eller her. Andreas
+     bad om den 23-08-2026. `null` er et gyldigt valg: »intet omraade«. */
+  if (raa.area_id === null) ud.area_id = null;
+  else if (typeof raa.area_id === 'string' && raa.area_id) ud.area_id = raa.area_id;
   for (const felt of ['due_date', 'defer_date']) {
     if (raa[felt] === null) ud[felt] = null;
     else if (typeof raa[felt] === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raa[felt])) ud[felt] = raa[felt];
@@ -1747,6 +1774,10 @@ const ROUTES = {
       startedAt: Number(getSetting('review_started', '0')) || 0,
       lastDone: Number(getSetting('review_done', '0')) || 0,
       weekday: Number(getSetting('review_weekday', '0')) || 0,
+      time: getSetting('review_time', '10:00'),
+      // Standard FRA. Handover §5.12: saa faa notifikationer som muligt, og
+      // en frisk installation skal ikke begynde at sende af sig selv.
+      push: getSetting('review_push', '') === '1',
       inbox: hentItems({ status: 'inbox' }),
       // Netop de projekter, der er den klassiske GTD-fejl.
       stalled: projekter.filter((p) => !p.next_count && p.open_count > 0),
@@ -2573,7 +2604,10 @@ const ROUTES = {
        WHERE notified_at IS NOT NULL AND notified_at > ? AND deleted = 0
          AND status NOT IN ('done','dropped')
        ORDER BY due_time LIMIT 5`).all(now() - 300);
-    sendJson(res, 200, { items });
+    /* Var det gennemgangen, der lige blev pushet? Service workeren faar en TOM
+       push og skal selv finde ud af, hvad den skal vise. */
+    const mindet = Number(getSetting('review_notified', '0')) || 0;
+    sendJson(res, 200, { items, review: !!mindet && now() - mindet < 300 });
   },
 
   'GET /api/v1/connections': (req, res) => {
@@ -2618,7 +2652,8 @@ const ROUTES = {
     if (!user) return;
     const body = await readJsonBody(req);
     // Whitelist - aldrig blind gennemskrivning af klientens noegler.
-    const ALLOWED = new Set(['theme', 'review_weekday', 'focus_item', 'focus_started', 'ical_alarm', 'notes_off']);
+    const ALLOWED = new Set(['theme', 'review_weekday', 'focus_item', 'focus_started',
+      'ical_alarm', 'notes_off', 'review_time', 'review_push']);
     const written = {};
     for (const [key, value] of Object.entries(body.settings || {})) {
       if (!ALLOWED.has(key)) continue;
@@ -2802,7 +2837,7 @@ const IMPORT_TABELLER = {
   contexts: ['id', 'name', 'seq', 'created_at', 'updated_at'],
   projects: ['id', 'name', 'outcome', 'area_id', 'parent_id', 'status', 'seq', 'reviewed_at',
     'created_at', 'updated_at', 'deleted'],
-  items: ['id', 'kind', 'status', 'title', 'note', 'project_id', 'area_id', 'due_date', 'due_time',
+  items: ['id', 'kind', 'status', 'title', 'note', 'project_id', 'area_id', 'starred', 'due_date', 'due_time',
     'defer_date', 'waiting_for', 'seq', 'recurrence_id', 'skipped', 'created_at', 'updated_at',
     'completed_at', 'deleted', 'dropped_with_project'],
   recurrences: ['id', 'rule', 'mode', 'template', 'next_due', 'next_time', 'paused', 'skips',
@@ -2836,7 +2871,8 @@ function importer(data) {
       tal[tabel] = n;
     }
     if (data.settings && typeof data.settings === 'object') {
-      const OK = new Set(['theme', 'review_weekday', 'review_done', 'ical_alarm', 'review_mode', 'review_focus']);
+      const OK = new Set(['theme', 'review_weekday', 'review_done', 'ical_alarm',
+        'review_mode', 'review_focus', 'review_time', 'review_push']);
       for (const [k, v] of Object.entries(data.settings)) if (OK.has(k)) setSetting(k, String(v));
     }
     db.exec('COMMIT');
@@ -2940,10 +2976,54 @@ function fjernAbonnement(id) {
  * hel dag, skal den IKKE vaekke folk med gaarsdagens paamindelser, naar den
  * starter igen - `notified_at` forhindrer gentagelser, men ikke en byge.
  */
+/**
+ * Skal der mindes om den ugentlige gennemgang lige nu?
+ *
+ * Baandet i appen har altid vaeret den primaere vej (§5.12), og det er den
+ * fortsat: det her er slaaet FRA som standard. Men baandet kraever, at man
+ * aabner doda - og gennemgangen er netop den ting, man glemmer at aabne noget
+ * for. Andreas bad om muligheden 23-08-2026.
+ *
+ * `review_notified` er et TIDSSTEMPEL, ikke bare en dato. Datoen alene ville
+ * raekke til »én paamindelse pr. dag«, men service workeren skal ogsaa kunne
+ * se, om pushen lige er sendt - den henter selv, hvad den skal vise, og skal
+ * kunne skelne gennemgangen fra en forfalden opgave.
+ */
+function gennemgangSkalMindes() {
+  if (getSetting('review_push', '') !== '1') return false;
+  if (!gennemgangForfalder()) return false;
+  const sidst = Number(getSetting('review_notified', '0')) || 0;
+  // Samme DAG er nok til at lade vaere - én paamindelse pr. gennemgang.
+  if (sidst && parse.fmtDato(new Date(sidst * 1000)) === parse.fmtDato(new Date())) return false;
+  const [t, m] = String(getSetting('review_time', '10:00')).split(':').map(Number);
+  if (!Number.isFinite(t) || !Number.isFinite(m)) return false;
+  const nu = new Date();
+  const minutter = nu.getHours() * 60 + nu.getMinutes();
+  const paa = t * 60 + m;
+  // Samme ensidige vindue som opgaverne: har serveren vaeret nede, skal den
+  // ikke vaekke nogen med formiddagens paamindelse om aftenen.
+  return minutter >= paa && minutter - paa <= 60;
+}
+
 async function tjekPaamindelser() {
   try {
     const abon = hentAbonnementer();
     if (!abon.length) return;
+
+    /*
+     * Gennemgangen foerst, og med sin EGEN afsendelse: den har intet at goere
+     * med, om der ogsaa er en opgave forfalden lige nu, og de to skal kunne
+     * komme hver for sig.
+     */
+    if (gennemgangSkalMindes()) {
+      // Stemples FOER afsendelsen - samme regel som opgaverne.
+      setSetting('review_notified', String(now()));
+      log(`paaminder om ugentlig gennemgang til ${abon.length} enhed(er)`);
+      for (const a of abon) {
+        const svar = await push.sendTil(a.endpoint);
+        if (svar.borte) fjernAbonnement(a.id);
+      }
+    }
     const varsel = Number(getSetting('push_lead', '0'));
     if (varsel < 0) return;
 

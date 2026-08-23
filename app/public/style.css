@@ -1131,6 +1131,10 @@ textarea.input { resize: vertical; min-height: 90px; font-family: inherit; }
 .notionkom-item .meta { margin-bottom: 4px; }
 /* Feltet til en ny kommentar. Knappen staar UNDER feltet og i hoejre side, saa
    den ikke klemmer teksten paa en smal skaerm. */
+/* Stjernen i listen. Diskret: den skal loefte opgaven, ikke raabe fra den. */
+.stjerne { color: var(--accent); vertical-align: -2px; margin-right: 2px; }
+.stjerne svg { fill: currentColor; }
+
 /* Et notekort, der foerer UD af doda - til noten i Sagu. */
 .sagukort { display: block; text-decoration: none; color: inherit; }
 .sagukort:hover { background: var(--card-hover); }

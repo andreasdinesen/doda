@@ -698,10 +698,20 @@ function bindOmniFiler() {
     stop(e);
     kort.classList.remove('draaber');
     omniState.filer = omniState.filer.concat(filer);
-    // Filnavnet UDEN endelse er et bedre forslag end intet - men det maa
-    // aldrig overskrive noget, brugeren allerede har skrevet.
-    if (!el.value.trim()) el.value = filer[0].name.replace(/\.[^.]+$/, '');
+    /*
+     * Filnavnet UDEN endelse er et bedre forslag end intet - men det maa
+     * aldrig overskrive noget, brugeren allerede har skrevet.
+     *
+     * Og det MARKERES. Foer stod det som almindelig tekst, saa den, der ville
+     * skrive sin egen titel, fik »min titel C3FF4A37-F58E-4B70…« og skulle
+     * slette et navn, han aldrig havde skrevet. Et forslag, man skal rydde op
+     * efter, er ikke et forslag. Markeret forsvinder det ved foerste
+     * tastetryk - og vil man beholde det, er Enter eller en piletast nok.
+     */
+    const tomt = !el.value.trim();
+    if (tomt) el.value = filer[0].name.replace(/\.[^.]+$/, '');
     el.focus();
+    if (tomt) el.select();
     opdaterOmni();
   });
 }

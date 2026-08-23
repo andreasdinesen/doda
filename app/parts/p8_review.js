@@ -197,11 +197,28 @@ async function sideReview() {
       </div>
       <div class="card">
         <h2>Reminder</h2>
-        <p class="lead" style="margin:6px 0 12px">A quiet nudge on the day you choose.
-        Nothing else in doda will ever notify you.</p>
+        <p class="lead" style="margin:6px 0 12px">A quiet nudge on the day you choose —
+        a banner when you open doda.</p>
         <select class="input" id="revDay" style="max-width:240px">
           ${dage.map((n, i) => `<option value="${i}"${i === d.weekday ? ' selected' : ''}>${n}</option>`).join('')}
         </select>
+        ${d.weekday ? `
+          <!-- Kun naar der ER en dag: en paamindelse uden en dag at minde om
+               er en kontakt, der ikke kan goere noget. -->
+          <label class="field" style="margin-top:16px">
+            <span>Also push me a notification
+              <span class="hint">The banner needs you to open doda — and the review is
+              the one thing you forget to open anything for. Off unless you turn it on.</span></span>
+            <span style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <button class="btn ${d.push ? 'primary' : ''}" id="revPush">
+                ${d.push ? 'Notification on' : 'Notification off'}</button>
+              <select class="input" id="revTime" style="max-width:140px"${d.push ? '' : ' disabled'}>
+                ${['08:00', '09:00', '10:00', '12:00', '17:00', '19:00', '20:00']
+    .map((t) => `<option value="${t}"${t === d.time ? ' selected' : ''}>${t}</option>`).join('')}
+              </select>
+            </span></label>
+          <p class="gate-note" style="text-align:left">Needs notifications turned on for
+          this device under <strong>Settings → Notifications</strong>.</p>` : ''}
       </div>
     </section>`;
     document.querySelectorAll('[data-mode]').forEach((el) => {
@@ -213,7 +230,25 @@ async function sideReview() {
     document.getElementById('revDay').addEventListener('change', async (e) => {
       await api('POST', '/api/v1/settings', { settings: { review_weekday: e.target.value } });
       toast(e.target.value === '0' ? 'Reminder off' : 'Reminder set');
+      // Dagen aabner og lukker for resten af kortet - tegn det forfra.
+      tegnSide();
     });
+    const revPush = document.getElementById('revPush');
+    if (revPush) {
+      revPush.addEventListener('click', async () => {
+        const til = !d.push;
+        await api('POST', '/api/v1/settings', { settings: { review_push: til ? '1' : '0' } });
+        toast(til ? 'You will be notified on the day' : 'Notification off — the banner stays');
+        tegnSide();
+      });
+    }
+    const revTime = document.getElementById('revTime');
+    if (revTime) {
+      revTime.addEventListener('change', async (e) => {
+        await api('POST', '/api/v1/settings', { settings: { review_time: e.target.value } });
+        toast('Saved');
+      });
+    }
     return;
   }
 

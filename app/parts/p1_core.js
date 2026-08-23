@@ -5,7 +5,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 52;
+const APP_VERSION = 54;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -175,6 +175,9 @@ const ICONS = {
   plus: '<path d="M12 5.5v13M5.5 12h13"/>',
   note: '<path d="M6 4.5h8.5L19 9v10.5H6z"/><path d="M14 4.5V9h5"/><path d="M9 13h7M9 16h4"/>',
   clock: '<circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 1.8"/>',
+  // Stjernen. Samme stregtykkelse som resten - den skal loefte opgaven i
+  // listen, ikke raabe fra den.
+  star: '<path d="M12 4.2l2.35 4.76 5.25.77-3.8 3.7.9 5.23L12 16.19l-4.7 2.47.9-5.23-3.8-3.7 5.25-.77z"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 3.5v2M12 18.5v2M20.5 12h-2M5.5 12h-2M17.8 6.2l-1.4 1.4M7.6 16.4l-1.4 1.4M17.8 17.8l-1.4-1.4M7.6 7.6L6.2 6.2"/>',
   moon: '<path d="M20 14.6A8.6 8.6 0 019.4 4 8.6 8.6 0 1020 14.6z"/>',
   pin: '<path d="M9 3.5h6l-1 5 3 3.5H7l3-3.5z"/><path d="M12 12v8.5"/>',
@@ -915,7 +918,26 @@ function oauthNaeste() {
  */
 async function aabnFraAdressen() {
   let id = null;
-  try { id = new URLSearchParams(location.search).get('item'); } catch { id = null; }
+  let visning = null;
+  try {
+    const q = new URLSearchParams(location.search);
+    id = q.get('item');
+    visning = q.get('view');
+  } catch { id = null; }
+
+  /*
+   * `?view=review` - dét, en push om den ugentlige gennemgang lander paa.
+   *
+   * Uden den ville notifikationen aabne forsiden, og saa skulle man klikke
+   * »Start« i baandet bagefter. En besked, der beder om en handling, skal
+   * lande dér, hvor handlingen sker.
+   */
+  if (visning === 'review' && state.user) {
+    try { history.replaceState(null, '', location.pathname); } catch { /* ligegyldigt */ }
+    gaaTil('review');
+    return;
+  }
+
   if (!id || !state.user) return;
   try { history.replaceState(null, '', location.pathname); } catch { /* ligegyldigt */ }
   try {

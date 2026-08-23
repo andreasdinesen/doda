@@ -136,6 +136,26 @@ tavst: kalender-appen havde ingenting at give besked på. Nu er den der.
 - Det virker **med appen lukket**, uden tilladelser og uden nøgler — og det er
   telefonens egen notifikationsmekanisme, som brugeren allerede stoler på.
 
+**Gennemgangen kan nu også pushe — slået fra (v53).** Argumentet ovenfor holdt,
+så længe push-infrastrukturen ikke fandtes: at bygge en hel kanal for ÉN
+ugentlig påmindelse ville være at tilføje meget for at råbe lidt. Men kanalen
+**blev** bygget i v13, og så koster det en gren, ikke en infrastruktur.
+
+Andreas bad om den 23-08-2026. Princippet holdes, hvor det tæller: **den er
+slukket, indtil man selv tænder den**, og båndet i appen er stadig det, man får
+uden at bede om noget.
+
+- Gennemgangen fik et **klokkeslæt** (`review_time`). En påmindelse uden et
+  tidspunkt ville komme ved midnat.
+- Kontakten vises kun, når der ER en gennemgangsdag: en påmindelse uden noget
+  at minde om er en kontakt, der ikke kan gøre noget.
+- `review_notified` er et **tidsstempel**, ikke en dato. Datoen ville række til
+  »én gang om dagen«, men service workeren skal også kunne se, om pushen lige
+  er sendt — den henter selv, hvad den skal vise, og skal kunne skelne
+  gennemgangen fra en forfalden opgave.
+- Notifikationen lander på `?view=review`, ikke på forsiden. **En besked, der
+  beder om en handling, skal lande dér, hvor handlingen sker.**
+
 ### Web Push (v13) — for den, der ikke abonnerer med sin kalender
 
 Kalenderen er stadig den **primære** vej: den virker uden tilladelser, uden
@@ -840,9 +860,20 @@ ikke forpligtelse.
 
 ## 7 · Uden for scope
 
-Handover §10 gælder uændret: ingen flere brugere, ingen prioritetsniveauer, ingen
+Handover §10 gælder uændret: ingen flere brugere, ingen
 statistik/streaks/gamification, ingen tovejs-sync, ingen notifikationer ud over
 deadlines og gennemgangspåmindelsen.
+
+**»Ingen prioritetsniveauer« blev til én stjerne (v54).** Fravalget stod, fordi
+niveauer koster tre beslutninger pr. opgave, og fordi »lav« i praksis bliver et
+sted at gemme det, man alligevel ikke laver. Andreas bad om prioritet
+23-08-2026, og det, han ville, var at **løfte** en opgave i Next Actions — ikke
+at mærke den.
+
+Derfor ét flag: `starred`, 0 eller 1. Det har én betydning og én virkning, og
+det er stadig ikke niveauer. Sorteringen er `starred DESC, seq, created_at`, så
+rækkefølgen **inden for** hver gruppe er uændret — det, man selv har trukket på
+plads, bliver stående.
 
 **Enkeltbruger er en beslutning, ikke en forglemmelse.** Den er grunden til, at ingen
 datatabel har en `user_id`, at `settings` er global, og at token-godkendelsen henter
