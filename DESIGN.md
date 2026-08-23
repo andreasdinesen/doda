@@ -916,6 +916,49 @@ niveaubitsene gav `3/2/0/2` mod standardens `1/0/3/2`.
 læser fem koder fra version 1 til 10. Findes `swift` ikke, **springes testen
 over med en besked** — en test, der stiltiende ikke kører, er værre end ingen.
 
+## 6c · Kommandobaren, der bliver stående (v57)
+
+Feltet er husets eneste vej til at fange, finde og navigere. At skulle scrolle
+op for at nå det er en afgift på hver eneste af de tre ting, så baren klistrer
+nu i toppen (`position: sticky`).
+
+**Hele baren, ikke kun feltet.** Sticky binder et element til sin *forælders*
+kasse. Havde jeg gjort `.omni-card` sticky, ville den klistre indtil `.topbar`s
+bund passerede skærmens top — og så forsvinde alligevel. Prisen er, at
+sync-knappen og tælleren følger med op; til gengæld er de netop de to ting, man
+vil kunne se uden at scrolle.
+
+**Luften over feltet har ét sted at bo.** Den kom fra `.main`s `padding-top`,
+og den padding ligger ikke længere over baren, når den klistrer. Baren bærer
+den derfor selv og trækker sig tilbage på plads med samme tal
+(`padding-top: 22px; margin-top: -22px`). Ét tal at rette, ikke to i trit.
+På mobil er tallet 64 px, fordi hamburgeren ligger `fixed` i de øverste 54 px —
+uden den stribe klistrer feltet ind under den.
+
+**En blød overgang i stedet for en kant.** `::after` med en gradient fra `--bg`
+til gennemsigtig lader indholdet tone ud under baren. Den er usynlig, når der
+ikke er scrollet — dér er det bg over bg — så der er ingen tilstand at holde
+styr på. `pointer-events: none`, ellers spiser striben klik på den øverste
+opgave.
+
+### Hvem der scroller, er ikke det samme på de to bredder
+
+Det, der kostede tid: min første måling sagde, at siden slet ikke scrollede.
+`window.scrollTo(0, 1200)` efterlod `window.scrollY` på 0.
+
+Under 900 px gør `html, body { overflow-x: hidden }` — nettet mod vandret
+scroll fra lange ord — sammen med `height: 100%` tilsammen **body** til en
+scroll-boks. Så er det `document.body.scrollTop`, der flytter siden, og
+`window.scrollTo()` gør ingenting. På desktop scroller dokumentet som normalt.
+
+Baren klistrer korrekt begge steder, fordi body's scrollport *er* skærmen. Men
+den, der måler med `window.scrollY`, får at vide, at intet virker — og retter
+så på noget, der ikke fejler. Det står nu i kommentaren over reglen.
+
+Det gælder i øvrigt alt andet, der vil vide, hvor langt siden er scrollet:
+pull-to-refresh, uendelig liste, »tilbage til toppen«. Spørg efter
+scroll-containeren i stedet for at gå ud fra vinduet.
+
 ## 7 · Uden for scope
 
 Handover §10 gælder uændret: ingen flere brugere, ingen

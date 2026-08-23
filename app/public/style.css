@@ -268,7 +268,51 @@ button.version-old:hover { text-decoration: underline; }
 
 /* ------------------------------------------------------- kommandobaren */
 
-.topbar { width: 100%; max-width: 940px; display: flex; flex-direction: column; align-items: center; }
+/* Baren bliver staaende, naar siden scroller - feltet er husets eneste vej
+   til at fange, finde og navigere, og det skal ikke skulle scrolles frem.
+   Samme greb som sidebaren (~l. 111).
+
+   Hvem der scroller, er IKKE det samme de to steder, og det er vaerd at vide,
+   foer man retter noget her: paa desktop scroller dokumentet, men under 900 px
+   goer `html, body { overflow-x: hidden }` (~l. 1096) sammen med
+   `height: 100%` (~l. 66) BODY til scroll-boks - `window.scrollTo()` goer
+   ingenting dér, kun `document.body.scrollTop`. Baren klistrer korrekt begge
+   steder, fordi body's scrollport er hele skaermen, men maaler man det med
+   `window.scrollY`, ser det ud som om siden slet ikke scroller. Det gjorde
+   det, foerste gang det blev proevet.
+
+   Lag 20: over indholdet, under sideoversigten (30) og hamburgeren (40). */
+.topbar {
+  width: 100%;
+  max-width: 940px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--bg);
+  /* Luften over feltet er .main's padding-top. Naar baren klistrer, ligger
+     den padding ikke laengere over den - saa baren baerer den selv og
+     traekker sig tilbage paa plads med det samme tal. Ét sted at rette. */
+  padding-top: 22px;
+  margin-top: -22px;
+}
+
+/* En blod overgang i stedet for en kant: indholdet toner ud under baren
+   frem for at blive klippet over. Usynlig, naar der ikke er scrollet -
+   dér er det bg over bg. pointer-events:none, ellers spiser striben klik
+   pa den oeverste opgave. */
+.topbar::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 20px;
+  background: linear-gradient(var(--bg), transparent);
+  pointer-events: none;
+}
 
 .toprow { align-self: flex-end; display: flex; align-items: baseline; gap: 14px; }
 .stats { display: flex; gap: 6px; padding: 0 4px 14px; }
@@ -1085,6 +1129,10 @@ textarea.input { resize: vertical; min-height: 90px; font-family: inherit; }
   /* Media queries giver ingen specificitet - body.navfold-varianten skal
      naevnes eksplicit, ellers beholder mobilen desktop-indrykningen. */
   .main, body.navopen .main { padding: 64px 18px 90px; }
+
+  /* Hamburgeren ligger fixed i de oeverste 54 px. Baren skal baere hele
+     .main's padding-top, ellers klistrer feltet ind under hamburgeren. */
+  .topbar { padding-top: 64px; margin-top: -64px; }
 
   .omni-input { font-size: 16px; padding: 16px 18px 16px 48px; }
   .omni-icon { left: 17px; }
