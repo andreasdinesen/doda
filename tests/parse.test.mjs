@@ -367,3 +367,42 @@ test('brugeren faar at VIDE, at datoen ikke blev forstaaet', () => {
   assert.equal(r.due, null);
   assert.match(r.warnings[0], /forstod ikke datoen/);
 });
+
+/*
+ * `: Omraade` - med mellemrum PAA BEGGE SIDER.
+ *
+ * De andre markoerer klaeber til deres vaerdi (`#hjem`, `@Doda`), men kolon er
+ * et almindeligt tegn i skreven tekst. Mellemrum foran redder de fleste;
+ * kravet om mellemrum bagved goer resten, saa et kolon midt i en saetning
+ * aldrig kan blive til et omraade, man ikke bad om. Andreas' valg 23-08-2026.
+ */
+test(': med mellemrum omkring er et område', () => {
+  assert.equal(fangst('test : Privat').area, 'Privat');
+  assert.equal(fangst('test : Privat').title, 'test');
+  // Sammen med de andre markoerer.
+  const r = fangst('køb ind : Privat #butik @Huset');
+  assert.equal(r.area, 'Privat');
+  assert.equal(r.contexts[0], 'butik');
+  assert.equal(r.project, 'Huset');
+  assert.equal(r.title, 'køb ind');
+  // Et navn med mellemrum kraever anfoerselstegn, praecis som @"To ord".
+  assert.equal(fangst('test : "Mit område"').area, 'Mit område');
+});
+
+test('et kolon UDEN mellemrum omkring er almindelig tekst', () => {
+  // Det er netop dét, kravet om mellemrum bagved beskytter.
+  assert.equal(fangst('test :Privat').area, null);
+  assert.equal(fangst('test :Privat').title, 'test :Privat');
+  assert.equal(fangst('Møde: husk kaffe').area, null);
+  assert.equal(fangst('Møde: husk kaffe').title, 'Møde: husk kaffe');
+  assert.equal(fangst('forhold 3:1 i opskriften').area, null);
+  assert.equal(fangst('se https://eksempel.dk/side').area, null);
+});
+
+test('et klokkeslæt bliver ikke til et område', () => {
+  // Den farligste: ! tager hele frasen, og et kolon deri maa ikke braekke den.
+  const r = fangst('ring !i dag 12:30');
+  assert.equal(r.area, null);
+  assert.equal(r.due.tid, '12:30');
+  assert.equal(r.title, 'ring');
+});

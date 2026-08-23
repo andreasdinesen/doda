@@ -456,7 +456,10 @@
   // Det er ufarligt, fordi en markoer SKAL have mellemrum eller start foran
   // sig: "https://dr.dk/nyheder", "3/9" og "and/or" har alle et tegn foer
   // skraastregen og roeres derfor ikke.
-  const MARKOERER = '#@!~/';
+  // `:` er omraadet. Den er ufarlig af samme grund som de andre: en markoer
+  // SKAL have mellemrum eller start foran sig, saa "12:30", "Moede: husk" og
+  // "https://x.dk" har alle et tegn foer kolonet og roeres ikke.
+  const MARKOERER = '#@!~/:';
 
   /**
    * Tolker en fangst-tekst til felter.
@@ -469,7 +472,7 @@
     opts = opts || {};
     const ud = {
       kind: 'task', title: '', note: '',
-      contexts: [], project: null,
+      contexts: [], project: null, area: null,
       due: null, defer: null,
       recurrenceText: null, warnings: [],
     };
@@ -513,6 +516,25 @@
       const her = fundne[i];
       const slut = i + 1 < fundne.length ? fundne[i + 1].pos : tekst.length;
       const raat = tekst.slice(her.pos + 1, slut);
+
+      /*
+       * Omraadet kraever mellemrum PAA BEGGE SIDER: `test : Privat`.
+       *
+       * De andre markoerer klaeber til deres vaerdi (`#hjem`, `@Doda`), men
+       * kolon er et almindeligt tegn i skreven tekst - »Moede: husk kaffe«,
+       * »forhold 3:1«, »12:30«. Mellemrum foran redder de fleste; kravet om
+       * mellemrum BAGVED goer resten, saa et kolon midt i en saetning aldrig
+       * kan blive til et omraade, man ikke bad om. Andreas' valg 23-08-2026.
+       */
+      if (her.tegn === ':') {
+        const m2 = raat.match(/^\s+("([^"]*)"|[\p{L}\p{N}_-]+)/u);
+        if (!m2) continue;
+        const vaerdi2 = (m2[2] !== undefined ? m2[2] : m2[1]).trim();
+        if (!vaerdi2) continue;
+        ud.area = vaerdi2;
+        spis.push([her.pos, her.pos + 1 + m2[0].length]);
+        continue;
+      }
 
       if (her.tegn === '#' || her.tegn === '@' || her.tegn === '/') {
         // Kontekst og projekt er ÉT ord, og det skal klaebe DIREKTE til

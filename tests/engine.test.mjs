@@ -409,3 +409,31 @@ test('en opgave kan få et område - og få det taget af igen', async () => {
   assert.equal((await J(`/api/v1/items/${r.item.id}`)).item.area_id, null,
     'null er et gyldigt valg: »intet omraade«');
 });
+
+test('": Område" ved fangst sætter opgavens område - og opretter det, hvis det er nyt', async () => {
+  const r = await J('/api/v1/capture', { text: 'skift olie : Bilen', createNew: true });
+  assert.equal(r.item.title, 'skift olie', 'markoeren skal ud af titlen');
+  assert.ok(r.item.area_id, 'omraadet skal vaere sat');
+  const omr = (await J('/api/v1/areas')).areas.find((a) => a.id === r.item.area_id);
+  assert.equal(omr.name, 'Bilen', 'og oprettet med det navn, der blev skrevet');
+
+  // Anden gang genbruges det samme omraade - ikke et nyt med samme navn.
+  const r2 = await J('/api/v1/capture', { text: 'vask den : bilen', createNew: true });
+  assert.equal(r2.item.area_id, r.item.area_id, 'store og smaa bogstaver er samme omraade');
+});
+
+test('et kolon uden mellemrum omkring rører ikke opgaven', async () => {
+  const r = await J('/api/v1/capture', { text: 'Møde: husk kaffe', createNew: true });
+  assert.equal(r.item.title, 'Møde: husk kaffe');
+  assert.equal(r.item.area_id, null);
+});
+
+test('webappen bliver spurgt, før et nyt område oprettes', async () => {
+  // createNew udelades: det er webappens vej, og den skal bekraefte selv.
+  const r = await J('/api/v1/capture', { text: 'noget : HeltNytOmraade' });
+  assert.ok(r.needsConfirm, 'der skal spoerges');
+  assert.equal(r.needsConfirm.area, 'HeltNytOmraade');
+  // Og intet er oprettet endnu.
+  const omr = (await J('/api/v1/areas')).areas.find((a) => a.name === 'HeltNytOmraade');
+  assert.equal(omr, undefined, 'omraadet maa ikke findes, foer man har sagt ja');
+});

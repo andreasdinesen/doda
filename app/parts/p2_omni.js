@@ -23,7 +23,9 @@ const MODER = {
   // findes funktionen i praksis ikke - det var praecis derfor "/projekt" var
   // ubrugt indtil v4, selv om paletten lovede det.
   '+': { id: 'task', pil: '+ New Task', ph: 'Task title… try !tomorrow at 9',
-    legend: ['/ project', '# context', '! date', '~ hide until'], enter: 'Create' },
+    // `: area` staar med mellemrum EFTER kolonet, fordi det er saadan den
+    // skrives - legenden er en kravspecifikation (§v9) og skal vise formen.
+    legend: ['/ project', '# context', '! date', '~ hide until', ': area'], enter: 'Create' },
   '*': { id: 'note', pil: '* New Note', ph: 'Note title…', legend: ['/ project', '# context'], enter: 'Create' },
   '/': { id: 'project', pil: '/ Projects', ph: 'Find or create a project…', legend: [], enter: 'Open' },
   '#': { id: 'context', pil: '# Contexts', ph: 'Find or create a context…', legend: [], enter: 'Open' },
@@ -89,6 +91,7 @@ const MARKOER_KILDE = {
   '/': { hvad: 'project', kilde: () => state.projects, ikon: 'projects' },
   '@': { hvad: 'project', kilde: () => state.projects, ikon: 'projects' },
   '#': { hvad: 'context', kilde: () => state.contexts, ikon: 'contexts' },
+  ':': { hvad: 'area', kilde: () => state.areas, ikon: 'someday' },
 };
 
 /** Hvilken markoer staar markoeren (caret'en) i? Null, hvis ingen. */
@@ -101,8 +104,13 @@ function markoerVedCaret() {
   if (pos === null || pos === undefined) return null;
   const foer = el.value.slice(0, pos);
   const m = foer.match(/(^|\s)([/@#])([\p{L}\p{N}_-]*)$/u);
-  if (!m) return null;
-  return { tegn: m[2], delvist: m[3], start: pos - m[3].length - 1, slut: pos };
+  if (m) return { tegn: m[2], delvist: m[3], start: pos - m[3].length - 1, slut: pos };
+  /* Omraadet skriver man `: Navn` - med mellemrum paa begge sider. Derfor sit
+     eget moenster: mellemrummet efter kolonet er en del af markoeren, ikke af
+     navnet, og `start` skal pege paa kolonet, saa Tab erstatter det hele. */
+  const mo = foer.match(/(^|\s)(:)\s([\p{L}\p{N}_-]*)$/u);
+  if (mo) return { tegn: ':', delvist: mo[3], start: pos - mo[3].length - 2, slut: pos };
+  return null;
 }
 
 /** Rækker til paletten: de navne, der matcher det halvskrevne. */
@@ -136,7 +144,10 @@ function fuldfoerMarkoer(raekke) {
   const el = omniEl();
   const t = raekke.token;
   const navn = /[\s]/.test(raekke.navn) ? `"${raekke.navn}"` : raekke.navn;
-  const ind = `${t.tegn}${navn} `;
+  // Omraadet skrives `: Navn` - mellemrummet efter kolonet er en del af
+  // formen, ikke pynt. Uden det ville Tab saette `:Navn`, som parseren med
+  // vilje IKKE laeser som et omraade.
+  const ind = t.tegn === ':' ? `: ${navn} ` : `${t.tegn}${navn} `;
   el.value = el.value.slice(0, t.start) + ind + el.value.slice(t.slut);
   const nyPos = t.start + ind.length;
   el.focus();
@@ -285,7 +296,11 @@ function byggRaekker() {
 
   if (omniState.bekraeft) {
     const b = omniState.bekraeft;
-    const nye = [...b.contexts.map((n) => `#${n}`), ...(b.project ? [`@${b.project}`] : [])];
+    // Omraadet skal med her ogsaa - ellers ville et nyt omraade blive oprettet
+    // uden at nogen blev spurgt, mens et nyt projekt bliver det.
+    const nye = [...b.contexts.map((n) => `#${n}`),
+      ...(b.project ? [`@${b.project}`] : []),
+      ...(b.area ? [`: ${b.area}`] : [])];
     raekker.push({
       type: 'confirm',
       titel: `Create ${nye.join(' and ')}?`,

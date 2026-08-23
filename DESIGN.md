@@ -324,6 +324,23 @@ er engelsk. Datoformatet i UI'et er `en-GB` (24-timers, dag før måned) — ikk
 | `!` | Dato / gentagelse | `!i morgen`, `!hver mandag` |
 | `~` | Skjul indtil | `~1/9` |
 
+### `: Område` — den ene markør med mellemrum omkring (v55)
+
+`#kontekst` og `@projekt` klæber til deres værdi. **Området gør ikke:** det
+skrives `: Privat`, med mellemrum på begge sider.
+
+Forskellen er ikke inkonsekvens, den er nødvendig. Kolon er et almindeligt tegn
+i skreven tekst — »Møde: husk kaffe«, »forhold 3:1«, »12:30« — og guarden om
+mellemrum *foran* en markør redder kun de to første. Kravet om mellemrum
+**bagved** gør resten, så et kolon midt i en sætning aldrig bliver til et
+område, ingen bad om.
+
+Den farligste er klokkeslættet: `!` tager hele frasen frem til næste markør, så
+`!i dag 12:30` måtte ikke brække midt over. Der er test på hver enkelt af dem.
+
+Tab indsætter derfor `: Navn ` med mellemrummet, og legenden viser formen —
+uden mellemrummet ville den sætte noget, parseren med vilje ikke læser.
+
 ### Beskrivelse og links
 
 Hver opgave har ud over titlen et **beskrivelsesfelt** (flerlinjet, markdown,

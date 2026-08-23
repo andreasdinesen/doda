@@ -840,6 +840,21 @@ function hentProjekter() {
       FROM projects p WHERE p.deleted = 0 ORDER BY p.seq, lower(p.name)`).all(iDag());
 }
 
+/** Ét omraade ved navn - uden hensyn til store og smaa bogstaver. */
+function findOmraade(navn) {
+  return db.prepare('SELECT id, name, seq FROM areas WHERE lower(name) = lower(?)').get(String(navn || ''));
+}
+
+/** Opretter et omraade. Bruges naar `:Navn` naevner et, der ikke findes. */
+function opretOmraade(navn) {
+  const id = newId();
+  const t = now();
+  const n = String(navn || '').trim().slice(0, 80);
+  db.prepare('INSERT INTO areas (id, name, seq, created_at, updated_at) VALUES (?,?,?,?,?)')
+    .run(id, n, 0, t, t);
+  return { id, name: n, seq: 0 };
+}
+
 function hentOmraader() {
   return db.prepare('SELECT id, name, seq FROM areas ORDER BY seq, lower(name)').all();
 }
@@ -1034,12 +1049,12 @@ function opretItem(felter, kontekstIder) {
     ? naesteSeq('items', 'WHERE project_id = ?', [f.project_id])
     : naesteSeq('items', 'WHERE project_id IS NULL');
   db.prepare(`
-    INSERT INTO items (id, kind, status, title, note, project_id, due_date, due_time,
-                       defer_date, waiting_for, seq, created_at, updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(id, f.kind, f.status, f.title, f.note, f.project_id || null,
+    INSERT INTO items (id, kind, status, title, note, project_id, area_id, due_date, due_time,
+                       defer_date, waiting_for, seq, starred, created_at, updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(id, f.kind, f.status, f.title, f.note, f.project_id || null, f.area_id || null,
       f.due_date || null, f.due_time || null, f.defer_date || null,
-      f.waiting_for || '', seq, t, t);
+      f.waiting_for || '', seq, f.starred ? 1 : 0, t, t);
   if (kontekstIder && kontekstIder.length) saetKontekster(id, kontekstIder);
   return hentItem(id);
 }
@@ -1371,14 +1386,21 @@ function fangst(tekst, opretNye, fra) {
 
   const manglerKontekster = tolket.contexts.filter((n) => !findKontekst(n));
   const manglerProjekt = tolket.project && !findProjekt(tolket.project) ? tolket.project : null;
+  const manglerOmraade = tolket.area && !findOmraade(tolket.area) ? tolket.area : null;
 
-  if (!opretNye && (manglerKontekster.length || manglerProjekt)) {
-    return { skalBekraeftes: { contexts: manglerKontekster, project: manglerProjekt }, tolket };
+  if (!opretNye && (manglerKontekster.length || manglerProjekt || manglerOmraade)) {
+    return {
+      skalBekraeftes: { contexts: manglerKontekster, project: manglerProjekt, area: manglerOmraade },
+      tolket,
+    };
   }
 
   const kontekstIder = tolket.contexts.map((n) => (findKontekst(n) || opretKontekst(n)).id);
   let projektId = null;
   if (tolket.project) projektId = (findProjekt(tolket.project) || opretProjekt(tolket.project)).id;
+  // `:Navn` paa en opgave. Omraadet er opgavens EGET - det arves ikke fra
+  // projektet, og et projekt uden omraade overskriver ikke et, man har skrevet.
+  const omraadeId = tolket.area ? (findOmraade(tolket.area) || opretOmraade(tolket.area)).id : null;
 
   // Skaermen udfylder kun det, teksten TAV om.
   if (!projektId && skaerm.projektId) projektId = skaerm.projektId;
@@ -1409,6 +1431,7 @@ function fangst(tekst, opretNye, fra) {
     title: tolket.title.slice(0, GRAENSER.title),
     note: tolket.note.slice(0, GRAENSER.note),
     project_id: projektId,
+    area_id: omraadeId,
     due_date: tolket.due ? tolket.due.dato : null,
     due_time: tolket.due ? tolket.due.tid : null,
     defer_date: tolket.defer,
