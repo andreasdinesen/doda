@@ -278,6 +278,8 @@ const GUIDE_DELE = [
             raekker: [
               ['!tomorrow', 'Also <code>!today</code>, <code>!friday</code>, <code>!next week</code>.'],
               ['!in 2 weeks', 'Days, weeks or months from today. <code>!om 2 uger</code> does the same.'],
+              ['!in 3 hours', 'Hours and minutes set a <strong>time</strong> too, and roll over midnight. '
+                + '<code>!om 3 timer</code>, <code>!om 30 minutter</code>.'],
               ['!3/9', '<code>!3/9-2027</code>, <code>!3 sep</code> and <code>!sep 3 at 9</code> all land.'],
               ['~', 'The same words, but for hiding a task until that day.'],
             ],

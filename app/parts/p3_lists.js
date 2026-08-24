@@ -1112,7 +1112,7 @@ function sideSettings() {
 
     <div class="card"><h2>Capture syntax</h2>
       ${syntaksTabel()}
-      <p class="gate-note" style="text-align:left">Danish words work too: <code>!i morgen</code>, <code>!om 2 uger</code>.</p>
+      <p class="gate-note" style="text-align:left">Danish words work too: <code>!i morgen</code>, <code>!om 2 uger</code>, <code>!om 3 timer</code>.</p>
     </div>
 
     <div class="card"><h2>Notes</h2>

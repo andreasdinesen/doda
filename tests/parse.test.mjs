@@ -141,6 +141,65 @@ test('sommertid: en dato hen over skiftet forskydes ikke', () => {
   assert.equal(P.tolkDato('om 7 dage', foer).dato, '2026-10-31');
 });
 
+test('timer og minutter saetter ogsaa et KLOKKESLAET', () => {
+  /*
+   * »Doda forstaar ikke om 3 timer eller in 3 hours« (Andreas, 24-08-2026).
+   *
+   * Formen fandtes for dage, uger, maaneder og aar - men ikke for timer, og
+   * en frase, parseren ikke kan laese, bliver tavst til ingenting.
+   *
+   * Timer er den eneste form, der ogsaa saetter et tidspunkt: en opgave »om
+   * 3 timer« uden klokkeslaet er ingenting.
+   */
+  const kl20 = new Date(2026, 7, 13, 20, 30, 0);
+  assert.deepEqual(P.tolkDato('om 3 timer', kl20), { dato: '2026-08-13', tid: '23:30' });
+  assert.deepEqual(P.tolkDato('in 3 hours', kl20), { dato: '2026-08-13', tid: '23:30' });
+  assert.deepEqual(P.tolkDato('om en time', kl20), { dato: '2026-08-13', tid: '21:30' });
+  assert.deepEqual(P.tolkDato('om 30 minutter', kl20), { dato: '2026-08-13', tid: '21:00' });
+  assert.deepEqual(P.tolkDato('in 90 minutes', kl20), { dato: '2026-08-13', tid: '22:00' });
+  // Talord skal ogsaa igennem - det er samme vej som "om tre dage".
+  assert.deepEqual(P.tolkDato('om tre timer', kl20), { dato: '2026-08-13', tid: '23:30' });
+  // Og en frase uden tal er stadig ingenting, ikke et gaet.
+  assert.equal(P.tolkDato('om timer', kl20), null);
+});
+
+test('timer ruller over midnat - og tager DATOEN med', () => {
+  /*
+   * Den fejl, der ville vaere let at lave: regne klokkeslaettet ud og lade
+   * datoen staa paa i dag. Saa ville »om 3 timer« kl. 23 forfalde kl. 02 -
+   * fjorten timer FOER man skrev det.
+   */
+  assert.deepEqual(P.tolkDato('om 3 timer', new Date(2026, 7, 13, 23, 0, 0)),
+    { dato: '2026-08-14', tid: '02:00' });
+  assert.deepEqual(P.tolkDato('om 30 minutter', new Date(2026, 7, 13, 23, 45, 0)),
+    { dato: '2026-08-14', tid: '00:15' });
+  // Over et maanedsskifte og et aarsskifte.
+  assert.deepEqual(P.tolkDato('om 2 timer', new Date(2026, 7, 31, 23, 30, 0)),
+    { dato: '2026-09-01', tid: '01:30' });
+  assert.deepEqual(P.tolkDato('om 1 time', new Date(2026, 11, 31, 23, 30, 0)),
+    { dato: '2027-01-01', tid: '00:30' });
+});
+
+test('timer regnes i ABSOLUT tid - modsat dage', () => {
+  /*
+   * Alle andre former regner paa (aar, maaned, dag), saa et doegn hen over
+   * sommertidsskiftet stadig er ét doegn. For TIMER er det omvendt: »om 2
+   * timer« er to FAKTISKE timer, ogsaa den nat uret stilles.
+   *
+   * Natten til 25. oktober 2026 stilles uret fra 03 tilbage til 02. Kl. 01:30
+   * plus to virkelige timer er derfor 02:30 - ikke 03:30.
+   */
+  assert.deepEqual(P.tolkDato('om 2 timer', new Date(2026, 9, 25, 1, 30, 0)),
+    { dato: '2026-10-25', tid: '02:30' });
+});
+
+test('et klokkeslaet, brugeren SELV skrev, vinder over det udregnede', () => {
+  // "om 2 timer kl 15" er modstridende. Det, der staar med rene ord, er det
+  // sikreste gaet - og det er ogsaa saadan alle de andre former opfoerer sig.
+  assert.deepEqual(P.tolkDato('om 2 timer kl 15', new Date(2026, 7, 13, 10, 0, 0)),
+    { dato: '2026-08-13', tid: '15:00' });
+});
+
 test('månedsskift klemmer dagen ned i stedet for at smutte over', () => {
   const d = new Date(2026, 0, 31, 12, 0, 0); // 31. januar
   assert.equal(P.tolkDato('om 1 måned', d).dato, '2026-02-28');

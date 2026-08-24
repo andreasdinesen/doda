@@ -1036,6 +1036,43 @@ En Sagu-note er tekst. Har opgaven filer, siger bekræftelsen **hvor mange**, de
 ryger med — det skal stå før, ikke opdages bagefter, når sletningen ikke kan
 fortrydes.
 
+## 6e · Timer og minutter i `!` (v59)
+
+»Doda forstår ikke `om 3 timer` eller `in 3 hours`« (Andreas, 24-08-2026).
+Formen fandtes for dage, uger, måneder og år; timer og minutter manglede, og en
+frase, parseren ikke kan læse, bliver **tavst** til ingenting.
+
+To ting gør den anderledes end alle de andre former, og begge er med vilje:
+
+**Den sætter også et klokkeslæt.** En opgave »om 3 timer« uden tidspunkt er
+ingenting. Alle andre former lader `tid` være `null`, hvis brugeren ikke selv
+skrev et.
+
+**Den regnes i absolut tid.** Resten af filen regner på (år, måned, dag) — netop
+så `om 3 dage` er tre *kalenderdage* hen over et sommertidsskifte, og et døgn
+ikke bliver 23 eller 25 timer (§4). For timer er kravet det modsatte: `om 2
+timer` er to *faktiske* timer. Natten til 25. oktober 2026 stilles uret fra 03
+tilbage til 02, så 01:30 + 2 timer er 02:30 — ikke 03:30. Derfor må den form
+**ikke** gå gennem `plusDage()`.
+
+### Den fejl, der var let at lave
+
+At regne klokkeslættet ud og lade datoen stå på i dag. Så ville `om 3 timer`
+kl. 23 forfalde kl. 02 — fjorten timer *før* man skrev det. Datoen tages fra
+det samme beregnede tidspunkt som klokkeslættet, og en test dækker midnat,
+månedsskifte og årsskifte. Testen er set fejle med netop den fejl indbygget.
+
+### Ingen konflikt med klokkeslæt-tolkningen
+
+`findKlokkeslaet()` kører først og kunne have ædt tallet i »om 3 timer«. Det
+gør den ikke: et bart tal kræver `at`/`kl` foran eller et kolon (§v49), så
+`3` i »om 3 timer« er urørt. Det er en af de gange, hvor en stram regel fra før
+betaler sig bagefter.
+
+Skriver brugeren selv et klokkeslæt — »om 2 timer kl 15« — vinder det. Frasen
+er modstridende, og dét, der står med rene ord, er det sikreste gæt; det er
+også sådan alle de andre former opfører sig.
+
 ## 7 · Uden for scope
 
 Handover §10 gælder uændret: ingen flere brugere, ingen

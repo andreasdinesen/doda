@@ -140,11 +140,32 @@
       return svar(plusDage(iDag, diff === 0 ? 7 : diff));
     }
 
-    // "in 3 days", "in two weeks", "om 3 dage", "om en måned"
-    let m = t.match(/^(?:in|om)\s+(\S+)\s+(day|days|week|weeks|month|months|year|years|dag|dage|uge|uger|måned|måneder|år)$/);
+    // "in 3 days", "in two weeks", "om 3 dage", "om en måned",
+    // "om 3 timer", "in 90 minutes"
+    let m = t.match(/^(?:in|om)\s+(\S+)\s+(hour|hours|minute|minutes|time|timer|minut|minutter|day|days|week|weeks|month|months|year|years|dag|dage|uge|uger|måned|måneder|år)$/);
     if (m) {
       const n = tal(m[1]);
       if (n === null) return null;
+      /*
+       * Timer og minutter er den eneste form, der ogsaa saetter et
+       * KLOKKESLAET - "om 3 timer" uden et tidspunkt er ingenting.
+       *
+       * Og den eneste, der regnes i absolut tid. Alle andre former regner paa
+       * (aar, maaned, dag), fordi "om 3 dage" er tre KALENDERDAGE hen over et
+       * sommertidsskifte. "Om 3 timer" er tre FAKTISKE timer - dét er hele
+       * forskellen, og derfor maa den ikke gaa gennem plusDage().
+       *
+       * Et klokkeslaet, brugeren selv har skrevet, vinder: "om 2 timer kl 15"
+       * er modstridende, og dét, der staar med rene ord, er det sikreste gaet.
+       */
+      if (/^(hour|time|minute|minut)/.test(m[2])) {
+        const minutter = /^(hour|time)/.test(m[2]) ? n * 60 : n;
+        const d = new Date(base.getTime() + minutter * 60000);
+        return {
+          dato: fmtDato(new Date(d.getFullYear(), d.getMonth(), d.getDate())),
+          tid: tid || `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`,
+        };
+      }
       if (/^(day|dag)/.test(m[2])) return svar(plusDage(iDag, n));
       if (/^(week|uge)/.test(m[2])) return svar(plusDage(iDag, n * 7));
       if (/^(month|måned)/.test(m[2])) return svar(plusMaaneder(iDag, n));
