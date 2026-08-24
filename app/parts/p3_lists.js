@@ -682,7 +682,10 @@ async function aabnElement(listeItem) {
     <div class="modal-foot">
       <button class="btn ghost" id="edDelete">Delete</button>
       ${it.kind === 'note' || state.notesEnabled
-    ? `<button class="btn ghost" id="edConvert">${it.kind === 'note' ? 'Make it a task' : 'Make it a note'}</button>`
+    ? `<button class="btn ghost" id="edConvert">${it.kind === 'note' ? 'Make it a task'
+      // Sig HVOR noten havner. Paletten skriver "* note in Sagu" af samme
+      // grund: knappen sletter opgaven her, og det maa ikke overraske.
+      : (saguKlar ? 'Make it a note in Sagu' : 'Make it a note')}</button>`
     : ''}
       <span style="flex:1"></span>
       <button class="btn" id="edCancel">Cancel</button>
@@ -1000,12 +1003,76 @@ async function aabnElement(listeItem) {
 
   host.querySelector('#edDelete').addEventListener('click', async () => { luk(); await slet(it.id); });
 
-  // Konvertering ma ALDRIG miste indhold: bade titel og beskrivelse foelger
-  // med begge veje (handover §5.5). En note er reference og skal derfor ud af
-  // handlingslisterne - den far status "queued", ikke "inbox".
+  /**
+   * Opgaven bliver til en note i Sagu - og forsvinder herfra.
+   *
+   * Raekkefoelgen er ikke til forhandling: noten oprettes FOERST, og opgaven
+   * slettes kun, hvis det lykkedes. Omvendt ville en Sagu, der er nede, koste
+   * baade opgaven og teksten paa én gang.
+   *
+   * Ingen `backUrl`. `*` linker noten tilbage til sin opgave, men her SLETTES
+   * opgaven - et link tilbage ville pege paa noget, der ikke findes.
+   *
+   * Udkastet (`u`), ikke `it`: har man rettet titlen eller teksten uden at
+   * gemme, er det dét, man ser paa skaermen, og dét man tror bliver til noten.
+   */
+  const tilSaguNote = async () => {
+    const titel = String(u.title || '').trim() || 'Untitled';
+    const filer = (it.attachments || []).length;
+    /*
+     * Sletningen kan ikke fortrydes, og vedhaeftninger kan ikke foelge med -
+     * en Sagu-note er tekst. Det skal staa FOER, ikke opdages bagefter.
+     */
+    const advarsel = filer
+      ? `\n\n${filer} attachment${filer === 1 ? '' : 's'} cannot come along `
+        + 'and will be deleted with the task.'
+      : '';
+    if (!window.confirm(`Create "${titel}" as a note in Sagu and delete the task here?${advarsel}`)) return;
+
+    let d;
+    try {
+      d = await api('POST', '/api/v1/sagu/note', { title: titel, body: u.note || '' });
+    } catch (ex) {
+      // Intet er sket endnu - ruden bliver staaende, saa man kan proeve igen.
+      toast(ex.message);
+      return;
+    }
+    const aabn = { label: 'Open', run: () => window.open(d.page.url, '_blank', 'noopener') };
+    try {
+      await api('DELETE', `/api/v1/items/${it.id}`, {});
+    } catch (ex) {
+      /*
+       * Noten ER oprettet. Melder vi bare fejlen, ser det ud som om intet
+       * skete - og saa trykker man igen og faar noten to gange.
+       */
+      luk();
+      await genindlaes();
+      tegnSide();
+      toast(`Note created in Sagu, but the task is still here: ${ex.message}`, aabn);
+      return;
+    }
+    luk();
+    await genindlaes();
+    tegnSide();
+    toast('Note created in Sagu \u00b7 task removed', aabn);
+  };
+
+  /*
+   * Konvertering ma ALDRIG miste indhold: bade titel og beskrivelse foelger
+   * med begge veje (handover §5.5). En note er reference og skal derfor ud af
+   * handlingslisterne - den far status "queued", ikke "inbox".
+   *
+   * Er Sagu koblet paa, hoerer noten DERTIL - samme regel som `*` i paletten
+   * (DESIGN §v35). Indtil v58 gjaldt reglen kun vejen ind gennem fangstfeltet,
+   * saa denne knap lavede stille en LOKAL doda-note ved siden af Sagu: netop
+   * den opsplitning, reglen skulle undgaa. Andreas bad om begge dele
+   * 23-08-2026 - samme regel som `*`, og opgaven forsvinder herfra, fordi den
+   * ikke laengere ER en opgave.
+   */
   const konverter = host.querySelector('#edConvert');
   if (konverter) konverter.addEventListener('click', async () => {
     const tilNote = it.kind !== 'note';
+    if (tilNote && saguKlar) { await tilSaguNote(); return; }
     try {
       await gem({ kind: tilNote ? 'note' : 'task', status: tilNote ? 'queued' : (u.status === 'queued' ? 'inbox' : u.status) });
       luk();

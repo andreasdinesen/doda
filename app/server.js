@@ -2437,6 +2437,10 @@ const ROUTES = {
       notebookId: str(body.notebookId, 64) || getSetting('sagu_notebook', '') || null,
       tilbageUrl: str(body.backUrl, 400) || null,
       tilbageTitel: str(body.backTitle, 200) || null,
+      // Beskrivelsen, naar en opgave bliver til en note. Samme graense som
+      // `item.note` - teksten kommer derfra, og en kortere graense her ville
+      // klippe den tavst midt over, netop som opgaven bliver slettet.
+      krop: str(body.body, GRAENSER.note) || null,
     });
     if (r.fejl) { apiFejl(res, 502, 'sagu_failed', r.fejl); return; }
     audit('sagu-note-oprettet', r.page.title, clientIp(req));

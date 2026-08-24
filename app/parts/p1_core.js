@@ -5,7 +5,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 57;
+const APP_VERSION = 58;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -408,6 +408,9 @@ function shellHtml() {
       </div>
     </aside>
     <main class="main">
+      <!-- Vagtposten: 1 px, usynlig, lige over den klaebende bjaelke. Den er
+           kun til for at kunne SES forsvinde - se registrerRullevagt(). -->
+      <div class="rulvagt" id="rulVagt" aria-hidden="true"></div>
       <div class="topbar">
         <!-- Versionslinjen i sidebarens fod har kunnet sige det hele tiden,
              men paa en telefon staar foden BAG hamburgeren, saa man ser den
@@ -666,6 +669,37 @@ function bindShell() {
   document.getElementById('navToggle').addEventListener('click', () => document.body.classList.toggle('navopen'));
   document.getElementById('backdrop').addEventListener('click', () => document.body.classList.remove('navopen'));
   bindOmni();
+  registrerRullevagt();
+}
+
+/**
+ * »body.rullet« - er siden rullet ned?
+ *
+ * Bjaelken klaeber (v57), men en bjaelke, der bare klaeber, tager en femtedel
+ * af en telefonskaerm med sig ned gennem hele listen. Naar der er rullet,
+ * folder alt andet end selve feltet sig sammen: tallene og legenden laeser man
+ * én gang, feltet vil man kunne naa hele tiden. Andreas bad om det
+ * 23-08-2026 med Sagu som forbillede - Sagu loeste det samme oenske i F20.
+ *
+ * Observeren sidder paa VAGTPOSTEN, ikke paa bjaelken selv: en observer paa et
+ * element, der ER sticky, udloeser aldrig - det forlader jo aldrig skaermen.
+ *
+ * Vagten staar FOER bjaelken. Naar bjaelken folder sig sammen, rykker alt
+ * EFTER den op - stod vagten under, kunne den komme til syne igen af selve
+ * sammenfoldningen og saette klassen i et blink frem og tilbage.
+ */
+function registrerRullevagt() {
+  const vagt = document.getElementById('rulVagt');
+  if (!vagt) return;
+  if (!('IntersectionObserver' in window)) {
+    // Uden observer: ingen sammenfoldning. Bjaelken klaeber stadig - man
+    // mister kun den ekstra plads, og det er bedre end en klasse, der
+    // saetter sig fast i den forkerte stilling.
+    return;
+  }
+  new IntersectionObserver(([post]) => {
+    document.body.classList.toggle('rullet', !post.isIntersecting);
+  }, { rootMargin: '-8px 0px 0px 0px', threshold: 0 }).observe(vagt);
 }
 
 /*

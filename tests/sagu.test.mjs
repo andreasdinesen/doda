@@ -259,6 +259,55 @@ test('en note oprettet fra doda lander i den RIGTIGE notesbog - med link tilbage
     && !l.startsWith('# ')), 'linket maa ikke staa i overskriftslinjen');
 });
 
+test('en opgave, der bliver til en note, tager HELE teksten med', async () => {
+  /*
+   * Den vigtigste af dem alle, fordi opgaven SLETTES bagefter (v58).
+   *
+   * Frem til v58 kunne `opretNote` kun sende en titel; kroppen var altid
+   * `# titel` plus et eventuelt tilbagelink. Havde knappen sendt beskrivelsen
+   * uden at serveren tog imod den, ville teksten forsvinde tavst - og
+   * opgaven, den stod i, var slettet i samme aandedrag.
+   *
+   * Derfor proeves der paa noget, der KAN braekke undervejs: linjeskift,
+   * markdown og en overskrift midt i teksten.
+   */
+  const tekst = 'DIN ORDREOVERSIGT\n\n25,00 DKK / stk\n\n## Hvis du fortryder\n\n'
+    + '[Gaa til formularen](https://eksempel.dk/fortryd?id=7)';
+  const r = await J('/api/v1/sagu/note', { title: 'Harald Nyborg ordre', body: tekst });
+  assert.equal(r.status, 200);
+  const lavet = [...attrap.noter.values()].pop();
+
+  assert.match(lavet.body, /^# Harald Nyborg ordre\n/, 'titlen staar oeverst som overskrift');
+  assert.ok(lavet.body.includes(tekst), 'hele teksten ORDRET - ikke omskrevet, ikke klippet');
+  // Ingen `backUrl`: opgaven slettes, saa et link tilbage ville pege paa
+  // noget, der ikke findes. Det maa altsaa heller ikke opstaa af sig selv.
+  assert.ok(!/From doda:/.test(lavet.body), 'intet tilbagelink til en slettet opgave');
+});
+
+test('de gamle tre former er UROERTE af at kroppen kom til', async () => {
+  /*
+   * `opretNote` byggede foer kroppen som ét udtryk; nu saettes den sammen af
+   * dele. Sammensaetningen er let at faa til at give en ekstra tom linje eller
+   * et manglende linjeskift - og det ville aendre HVER eneste note, `*`
+   * opretter, uden at nogen test klagede.
+   */
+  await J('/api/v1/sagu/note', { title: 'Kun titel' });
+  assert.equal([...attrap.noter.values()].pop().body, '# Kun titel\n');
+
+  await J('/api/v1/sagu/note', {
+    title: 'Med link', backUrl: 'https://d.dk/?item=a1', backTitle: 'Med link',
+  });
+  assert.equal([...attrap.noter.values()].pop().body,
+    '# Med link\n\nFrom doda: [Med link](https://d.dk/?item=a1)\n');
+
+  // Og begge dele paa én gang - teksten foerst, linket paa sin egen linje.
+  await J('/api/v1/sagu/note', {
+    title: 'Begge', body: 'noget tekst', backUrl: 'https://d.dk/?item=b2', backTitle: 'Begge',
+  });
+  assert.equal([...attrap.noter.values()].pop().body,
+    '# Begge\n\nnoget tekst\n\nFrom doda: [Begge](https://d.dk/?item=b2)\n');
+});
+
 test('en note fra PALETTEN lander i den valgte notesbog', async () => {
   /*
    * Paletten er ét tastetryk og kan ikke spoerge om noget.

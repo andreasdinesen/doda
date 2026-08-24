@@ -825,8 +825,15 @@ async function sideNoter() {
     host.innerHTML = `<section class="page">${hoved}
       <div class="empty">${icon('note', 34)}
         <p class="empty-title">No notes yet</p>
-        <p>Start a capture with <strong>*</strong> — <code>* wifi password 1234</code> —
-        or open a task and press <strong>Make it a note</strong>.</p></div>
+        ${saguKlar
+    /* Begge veje ind peger paa Sagu, naar den er koblet paa. Stod der
+       stadig "brug * eller Make it a note", ville man foelge en anvisning,
+       der efterlader denne skaerm lige saa tom - noten laegger sig i Sagu. */
+    ? `<p>New notes go to <strong>Sagu</strong> — both <strong>*</strong> and
+        <strong>Make it a note in Sagu</strong> put them there. This screen shows the
+        notes that were already here.</p>`
+    : `<p>Start a capture with <strong>*</strong> — <code>* wifi password 1234</code> —
+        or open a task and press <strong>Make it a note</strong>.</p>`}</div>
     </section>`;
     return;
   }

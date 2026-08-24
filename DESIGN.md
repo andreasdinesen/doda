@@ -941,6 +941,35 @@ ikke er scrollet — dér er det bg over bg — så der er ingen tilstand at hol
 styr på. `pointer-events: none`, ellers spiser striben klik på den øverste
 opgave.
 
+### Den folder sig sammen, og det er hele forskellen (v58)
+
+En bjælke, der bare klæber, tager en femtedel af en telefonskærm med sig ned
+gennem hele listen. Så snart der er rullet, folder alt andet end selve feltet
+sig sammen — tælleren og legenden læser man én gang, feltet vil man kunne nå
+hele tiden. Mobil går fra 21 % til 9 % af skærmen, desktop fra 17 % til 10 %.
+
+Porteret fra Sagus F20, som løste det samme ønske to dage før. To ting er
+gjort anderledes: på mobil rykker feltet til side, så **hamburgeren får sin egen
+plads** i stedet for at lande oven på søgeikonet, og overgangen nedad er den
+gradient, v57 allerede havde, i stedet for en skygge.
+
+`body.rullet` sættes af en observer på **vagtposten** (`.rulvagt`, 1 px lige
+over bjælken), ikke på bjælken selv: en observer på noget, der ER sticky,
+udløser aldrig — det forlader jo aldrig skærmen. Vagten står FØR bjælken, så
+sammenfoldningen ikke kan bringe den i syne igen og sætte klassen i et blink
+frem og tilbage.
+
+**Ankrene måtte med.** `#pageHost h2` havde `scroll-margin-top: 24px` fra
+dengang der ikke stod noget over indholdet. Klikker man på en overskrift i
+sideoversigten, ruller browseren den til toppen — og så lå den bag feltet.
+Sagu fandt og rettede præcis det samme.
+
+**Ikke verificeret i panelet:** IntersectionObserver fyrer slet ikke i
+preview-browseren — en kontrolprøve på et element, der helt sikkert var
+synligt, fyrede også nul gange, så det er panelet, der ikke komponerer frames.
+CSS-siden er målt med klassen sat i hånden; selve omskiftningen hviler på, at
+mønsteret er kopieret uændret fra Sagu, hvor det virker.
+
 ### Hvem der scroller, er ikke det samme på de to bredder
 
 Det, der kostede tid: min første måling sagde, at siden slet ikke scrollede.
@@ -958,6 +987,54 @@ så på noget, der ikke fejler. Det står nu i kommentaren over reglen.
 Det gælder i øvrigt alt andet, der vil vide, hvor langt siden er scrollet:
 pull-to-refresh, uendelig liste, »tilbage til toppen«. Spørg efter
 scroll-containeren i stedet for at gå ud fra vinduet.
+
+## 6d · Noten hører til i Sagu — også fra knappen (v58)
+
+Reglen fra 21-08-2026 er, at er der koblet en note-app på, hører noterne
+DERTIL. `*` i fangstfeltet rettede sig efter den; kommentaren i koden sagde
+ligefrem »det er kun VEJEN IND, der lukkes«.
+
+Men **»Make it a note« var også en vej ind**, og den blev ikke lukket. Knappen
+hang på `notesEnabled`, som intet har med Sagu at gøre, så den lavede stille en
+lokal doda-note ved siden af Sagu — netop den opsplitning, reglen skulle undgå.
+Andreas fandt det ved at spørge, hvad knappen egentlig gjorde.
+
+**Opgaven slettes.** Den er ikke længere en opgave; bliver den stående, har man
+to ting at holde styr på i stedet for én. Det er `*`, der er undtagelsen: dér
+er noten det nye, og opgaven er noget, man også ville have.
+
+### Rækkefølgen er hele sikkerheden
+
+Noten oprettes **først**, og opgaven slettes kun, hvis det lykkedes. Omvendt
+ville en Sagu, der er nede, koste både opgaven og teksten i samme kald.
+
+Fejler sletningen derimod, er noten allerede oprettet. Beskeden siger det
+(»Note created in Sagu, but the task is still here«) i stedet for bare at melde
+fejlen — ellers ser det ud, som om intet skete, og så trykker man igen og får
+noten to gange.
+
+**Intet `backUrl`.** `*` linker noten tilbage til sin opgave, men her slettes
+opgaven; et link tilbage ville pege på noget, der ikke findes.
+
+### Brødteksten kunne slet ikke sendes med
+
+`opretNote` byggede kroppen selv — `# titel` plus et eventuelt tilbagelink — og
+tog ingen tekst imod. En mail på tyve linjer ville altså blive til en tom note,
+netop som opgaven med hele teksten blev slettet.
+
+Kroppen sættes nu sammen af dele, og fordi det er let at få en ekstra tom linje
+ind i en sådan omskrivning, låser en test **alle tre gamle former** fast: kun
+titel, titel + tilbagelink, og begge dele. Uden den ville hver eneste note, `*`
+opretter, kunne ændre sig, uden at noget klagede.
+
+Grænsen er `GRAENSER.note`, den samme som feltet, teksten kommer fra. En
+kortere grænse her ville klippe den tavst midt over.
+
+### Vedhæftninger kan ikke følge med
+
+En Sagu-note er tekst. Har opgaven filer, siger bekræftelsen **hvor mange**, der
+ryger med — det skal stå før, ikke opdages bagefter, når sletningen ikke kan
+fortrydes.
 
 ## 7 · Uden for scope
 

@@ -182,9 +182,22 @@ function opret(srv) {
   async function opretNote(raaTitel, opt) {
     const o = opt || {};
     const t = String(raaTitel || '').trim().slice(0, 200) || 'Untitled';
-    const krop = o.tilbageUrl
-      ? `# ${t}\n\nFrom doda: [${String(o.tilbageTitel || t).slice(0, 120)}](${o.tilbageUrl})\n`
-      : `# ${t}\n`;
+    /*
+     * Brodteksten (v58). Naar en opgave bliver til en note, SKAL beskrivelsen
+     * med: opgaven slettes bagefter, og uden den ville teksten vaere vaek for
+     * altid. `*` sender ingen krop - dér findes teksten ikke endnu.
+     *
+     * Delene saettes sammen hver for sig, saa de tre tilfaelde (kun titel,
+     * titel + tilbagelink, titel + tekst) giver praecis det samme som foer,
+     * hvor de var det samme.
+     */
+    const brod = String(o.krop || '').trim();
+    const tilbage = o.tilbageUrl
+      ? `From doda: [${String(o.tilbageTitel || t).slice(0, 120)}](${o.tilbageUrl})\n`
+      : '';
+    const krop = `# ${t}\n`
+      + (brod ? `\n${brod}\n` : '')
+      + (tilbage ? `\n${tilbage}` : '');
     const r = await kald('POST', '/api/v1/notes', {
       title: t,
       body: krop,

@@ -314,6 +314,34 @@ button.version-old:hover { text-decoration: underline; }
   pointer-events: none;
 }
 
+/* Rullet: KUN feltet bliver staaende.
+ *
+ * En bjaelke, der bare klaeber, tager en femtedel af en telefonskaerm med sig
+ * ned gennem hele listen - tallene, legenden og luft omkring et kort. Tallene
+ * laeser man én gang; feltet vil man kunne naa hele tiden. Andreas bad om det
+ * 23-08-2026 med Sagu som forbillede, hvor det samme oenske blev loest i F20.
+ *
+ * Klassen saettes af en observer paa `.rulvagt`, ikke paa bjaelken: en
+ * observer paa noget, der ER sticky, udloeser aldrig.
+ */
+body.rullet .toprow,
+body.rullet .omni-legend { display: none; }
+
+body.rullet .topbar { padding-top: 10px; padding-bottom: 8px; }
+body.rullet .omni-input { padding: 12px 0; font-size: 16px; }
+
+/* Kortet skal se ud som et felt, ikke som en flade, der er groet fast: uden
+   sin egen skygge flyder det sammen med bjaelkens baggrund. */
+body.rullet .omni-card:not(:focus-within) .omni-field { box-shadow: var(--shadow); }
+
+/*
+ * Et anker maa ikke lande BAG bjaelken.
+ *
+ * Tallet var 24 px, fra dengang der ikke stod noget over indholdet. Klikker
+ * man paa en overskrift i sideoversigten, ruller browseren den til toppen -
+ * og saa ligger den under feltet, hvor man ikke kan se dét, man bad om.
+ */
+
 .toprow { align-self: flex-end; display: flex; align-items: baseline; gap: 14px; }
 .stats { display: flex; gap: 6px; padding: 0 4px 14px; }
 
@@ -1019,7 +1047,7 @@ textarea.input { resize: vertical; min-height: 90px; font-family: inherit; }
 
 /* Klik i oversigten ruller afsnittet op i toppen - uden luft ville
    overskriften klistre til kanten. */
-#pageHost h2 { scroll-margin-top: 24px; }
+#pageHost h2 { scroll-margin-top: 96px; }
 
 /* Under mobilgraensen er der ikke plads ved siden af indholdet. Samme
    graense som sidebaren - ét tal, to steder (§4). */
@@ -1133,6 +1161,11 @@ textarea.input { resize: vertical; min-height: 90px; font-family: inherit; }
   /* Hamburgeren ligger fixed i de oeverste 54 px. Baren skal baere hele
      .main's padding-top, ellers klistrer feltet ind under hamburgeren. */
   .topbar { padding-top: 64px; margin-top: -64px; }
+
+  /* Foldet sammen er der ikke plads OVER hamburgeren laengere - saa faar den
+     plads ved SIDEN af feltet i stedet. Uden det ville den lande oven paa
+     soegeikonet (det goer den i Sagu). */
+  body.rullet .topbar { padding-top: 8px; padding-left: 52px; }
 
   .omni-input { font-size: 16px; padding: 16px 18px 16px 48px; }
   .omni-icon { left: 17px; }

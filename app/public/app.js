@@ -786,7 +786,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 57;
+const APP_VERSION = 58;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -1189,6 +1189,9 @@ function shellHtml() {
       </div>
     </aside>
     <main class="main">
+      <!-- Vagtposten: 1 px, usynlig, lige over den klaebende bjaelke. Den er
+           kun til for at kunne SES forsvinde - se registrerRullevagt(). -->
+      <div class="rulvagt" id="rulVagt" aria-hidden="true"></div>
       <div class="topbar">
         <!-- Versionslinjen i sidebarens fod har kunnet sige det hele tiden,
              men paa en telefon staar foden BAG hamburgeren, saa man ser den
@@ -1447,6 +1450,37 @@ function bindShell() {
   document.getElementById('navToggle').addEventListener('click', () => document.body.classList.toggle('navopen'));
   document.getElementById('backdrop').addEventListener('click', () => document.body.classList.remove('navopen'));
   bindOmni();
+  registrerRullevagt();
+}
+
+/**
+ * »body.rullet« - er siden rullet ned?
+ *
+ * Bjaelken klaeber (v57), men en bjaelke, der bare klaeber, tager en femtedel
+ * af en telefonskaerm med sig ned gennem hele listen. Naar der er rullet,
+ * folder alt andet end selve feltet sig sammen: tallene og legenden laeser man
+ * én gang, feltet vil man kunne naa hele tiden. Andreas bad om det
+ * 23-08-2026 med Sagu som forbillede - Sagu loeste det samme oenske i F20.
+ *
+ * Observeren sidder paa VAGTPOSTEN, ikke paa bjaelken selv: en observer paa et
+ * element, der ER sticky, udloeser aldrig - det forlader jo aldrig skaermen.
+ *
+ * Vagten staar FOER bjaelken. Naar bjaelken folder sig sammen, rykker alt
+ * EFTER den op - stod vagten under, kunne den komme til syne igen af selve
+ * sammenfoldningen og saette klassen i et blink frem og tilbage.
+ */
+function registrerRullevagt() {
+  const vagt = document.getElementById('rulVagt');
+  if (!vagt) return;
+  if (!('IntersectionObserver' in window)) {
+    // Uden observer: ingen sammenfoldning. Bjaelken klaeber stadig - man
+    // mister kun den ekstra plads, og det er bedre end en klasse, der
+    // saetter sig fast i den forkerte stilling.
+    return;
+  }
+  new IntersectionObserver(([post]) => {
+    document.body.classList.toggle('rullet', !post.isIntersecting);
+  }, { rootMargin: '-8px 0px 0px 0px', threshold: 0 }).observe(vagt);
 }
 
 /*
@@ -3302,7 +3336,10 @@ async function aabnElement(listeItem) {
     <div class="modal-foot">
       <button class="btn ghost" id="edDelete">Delete</button>
       ${it.kind === 'note' || state.notesEnabled
-    ? `<button class="btn ghost" id="edConvert">${it.kind === 'note' ? 'Make it a task' : 'Make it a note'}</button>`
+    ? `<button class="btn ghost" id="edConvert">${it.kind === 'note' ? 'Make it a task'
+      // Sig HVOR noten havner. Paletten skriver "* note in Sagu" af samme
+      // grund: knappen sletter opgaven her, og det maa ikke overraske.
+      : (saguKlar ? 'Make it a note in Sagu' : 'Make it a note')}</button>`
     : ''}
       <span style="flex:1"></span>
       <button class="btn" id="edCancel">Cancel</button>
@@ -3620,12 +3657,76 @@ async function aabnElement(listeItem) {
 
   host.querySelector('#edDelete').addEventListener('click', async () => { luk(); await slet(it.id); });
 
-  // Konvertering ma ALDRIG miste indhold: bade titel og beskrivelse foelger
-  // med begge veje (handover §5.5). En note er reference og skal derfor ud af
-  // handlingslisterne - den far status "queued", ikke "inbox".
+  /**
+   * Opgaven bliver til en note i Sagu - og forsvinder herfra.
+   *
+   * Raekkefoelgen er ikke til forhandling: noten oprettes FOERST, og opgaven
+   * slettes kun, hvis det lykkedes. Omvendt ville en Sagu, der er nede, koste
+   * baade opgaven og teksten paa én gang.
+   *
+   * Ingen `backUrl`. `*` linker noten tilbage til sin opgave, men her SLETTES
+   * opgaven - et link tilbage ville pege paa noget, der ikke findes.
+   *
+   * Udkastet (`u`), ikke `it`: har man rettet titlen eller teksten uden at
+   * gemme, er det dét, man ser paa skaermen, og dét man tror bliver til noten.
+   */
+  const tilSaguNote = async () => {
+    const titel = String(u.title || '').trim() || 'Untitled';
+    const filer = (it.attachments || []).length;
+    /*
+     * Sletningen kan ikke fortrydes, og vedhaeftninger kan ikke foelge med -
+     * en Sagu-note er tekst. Det skal staa FOER, ikke opdages bagefter.
+     */
+    const advarsel = filer
+      ? `\n\n${filer} attachment${filer === 1 ? '' : 's'} cannot come along `
+        + 'and will be deleted with the task.'
+      : '';
+    if (!window.confirm(`Create "${titel}" as a note in Sagu and delete the task here?${advarsel}`)) return;
+
+    let d;
+    try {
+      d = await api('POST', '/api/v1/sagu/note', { title: titel, body: u.note || '' });
+    } catch (ex) {
+      // Intet er sket endnu - ruden bliver staaende, saa man kan proeve igen.
+      toast(ex.message);
+      return;
+    }
+    const aabn = { label: 'Open', run: () => window.open(d.page.url, '_blank', 'noopener') };
+    try {
+      await api('DELETE', `/api/v1/items/${it.id}`, {});
+    } catch (ex) {
+      /*
+       * Noten ER oprettet. Melder vi bare fejlen, ser det ud som om intet
+       * skete - og saa trykker man igen og faar noten to gange.
+       */
+      luk();
+      await genindlaes();
+      tegnSide();
+      toast(`Note created in Sagu, but the task is still here: ${ex.message}`, aabn);
+      return;
+    }
+    luk();
+    await genindlaes();
+    tegnSide();
+    toast('Note created in Sagu \u00b7 task removed', aabn);
+  };
+
+  /*
+   * Konvertering ma ALDRIG miste indhold: bade titel og beskrivelse foelger
+   * med begge veje (handover §5.5). En note er reference og skal derfor ud af
+   * handlingslisterne - den far status "queued", ikke "inbox".
+   *
+   * Er Sagu koblet paa, hoerer noten DERTIL - samme regel som `*` i paletten
+   * (DESIGN §v35). Indtil v58 gjaldt reglen kun vejen ind gennem fangstfeltet,
+   * saa denne knap lavede stille en LOKAL doda-note ved siden af Sagu: netop
+   * den opsplitning, reglen skulle undgaa. Andreas bad om begge dele
+   * 23-08-2026 - samme regel som `*`, og opgaven forsvinder herfra, fordi den
+   * ikke laengere ER en opgave.
+   */
   const konverter = host.querySelector('#edConvert');
   if (konverter) konverter.addEventListener('click', async () => {
     const tilNote = it.kind !== 'note';
+    if (tilNote && saguKlar) { await tilSaguNote(); return; }
     try {
       await gem({ kind: tilNote ? 'note' : 'task', status: tilNote ? 'queued' : (u.status === 'queued' ? 'inbox' : u.status) });
       luk();
@@ -6891,8 +6992,15 @@ async function sideNoter() {
     host.innerHTML = `<section class="page">${hoved}
       <div class="empty">${icon('note', 34)}
         <p class="empty-title">No notes yet</p>
-        <p>Start a capture with <strong>*</strong> — <code>* wifi password 1234</code> —
-        or open a task and press <strong>Make it a note</strong>.</p></div>
+        ${saguKlar
+    /* Begge veje ind peger paa Sagu, naar den er koblet paa. Stod der
+       stadig "brug * eller Make it a note", ville man foelge en anvisning,
+       der efterlader denne skaerm lige saa tom - noten laegger sig i Sagu. */
+    ? `<p>New notes go to <strong>Sagu</strong> — both <strong>*</strong> and
+        <strong>Make it a note in Sagu</strong> put them there. This screen shows the
+        notes that were already here.</p>`
+    : `<p>Start a capture with <strong>*</strong> — <code>* wifi password 1234</code> —
+        or open a task and press <strong>Make it a note</strong>.</p>`}</div>
     </section>`;
     return;
   }
