@@ -807,7 +807,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 59;
+const APP_VERSION = 60;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -7006,11 +7006,51 @@ async function sideNoter() {
   const d = await api('GET', '/api/v1/items?kind=note');
   state.items = d.items;
 
-  const hoved = `<div class="page-head"><h1>Notes</h1>
-    <p class="lead">${esc(BESKRIVELSER.notes)}</p></div>`;
+  /*
+   * Sagu-noterne, doda bruger (v60).
+   *
+   * Er Sagu koblet paa, laves nye noter DÉR - saa stod denne skaerm tom og
+   * sagde »No notes yet«, mens noterne fandtes, bare et andet sted (Andreas,
+   * 24-08-2026). Det er ikke ALLE noter i Sagu, der hoerer til her: kun dem,
+   * der er linket fra en opgave eller et projekt i doda. Sagus egen forside
+   * er altid ét klik vaek og er bedre til resten.
+   *
+   * Fejler kaldet, tegnes skaermen som foer. En liste, der er en bekvemmelighed,
+   * maa ikke kunne vaelte den side, den staar paa.
+   */
+  let sagu = { url: '', items: [], projects: [] };
+  if (saguKlar) {
+    try { sagu = await api('GET', '/api/v1/sagu/linked'); } catch { /* skaermen staar uden */ }
+  }
+  const saguNoter = [
+    ...sagu.projects.map((p) => ({ url: p.link_url, navn: p.link_title || p.name, paa: p.name, slags: 'project' })),
+    ...sagu.items.map((i) => ({ url: i.link_url, navn: i.link_title || i.title, paa: i.title, slags: 'item' })),
+  ];
 
-  if (!d.items.length) {
+  const saguHtml = () => {
+    if (!saguKlar) return '';
+    const vaert = (() => { try { return new URL(sagu.url).host; } catch { return 'Sagu'; } })();
+    return `
+    <div class="grouphead">
+      <h2 class="group meta" style="margin:0">In Sagu ${saguNoter.length
+    ? `<span class="group-count">${saguNoter.length}</span>` : ''}</h2>
+      ${sagu.url ? `<a class="chip link" href="${esc(sagu.url)}" target="_blank" rel="noopener noreferrer"
+        title="${esc(sagu.url)}">${icon('link', 13)} ${esc(vaert)}</a>` : ''}
+    </div>
+    ${saguNoter.length ? `<div class="notes">${saguNoter.map((n) => `
+      <a class="notecard sagukort" href="${esc(n.url)}" target="_blank" rel="noopener noreferrer">
+        <div class="notecard-title">${icon('note', 14)} ${esc(n.navn)}</div>
+        ${n.navn !== n.paa ? `<div class="meta">on ${n.slags === 'project' ? 'project ' : ''}“${esc(n.paa)}”</div>` : ''}
+      </a>`).join('')}</div>`
+    // Er Sagu koblet paa, men intet linket endnu, skal afsnittet SIGE det -
+    // ikke bare vaere en overskrift over ingenting.
+    : `<p class="lead" style="margin:6px 0 0;opacity:.75">No notes from doda yet. A note made with
+        <code>*</code> or <strong>Make it a note in Sagu</strong> shows up here.</p>`}`;
+  };
+
+  if (!d.items.length && !saguNoter.length) {
     host.innerHTML = `<section class="page">${hoved}
+      ${saguHtml()}
       <div class="empty">${icon('note', 34)}
         <p class="empty-title">No notes yet</p>
         ${saguKlar
@@ -7023,6 +7063,13 @@ async function sideNoter() {
     : `<p>Start a capture with <strong>*</strong> — <code>* wifi password 1234</code> —
         or open a task and press <strong>Make it a note</strong>.</p>`}</div>
     </section>`;
+    return;
+  }
+
+  // Er der kun Sagu-noter, er der ikke noget at gruppere - men afsnittet
+  // ovenfor skal stadig tegnes.
+  if (!d.items.length) {
+    host.innerHTML = `<section class="page">${hoved}${saguHtml()}</section>`;
     return;
   }
 
@@ -7043,7 +7090,11 @@ async function sideNoter() {
 
   let n = 0;
   host.innerHTML = `<section class="page">${hoved}
-    <p class="meta" style="margin-bottom:12px">${d.items.length} note${d.items.length === 1 ? '' : 's'}</p>
+    ${saguHtml()}
+    ${/* De doda-egne noter staar under Sagus: er Sagu koblet paa, er det dér,
+          de nye ligger, og disse er dem, der var her i forvejen. */ ''}
+    <h2 class="group meta" style="margin-top:${saguKlar ? '26px' : '0'}">${saguKlar ? 'In doda' : 'Notes'}
+      <span class="group-count">${d.items.length}</span></h2>
     <div data-keynav>
       ${sorteret.map(([navn, liste]) => `
         <h2 class="group meta">${esc(navn)} <span class="group-count">${liste.length}</span></h2>

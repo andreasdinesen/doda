@@ -1073,6 +1073,53 @@ Skriver brugeren selv et klokkeslæt — »om 2 timer kl 15« — vinder det. Fr
 er modstridende, og dét, der står med rene ord, er det sikreste gæt; det er
 også sådan alle de andre former opfører sig.
 
+## 6f · Notes-skærmen, når noterne ligger i Sagu (v60)
+
+Siden v44 laver `*` noten i Sagu, og siden v58 gør knappen det samme. Notes-skærmen
+blev aldrig fulgt med: den viste kun dodas egne rækker med `kind = 'note'` og sagde
+»No notes yet«, mens noterne fandtes — bare et andet sted (Andreas, 24-08-2026).
+
+### Hvilke noter hører til her
+
+**Dem, der er linket fra en opgave eller et projekt i doda.** Ikke alt i Sagu.
+Skærmen skal svare på »hvad har jeg liggende derovre, som hører til det her«, ikke
+være en dårligere kopi af Sagus egen forside — den er altid ét klik væk, og linket
+i afsnittets højre side fører derhen.
+
+Reglen for, hvad der ER en Sagu-adresse, står ét sted (`app/sagu.js`). Serveren
+henter alt med et `link_url` og filtrerer med **den samme funktion** som klienten.
+En `LIKE '%#note-%'` i SQL ville være en anden regel ved siden af, og to regler for
+det samme driver fra hinanden, uden at nogen opdager det.
+
+### Listen spørger ikke Sagu
+
+Titlerne tages fra `link_title`, der allerede står i dodas base. Skærmen tegnes
+derfor uden et eneste kald udad — også offline, og når Sagu er nede. Er en note
+døbt om, retter `friskLinkTitel` det, når den åbnes; det er ikke listens opgave.
+
+Og fejler kaldet til `/sagu/linked` alligevel, tegnes siden som før. **En
+bekvemmelighed må ikke kunne vælte den side, den står på.**
+
+Er Sagu ikke forbundet, svarer endepunktet med en tom liste og status 200 — ikke
+400. Skærmen spørger kun, når den tror, Sagu er koblet på; tror den forkert, ville
+en 400 stå som en rød fejl på en side, hvor afsnittet slet ikke skulle vises.
+
+### Tre tilstande, ikke to
+
+Skærmen havde »tom« og »har noter«. Nu er der tre: kun Sagu-noter, kun doda-noter,
+eller begge. Den tomme tilstand må kun vises, når **begge** er tomme — ellers siger
+siden »No notes yet« oven over en liste med noter.
+
+### Testen, der slukkede lyset for de næste
+
+Den nye test frakoblede Sagu for at prøve den sti og efterlod det slukket: otte
+efterfølgende tests faldt. Værre var oprydningen — den brugte en nøgle, der ikke
+fandtes, så genforbindelsen blev afvist **tavst**, og alt så stadig forkert ud.
+
+Oprydningen ligger nu i `finally` **med en assertion på, at den lykkedes**. Deler
+tests én server og kører i rækkefølge, ligner fejlen ellers en fejl i dét, der
+køres bagefter — ikke i den test, der slukkede lyset.
+
 ## 7 · Uden for scope
 
 Handover §10 gælder uændret: ingen flere brugere, ingen

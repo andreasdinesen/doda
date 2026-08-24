@@ -576,6 +576,20 @@ h2.group {
 
 .group-count { color: var(--muted); opacity: .65; font-weight: 500; }
 
+/* Gruppeoverskrift med noget i hoejre side - »In Sagu« og vejen DERHEN.
+   `baseline`, saa chippen staar paa linje med den lille overskrift og ikke
+   loefter den; `wrap`, saa et langt vaertsnavn falder ned i stedet for at
+   klemme overskriften vaek paa en telefon. */
+.grouphead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 26px 0 8px;
+}
+.grouphead h2.group { margin: 0; }
+
 .list { display: flex; flex-direction: column; gap: 2px; }
 
 .item-row {

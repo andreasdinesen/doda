@@ -2447,6 +2447,35 @@ const ROUTES = {
     sendJson(res, 200, { page: r.page });
   },
 
+  /**
+   * De Sagu-noter, doda selv bruger.
+   *
+   * »Bruges sammen med doda« er praecis dem, der er LINKET fra en opgave eller
+   * et projekt her - ikke alle noter i Sagu. Ellers ville Notes-skaermen vaere
+   * en daarligere kopi af Sagus egen forside, som altid vil vaere et klik vaek.
+   *
+   * Titlerne tages fra `link_title`, der allerede staar i basen. Skaermen skal
+   * kunne tegnes uden at spoerge Sagu - ogsaa naar Sagu er nede, eller man
+   * sidder offline. Er en note doebt om i Sagu, retter `friskLinkTitel` det,
+   * naar den bliver aabnet; det er ikke denne listes opgave.
+   */
+  'GET /api/v1/sagu/linked': (req, res) => {
+    const auth = godkend(req, res, 'read');
+    if (!auth) return;
+    /*
+     * Reglen for »er dette en Sagu-adresse« staar ÉT sted (app/sagu.js).
+     * En `LIKE '%#note-%'` her ville vaere en anden regel ved siden af, og
+     * to regler for det samme driver fra hinanden uden at nogen opdager det.
+     */
+    const items = db.prepare(`SELECT id, title, kind, status, project_id, link_url, link_title
+        FROM items WHERE deleted = 0 AND link_url IS NOT NULL
+        ORDER BY updated_at DESC`).all().filter((r) => saguModul.erSaguUrl(r.link_url));
+    const projects = db.prepare(`SELECT id, name, link_url, link_title
+        FROM projects WHERE deleted = 0 AND link_url IS NOT NULL
+        ORDER BY name`).all().filter((r) => saguModul.erSaguUrl(r.link_url));
+    sendJson(res, 200, { url: saguForbundet() ? getSetting('sagu_url', '') : '', items, projects });
+  },
+
   /* Notens kommentarer. Kun LAESNING - svaret hoerer hjemme i Sagu. */
   'GET /api/v1/sagu/comments': async (req, res, ctx) => {
     const auth = godkend(req, res, 'read');

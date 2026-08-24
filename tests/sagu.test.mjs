@@ -327,6 +327,62 @@ test('en note fra PALETTEN lander i den valgte notesbog', async () => {
   assert.equal((await J('/api/v1/sagu/notebook', { notebookId: '' })).status, 200, 'og den kan ryddes');
 });
 
+test('Notes-skaermen kan faa de noter, doda selv bruger', async () => {
+  /*
+   * »Vis de noter, som bruges sammen med doda« (Andreas, 24-08-2026).
+   * Skaermen sagde »No notes yet«, mens noterne fandtes - bare i Sagu.
+   *
+   * »Bruges sammen med doda« er dem, der er LINKET herfra. Alt andet i Sagu
+   * hoerer til paa Sagus egen forside.
+   */
+  const opgave = (await J('/api/v1/capture', { text: 'Opgave med note' })).data.item;
+  const uden = (await J('/api/v1/capture', { text: 'Opgave uden note' })).data.item;
+  await J(`/api/v1/items/${opgave.id}`, {
+    link_url: 'https://sagu.eksempel.dk/#note-' + 'a'.repeat(32),
+    link_title: 'Notens eget navn',
+  });
+  // Et link, der IKKE er en Sagu-adresse, maa ikke smutte med.
+  await J(`/api/v1/items/${uden.id}`, { link_url: 'https://notion.so/en-side', link_title: 'Notion' });
+
+  const r = await J('/api/v1/sagu/linked');
+  assert.equal(r.status, 200);
+  const ider = r.data.items.map((i) => i.id);
+  assert.ok(ider.includes(opgave.id), 'den linkede opgave er med');
+  assert.ok(!ider.includes(uden.id), 'et Notion-link er ikke en Sagu-note');
+  assert.equal(r.data.items.find((i) => i.id === opgave.id).link_title, 'Notens eget navn',
+    'notens EGET navn med - det er tit et andet end opgavens');
+
+  // Adressen til serveren skal med, saa skaermen kan foere derhen.
+  assert.match(r.data.url, /^https?:\/\//, 'og vejen til Sagu selv');
+});
+
+test('er Sagu ikke forbundet, er listen tom - ikke en fejl', async () => {
+  /*
+   * Skaermen spoerger kun, naar den tror, Sagu er koblet paa. Tror den
+   * forkert, skal svaret vaere en tom liste: en 400 ville staa som en roed
+   * fejl paa en side, hvor Sagu-afsnittet slet ikke skulle vises.
+   */
+  await J('/api/v1/sagu', undefined, 'DELETE');
+  try {
+    const r = await J('/api/v1/sagu/linked');
+    assert.equal(r.status, 200);
+    assert.equal(r.data.url, '', 'ingen adresse at pege paa');
+    // Linkene paa opgaverne bliver staaende - de er en kendsgerning om
+    // opgaven, ikke en foelge af en indstilling. Saa noterne er der stadig.
+    assert.ok(Array.isArray(r.data.items));
+  } finally {
+    // Testene deler ÉN server og koerer i raekkefoelge. Lades forbindelsen
+    // frakoblet, fejler alt efter dette punkt - og fejlen ligner en fejl i
+    // dét, der koeres bagefter, ikke i den test, der slukkede lyset.
+    // Assert paa genforbindelsen: sker den ikke, fejler ALT efter dette
+    // punkt, og fejlen ligner en fejl i dét, der koeres bagefter - ikke i
+    // den test, der slukkede lyset. (Foerste forsoeg brugte en noegle, der
+    // ikke fandtes; den blev afvist tavst, og otte tests faldt.)
+    const igen = await forbind(attrap.url, 'sagu_rigtig');
+    assert.equal(igen.status, 200, 'forbindelsen skal vaere sat op igen bagefter');
+  }
+});
+
 test('Sagu nede: en paen fejl - ikke en fejlet gemning', async () => {
   attrap.saet('nede');
   const r = await J('/api/v1/sagu/note', { title: 'mens Sagu er nede' });
