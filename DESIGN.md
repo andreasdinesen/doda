@@ -1120,6 +1120,66 @@ Oprydningen ligger nu i `finally` **med en assertion på, at den lykkedes**. Del
 tests én server og kører i rækkefølge, ligner fejlen ellers en fejl i dét, der
 køres bagefter — ikke i den test, der slukkede lyset.
 
+## 6g · Da Notes-skærmen ikke blev tegnet (v61)
+
+v60 gik i drift med en skærm, der kastede `ReferenceError`, hver gang den blev
+åbnet. Man trykkede på **Notes**, og der skete ingenting — på både telefon og
+Mac. Erstatningen, der indførte Sagu-afsnittet, slugte linjen `const hoved = …`,
+mens tre `${hoved}` blev stående.
+
+### Hvorfor intet fangede det
+
+- `node --check` ser ingenting: det **er** gyldig syntaks.
+- De 263 tests ser ingenting: de prøver serveren og parseren.
+- doda har **ingen frontend-tests**, fordi `app.js` kræver en browser.
+
+Et forsøg på at køre `app.js` i `node:vm` med en stub-browser hang på de
+gensidige stubs og blev opgivet — det er større end den fejl, det skulle fange.
+
+### Vagten i stedet (`tests/frontend.test.mjs`)
+
+Grov med vilje: den leder efter navne, der bruges i en `${…}` og **ikke
+optræder ét eneste andet sted i filen**. Et navn, der hverken er deklareret,
+importeret eller parameter, kan ikke slås op — så siden kaster, når den tegnes.
+
+Standard-JS filtreres af `globalThis` selv, så kun de browser-globale skal
+holdes i en liste, og den bliver ikke lang. Der er en test af, at mønsteret
+faktisk kan blive rødt: en grøn test, der ikke **kan** fejle, beviser ingenting
+(§6b). Fejlen blev genskabt, og vagten fandt den.
+
+Den fanger ikke alt — `${a.b}`-fejl og forkerte værdier slipper igennem. Den
+fanger dét, der skete, og koster ingenting.
+
+### Det, der ellers kom for dagen
+
+Jagten gik først på iOS og eksterne links, og det var forkert. Men undervejs
+dukkede to ægte fejl op med samme rod som §6c: **`window.scrollY` er altid 0
+under mobilgrænsen**, fordi body er scroll-boksen.
+
+- **Træk-for-at-genindlæse** troede, ethvert træk kom fra toppen. Vagten
+  »kun fra toppen« holdt aldrig på en telefon, så et træk nedad midt i en lang
+  liste genindlæste appen.
+- **`window.scrollTo(0, 0)` ved sideskift** gjorde slet ingenting, så man
+  landede midt i den nye side.
+
+Begge går nu gennem `rulletNed()` og `tilToppen()` i `p1_core.js`, som læser og
+sætter alle tre (`window`, `body`, `documentElement`). Det er billigere end at
+gætte rigtigt om, hvem der scroller.
+
+**Lærestykket:** §6c skrev, at »alt, der vil vide, hvor langt siden er scrollet
+— pull-to-refresh, uendelig liste, op til toppen — skal spørge efter
+scroll-containeren«. Det blev skrevet ned og ikke gjort. En erkendelse, der
+kun bliver til en kommentar, er ikke en rettelse.
+
+### Eksterne links i standalone
+
+Ikke årsagen til fejlen, men taget med: iOS åbner ikke `target="_blank"` fra en
+PWA på hjemmeskærmen — linket ser rigtigt ud, og der sker ingenting. Én
+delegeret lytter frem for en handler pr. link, så et link tilføjet i morgen
+virker uden at nogen husker at binde det. `href` og `target` bliver stående;
+lytteren rører kun sagen i standalone, og kun for http(s), så `mailto:` går sin
+egen vej. Verificeret: i en almindelig browser blander den sig **ikke**.
+
 ## 7 · Uden for scope
 
 Handover §10 gælder uændret: ingen flere brugere, ingen

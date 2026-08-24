@@ -330,8 +330,15 @@ function traekForNyt() {
   const optaget = () => document.body.classList.contains('navopen')
     || !!(document.getElementById('modalHost') || {}).firstChild;
 
+  /*
+   * »Kun fra toppen« holdt aldrig paa en telefon: det er BODY, der scroller
+   * dér, saa `window.scrollY` er altid 0, og et traek nedad midt i en lang
+   * liste saa ud som et traek fra toppen - og genindlaeste appen.
+   * `rulletNed()` spoerger alle tre (p1_core).
+   */
+
   window.addEventListener('touchstart', (e) => {
-    aktiv = !optaget() && window.scrollY <= 0 && e.touches.length === 1;
+    aktiv = !optaget() && rulletNed() <= 0 && e.touches.length === 1;
     startY = aktiv ? e.touches[0].clientY : 0;
     afstand = 0;
   }, { passive: true });
@@ -339,7 +346,7 @@ function traekForNyt() {
   window.addEventListener('touchmove', (e) => {
     if (!aktiv) return;
     // Ruller siden alligevel, er det ikke et traek - saa slip det.
-    if (window.scrollY > 0) { aktiv = false; skjul(); return; }
+    if (rulletNed() > 0) { aktiv = false; skjul(); return; }
     afstand = e.touches[0].clientY - startY;
     if (afstand <= 0) { skjul(); return; }
     vis(afstand, afstand >= TAERSKEL ? 'Release to refresh' : 'Pull to refresh');

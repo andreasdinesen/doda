@@ -830,6 +830,9 @@ async function sideNoter() {
    * Fejler kaldet, tegnes skaermen som foer. En liste, der er en bekvemmelighed,
    * maa ikke kunne vaelte den side, den staar paa.
    */
+  const hoved = `<div class="page-head"><h1>Notes</h1>
+    <p class="lead">${esc(BESKRIVELSER.notes)}</p></div>`;
+
   let sagu = { url: '', items: [], projects: [] };
   if (saguKlar) {
     try { sagu = await api('GET', '/api/v1/sagu/linked'); } catch { /* skaermen staar uden */ }

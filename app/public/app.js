@@ -807,7 +807,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 60;
+const APP_VERSION = 61;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -1474,6 +1474,68 @@ function bindShell() {
   registrerRullevagt();
 }
 
+/*
+ * Rulning: SPOERG efter containeren, gaa aldrig ud fra vinduet.
+ *
+ * Under mobilgraensen er det BODY, der scroller: `html, body { overflow-x:
+ * hidden }` (nettet mod vandret scroll) og `height: 100%` goer tilsammen body
+ * til en scroll-boks (DESIGN §6c). Saa er `window.scrollY` altid 0, og
+ * `window.scrollTo()` goer ingenting - netop paa telefonen.
+ *
+ * Det ramte to ting stille: traek-for-at-genindlaese troede, ethvert traek kom
+ * fra toppen, og »op til toppen ved sideskift« virkede slet ikke, saa man
+ * landede midt i den nye side.
+ *
+ * Begge saetter/laeser alle tre. Det er billigere end at gaette rigtigt.
+ */
+const rulletNed = () => Math.max(
+  window.scrollY || 0,
+  document.body.scrollTop || 0,
+  document.documentElement.scrollTop || 0,
+);
+
+function tilToppen() {
+  window.scrollTo(0, 0);
+  document.body.scrollTop = 0;
+  document.documentElement.scrollTop = 0;
+}
+
+/*
+ * Eksterne links, naar doda koerer som app paa hjemmeskaermen.
+ *
+ * iOS aabner IKKE `target="_blank"` fra en PWA i standalone: linket ser
+ * rigtigt ud, man trykker, og der sker INGENTING - hverken i appen eller i
+ * Safari. Andreas fandt det 24-08-2026 paa Notes-skaermens Sagu-kort, men det
+ * gjaldt ALLE tolv eksterne links i doda; de andre var bare ikke blevet
+ * proevet fra telefonen.
+ *
+ * ÉN delegeret lytter frem for en handler pr. link: siderne tegnes om hele
+ * tiden, og et link, der bliver tilfoejet i morgen, skal virke, uden at nogen
+ * husker at binde det.
+ *
+ * `href` og `target` bliver staaende. De giver hoejrekliksmenuen, »aabn i ny
+ * fane« og en adresse, man kan se - og i en almindelig browser er det dem,
+ * der goer arbejdet. Lytteren roerer kun sagen, hvor browseren giver op.
+ */
+const iStandalone = () => window.matchMedia('(display-mode: standalone)').matches
+  || window.navigator.standalone === true;
+
+document.addEventListener('click', (e) => {
+  if (!iStandalone()) return;
+  const a = e.target.closest && e.target.closest('a[target="_blank"]');
+  if (!a || !a.href) return;
+  // Kun http(s). `mailto:` og `tel:` skal gaa deres egen vej - dem klarer
+  // systemet selv, ogsaa i standalone.
+  if (a.protocol !== 'http:' && a.protocol !== 'https:') return;
+  e.preventDefault();
+  const vindue = window.open(a.href, '_blank', 'noopener');
+  /*
+   * Sidste udvej. Bliver ogsaa `window.open` afvist, er det bedre at gaa
+   * derhen i appen end at lade knappen vaere doed - man kan swipe tilbage.
+   */
+  if (!vindue) window.location.href = a.href;
+});
+
 /**
  * »body.rullet« - er siden rullet ned?
  *
@@ -1535,7 +1597,7 @@ function gaaTil(view, opt) {
   tegnSide();
   // Scroll kun til toppen ved reelt sideskift - ellers kastes brugeren op,
   // hver gang en inline-redigering gentegner (RUNE-ERFARINGER §4).
-  if (skifter || havdeFilter) window.scrollTo(0, 0);
+  if (skifter || havdeFilter) tilToppen();
 }
 
 /** Henter state og gentegner NAV og SIDE, men aldrig hele skallen. */
@@ -4443,7 +4505,7 @@ function gaaTilProjekt(id) {
   state.openProject = id;
   opdaterNav();
   tegnSide();
-  window.scrollTo(0, 0);
+  tilToppen();
 }
 
 /* --------------------------------------------------- projekt-redigering */
@@ -5840,8 +5902,15 @@ function traekForNyt() {
   const optaget = () => document.body.classList.contains('navopen')
     || !!(document.getElementById('modalHost') || {}).firstChild;
 
+  /*
+   * »Kun fra toppen« holdt aldrig paa en telefon: det er BODY, der scroller
+   * dér, saa `window.scrollY` er altid 0, og et traek nedad midt i en lang
+   * liste saa ud som et traek fra toppen - og genindlaeste appen.
+   * `rulletNed()` spoerger alle tre (p1_core).
+   */
+
   window.addEventListener('touchstart', (e) => {
-    aktiv = !optaget() && window.scrollY <= 0 && e.touches.length === 1;
+    aktiv = !optaget() && rulletNed() <= 0 && e.touches.length === 1;
     startY = aktiv ? e.touches[0].clientY : 0;
     afstand = 0;
   }, { passive: true });
@@ -5849,7 +5918,7 @@ function traekForNyt() {
   window.addEventListener('touchmove', (e) => {
     if (!aktiv) return;
     // Ruller siden alligevel, er det ikke et traek - saa slip det.
-    if (window.scrollY > 0) { aktiv = false; skjul(); return; }
+    if (rulletNed() > 0) { aktiv = false; skjul(); return; }
     afstand = e.touches[0].clientY - startY;
     if (afstand <= 0) { skjul(); return; }
     vis(afstand, afstand >= TAERSKEL ? 'Release to refresh' : 'Pull to refresh');
@@ -7018,6 +7087,9 @@ async function sideNoter() {
    * Fejler kaldet, tegnes skaermen som foer. En liste, der er en bekvemmelighed,
    * maa ikke kunne vaelte den side, den staar paa.
    */
+  const hoved = `<div class="page-head"><h1>Notes</h1>
+    <p class="lead">${esc(BESKRIVELSER.notes)}</p></div>`;
+
   let sagu = { url: '', items: [], projects: [] };
   if (saguKlar) {
     try { sagu = await api('GET', '/api/v1/sagu/linked'); } catch { /* skaermen staar uden */ }

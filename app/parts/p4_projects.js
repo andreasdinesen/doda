@@ -327,7 +327,7 @@ function gaaTilProjekt(id) {
   state.openProject = id;
   opdaterNav();
   tegnSide();
-  window.scrollTo(0, 0);
+  tilToppen();
 }
 
 /* --------------------------------------------------- projekt-redigering */
