@@ -1197,6 +1197,23 @@ textarea.input { resize: vertical; min-height: 90px; font-family: inherit; }
   body.rullet .topbar { padding-top: 8px; padding-left: 52px; }
 
   .omni-input { font-size: 16px; padding: 16px 18px 16px 48px; }
+
+  /*
+   * 16 px paa ALLE felter, ikke kun soegefeltet.
+   *
+   * iOS zoomer ind, saa snart et felt med skrift under 16 px faar fokus - og
+   * saa staar siden forskudt med venstre kant UDEN for skaermen. Det ligner
+   * et layoutbrud og er det ikke: teksten er der, den er bare uden for det,
+   * telefonen har zoomet ind paa.
+   *
+   * `.omni-input` fik sine 16 px af praecis den grund. Alle de andre felter -
+   * kommentaren til en Sagu-note, titel, beskrivelse, Settings - arvede
+   * body's 15 px og blev glemt. Andreas ramte det paa en projektside
+   * 25-08-2026: »teksten kan ikke laeses i venstre side«.
+   *
+   * 16 px er ikke en smagssag her. Det er graensen, Safari maaler paa.
+   */
+  .input, textarea.input, select.input, .komskriv textarea { font-size: 16px; }
   .omni-icon { left: 17px; }
   .hint { display: none; }
   h1 { font-size: 27px; }
@@ -1254,6 +1271,34 @@ textarea.input { resize: vertical; min-height: 90px; font-family: inherit; }
 .sagukort { display: block; text-decoration: none; color: inherit; }
 .sagukort:hover { background: var(--card-hover); }
 .sagukort .notecard-title { display: flex; align-items: center; gap: 7px; }
+
+/* Kortet har TO udgange: titlen til noten i Sagu, linjen under til opgaven
+   eller projektet her. Derfor er kortet selv ikke laengere et link, og de to
+   maa hver for sig se ud som noget, man kan trykke paa. */
+.sagulink { text-decoration: none; color: inherit; }
+.sagulink:hover { text-decoration: underline; }
+
+.notelink {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  /* `inherit` ville give knappen browserens egen skrift - den skal se ud som
+     den meta-linje, den erstatter. */
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-align: left;
+}
+.notelink:hover { color: var(--accent-text); }
+/* flex:none - ellers klemmer flex-foraeldren ikonet sammen (§4). */
+.notelink svg { flex: none; }
 
 /* »Der er kommet en ny version«. Staar i toppen af indholdet - paa en telefon
    er sidebarens fod bag hamburgeren, og saa ser man den aldrig. */

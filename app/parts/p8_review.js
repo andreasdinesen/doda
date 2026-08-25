@@ -838,9 +838,31 @@ async function sideNoter() {
     try { sagu = await api('GET', '/api/v1/sagu/linked'); } catch { /* skaermen staar uden */ }
   }
   const saguNoter = [
-    ...sagu.projects.map((p) => ({ url: p.link_url, navn: p.link_title || p.name, paa: p.name, slags: 'project' })),
-    ...sagu.items.map((i) => ({ url: i.link_url, navn: i.link_title || i.title, paa: i.title, slags: 'item' })),
+    ...sagu.projects.map((p) => ({ id: p.id, url: p.link_url, navn: p.link_title || p.name, paa: p.name, slags: 'project' })),
+    ...sagu.items.map((i) => ({ id: i.id, url: i.link_url, navn: i.link_title || i.title, paa: i.title, slags: 'item' })),
   ];
+
+  /*
+   * Vejen fra en note tilbage til dét, den hoerer til.
+   *
+   * Bindes efter HVER af de tre udgange - skaermen tegnes tre steder (tom,
+   * kun Sagu, begge), og en binding, der kun staar det ene sted, giver knapper
+   * der ser rigtige ud og ikke goer noget. Det var praecis dén fejl, der
+   * ramte »Recent« og »Favourites« i Sagu.
+   */
+  const bindSaguLinks = () => {
+    host.querySelectorAll('[data-sagu-item]').forEach((el) => {
+      el.addEventListener('click', async () => {
+        const id = el.dataset.saguItem;
+        // Listen her er noter; opgaven skal hentes frisk for at kunne aabnes.
+        try { aabnElement((await api('GET', `/api/v1/items/${id}`)).item); }
+        catch (ex) { toast(ex.message); }
+      });
+    });
+    host.querySelectorAll('[data-sagu-project]').forEach((el) => {
+      el.addEventListener('click', () => gaaTilProjekt(el.dataset.saguProject));
+    });
+  };
 
   const saguHtml = () => {
     if (!saguKlar) return '';
@@ -852,11 +874,25 @@ async function sideNoter() {
       ${sagu.url ? `<a class="chip link" href="${esc(sagu.url)}" target="_blank" rel="noopener noreferrer"
         title="${esc(sagu.url)}">${icon('link', 13)} ${esc(vaert)}</a>` : ''}
     </div>
+    ${/*
+      * TO veje ud af kortet, ikke én (Andreas, 25-08-2026).
+      *
+      * Titlen foerer til NOTEN i Sagu; linjen under foerer til den opgave
+      * eller det projekt HER, som noten hoerer til. Foer var hele kortet ét
+      * link til Sagu, og saa var der ingen vej tilbage til dét, noten handler
+      * om - man skulle lede den op i en anden liste.
+      *
+      * Derfor en `div` med to elementer i stedet for ét `a` om det hele: et
+      * anker inden i et anker er ugyldigt, og en usynlig knap oven paa et link
+      * er en faelde for baade tastatur og skaermlaeser.
+      */ ''}
     ${saguNoter.length ? `<div class="notes">${saguNoter.map((n) => `
-      <a class="notecard sagukort" href="${esc(n.url)}" target="_blank" rel="noopener noreferrer">
-        <div class="notecard-title">${icon('note', 14)} ${esc(n.navn)}</div>
-        ${n.navn !== n.paa ? `<div class="meta">on ${n.slags === 'project' ? 'project ' : ''}“${esc(n.paa)}”</div>` : ''}
-      </a>`).join('')}</div>`
+      <div class="notecard sagukort">
+        <a class="notecard-title sagulink" href="${esc(n.url)}"
+           target="_blank" rel="noopener noreferrer">${icon('note', 14)} ${esc(n.navn)}</a>
+        <button class="notelink meta" data-sagu-${n.slags}="${esc(n.id)}">
+          ${icon('link', 12)} ${n.slags === 'project' ? 'project' : 'task'}: ${esc(n.paa)}</button>
+      </div>`).join('')}</div>`
     /*
      * Er Sagu koblet paa, men listen tom, skal afsnittet SIGE det - ikke bare
      * vaere en overskrift over ingenting.
@@ -886,6 +922,7 @@ async function sideNoter() {
     : `<p>Start a capture with <strong>*</strong> — <code>* wifi password 1234</code> —
         or open a task and press <strong>Make it a note</strong>.</p>`}</div>
     </section>`;
+    bindSaguLinks();
     return;
   }
 
@@ -893,6 +930,7 @@ async function sideNoter() {
   // ovenfor skal stadig tegnes.
   if (!d.items.length) {
     host.innerHTML = `<section class="page">${hoved}${saguHtml()}</section>`;
+    bindSaguLinks();
     return;
   }
 
@@ -925,6 +963,7 @@ async function sideNoter() {
     </div>
     <p class="hintline meta">↑↓ select · enter open · esc leave</p>
   </section>`;
+  bindSaguLinks();
   bindListe();
 }
 

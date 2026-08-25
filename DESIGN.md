@@ -1249,6 +1249,51 @@ højre 1262. Kort indhold blev derefter byttet ud med tyve lange titler i samme
 side, og bredden rørte sig ikke — det er dét, sagen handlede om, så det er dét,
 der skulle måles. På mobil flugter de også, uden vandret scroll.
 
+## 6j · 16 px på felter, og to udgange fra et note-kort (v64)
+
+»Teksten kan ikke læses i venstre side, når man står på projekter« (Andreas,
+25-08-2026, med et skærmbillede).
+
+### Det lignede et layoutbrud og var det ikke
+
+Jeg forsøgte at genskabe det med lange API-nøgler, `<code>`, `<pre>` og et
+kommentarfelt — alt brød pænt, og `.page` blev aldrig bredere end skærmen.
+Sporet lå i billedet: **teksten var forstørret.**
+
+`.input` havde ingen `font-size` og arvede body's **15 px**. iOS zoomer ind, så
+snart et felt med skrift under 16 px får fokus, og så står siden forskudt med
+venstre kant uden for skærmen. Teksten var der hele tiden; den lå uden for det,
+telefonen havde zoomet ind på.
+
+`.omni-input` fik sine 16 px af præcis den grund (§4). Alle de andre felter —
+kommentaren til en Sagu-note, titel, beskrivelse, Settings — blev glemt. **En
+regel, der kun blev anvendt ét sted**, for fjerde gang på fire dage (§6d, §6f,
+§6g, §6i).
+
+16 px er ikke en smagssag her. Det er grænsen, Safari måler på.
+
+### Sidelæren: hvad et skærmbillede fortæller
+
+To gange på to dage har billedet afgjort sagen på et sekund, hvor koden ikke
+kunne: i §6g stod menupunktet markeret over det forrige indhold, og her var
+skriften for stor. **Spørg efter et skærmbillede, før du begynder at gætte på
+årsager** — »virker ikke« dækker over vidt forskellige fejl.
+
+### To udgange fra kortet
+
+Et Sagu-kort i note-oversigten var ét link til Sagu. Der var ingen vej tilbage
+til den opgave eller det projekt, noten hører til — man skulle lede den op i en
+anden liste.
+
+Nu er kortet en `div` med to elementer: titlen (`<a>` til noten i Sagu) og en
+linje under (`<button>` til tingen her). **Ikke** et anker inden i et anker —
+det er ugyldigt — og ikke en usynlig knap oven på et link, som er en fælde for
+både tastatur og skærmlæser.
+
+Bindingen kaldes ved **alle tre udgange** af `sideNoter()` (tom, kun Sagu,
+begge). En binding, der kun står ét sted, giver knapper, der ser rigtige ud og
+ikke gør noget — det var netop dét, der ramte »Recent« og »Favourites« i Sagu.
+
 ## 7 · Uden for scope
 
 Handover §10 gælder uændret: ingen flere brugere, ingen
