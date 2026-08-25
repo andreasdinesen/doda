@@ -356,6 +356,37 @@ test('Notes-skaermen kan faa de noter, doda selv bruger', async () => {
   assert.match(r.data.url, /^https?:\/\//, 'og vejen til Sagu selv');
 });
 
+test('kun LEVENDE opgaver - en afsluttet fylder ikke oversigten', async () => {
+  /*
+   * »I note oversigten skal den kun vise sagu noter paa aktive opgaver og
+   * projekter« (Andreas, 25-08-2026).
+   *
+   * En afsluttet opgaves note er en kendsgerning om noget overstaaet. Listen
+   * bruges til at finde det, der stadig er i gang, og med 21 fuldfoerte
+   * opgaver druknede de faa levende.
+   *
+   * Noten bliver liggende i Sagu, og opgaven kan stadig aabnes fra Logbook -
+   * det er KUN denne oversigt, der holdes ren.
+   */
+  const url = (n) => `https://sagu.eksempel.dk/#note-${String(n).repeat(32)}`;
+  const lav = async (titel, n, status) => {
+    const it = (await J('/api/v1/capture', { text: titel })).data.item;
+    await J(`/api/v1/items/${it.id}`, { link_url: url(n), link_title: `Note ${n}`, status });
+    return it.id;
+  };
+  const levende = await lav('Stadig i gang', 1, 'next');
+  const parkeret = await lav('Maaske senere', 2, 'someday');
+  const faerdig = await lav('Overstaaet', 3, 'done');
+  const droppet = await lav('Droppet', 4, 'dropped');
+
+  const ider = (await J('/api/v1/sagu/linked')).data.items.map((i) => i.id);
+  assert.ok(ider.includes(levende), 'en aaben opgave er med');
+  // Parkeret er ikke det samme som afsluttet - someday bliver staaende.
+  assert.ok(ider.includes(parkeret), 'someday er stadig levende');
+  assert.ok(!ider.includes(faerdig), 'en fuldfoert opgave fylder ikke');
+  assert.ok(!ider.includes(droppet), 'og heller ikke en droppet');
+});
+
 test('er Sagu ikke forbundet, er listen tom - ikke en fejl', async () => {
   /*
    * Skaermen spoerger kun, naar den tror, Sagu er koblet paa. Tror den

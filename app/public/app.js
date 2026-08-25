@@ -807,7 +807,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 61;
+const APP_VERSION = 62;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -7114,10 +7114,18 @@ async function sideNoter() {
         <div class="notecard-title">${icon('note', 14)} ${esc(n.navn)}</div>
         ${n.navn !== n.paa ? `<div class="meta">on ${n.slags === 'project' ? 'project ' : ''}“${esc(n.paa)}”</div>` : ''}
       </a>`).join('')}</div>`
-    // Er Sagu koblet paa, men intet linket endnu, skal afsnittet SIGE det -
-    // ikke bare vaere en overskrift over ingenting.
-    : `<p class="lead" style="margin:6px 0 0;opacity:.75">No notes from doda yet. A note made with
-        <code>*</code> or <strong>Make it a note in Sagu</strong> shows up here.</p>`}`;
+    /*
+     * Er Sagu koblet paa, men listen tom, skal afsnittet SIGE det - ikke bare
+     * vaere en overskrift over ingenting.
+     *
+     * »Nothing here right now« og ikke »no notes yet«: listen viser kun det
+     * levende (v62), saa der KAN ligge noter i Sagu paa opgaver, der er
+     * fuldfoert. At sige »endnu ingen« ville vaere loegn for den, der lige har
+     * afsluttet det hele.
+     */
+    : `<p class="lead" style="margin:6px 0 0;opacity:.75">Nothing here right now — this shows
+        notes on tasks and projects that are still open. A note made with <code>*</code> or
+        <strong>Make it a note in Sagu</strong> shows up here.</p>`}`;
   };
 
   if (!d.items.length && !saguNoter.length) {

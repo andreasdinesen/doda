@@ -2467,11 +2467,24 @@ const ROUTES = {
      * En `LIKE '%#note-%'` her ville vaere en anden regel ved siden af, og
      * to regler for det samme driver fra hinanden uden at nogen opdager det.
      */
+    /*
+     * Kun det LEVENDE (Andreas, 25-08-2026).
+     *
+     * En afsluttet opgave er faerdig, og dens note er en kendsgerning om
+     * noget, der er overstaaet - den fylder en liste, man bruger til at finde
+     * det, der stadig er i gang. Noterne selv bliver liggende i Sagu, og
+     * opgaven kan stadig aabnes i Logbook med sit link; det er kun DENNE
+     * oversigt, der holdes ren.
+     *
+     * `someday` er med: parkeret er ikke det samme som afsluttet.
+     */
     const items = db.prepare(`SELECT id, title, kind, status, project_id, link_url, link_title
         FROM items WHERE deleted = 0 AND link_url IS NOT NULL
+          AND status NOT IN ('done','dropped')
         ORDER BY updated_at DESC`).all().filter((r) => saguModul.erSaguUrl(r.link_url));
     const projects = db.prepare(`SELECT id, name, link_url, link_title
         FROM projects WHERE deleted = 0 AND link_url IS NOT NULL
+          AND status NOT IN ('done','dropped')
         ORDER BY name`).all().filter((r) => saguModul.erSaguUrl(r.link_url));
     sendJson(res, 200, { url: saguForbundet() ? getSetting('sagu_url', '') : '', items, projects });
   },

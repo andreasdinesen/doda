@@ -1180,6 +1180,36 @@ virker uden at nogen husker at binde det. `href` og `target` bliver stående;
 lytteren rører kun sagen i standalone, og kun for http(s), så `mailto:` går sin
 egen vej. Verificeret: i en almindelig browser blander den sig **ikke**.
 
+## 6h · Note-oversigten viser kun det levende (v62)
+
+»I note oversigten skal den kun vise sagu noter på aktive opgaver og projekter«
+(Andreas, 25-08-2026). Med 21 fuldførte opgaver druknede de få, der stadig var
+i gang.
+
+**Grænsen er `done`/`dropped`, ikke `active`.** `someday` bliver stående:
+parkeret er ikke det samme som afsluttet, og en note på noget, man har lagt til
+side, er stadig noget, man har liggende. Det gælder både opgaver og projekter —
+selv om et projekt bogstaveligt har en status, der hedder `active`, ville den
+snævre læsning skjule de parkerede projekters noter uden grund.
+
+**Filtreret på serveren**, i samme forespørgsel — ikke i klienten. Der er ingen
+grund til at sende rækker over ledningen, som skærmen alligevel kasserer.
+
+Noterne bliver liggende i Sagu, og en afsluttet opgave kan stadig åbnes fra
+Logbook med sit link. Det er **kun oversigten**, der holdes ren; intet slettes,
+og intet bliver utilgængeligt.
+
+### Den tomme tekst måtte følge med
+
+Den sagde »No notes from doda yet«. Med filteret på ville det være løgn for
+den, der netop har afsluttet det hele: der **er** noter, de hænger bare på
+færdige opgaver. Nu siger den »Nothing here right now — this shows notes on
+tasks and projects that are still open«.
+
+Samme mønster som §6d og §6f: **ændrer man hvad en liste indeholder, ændrer man
+også hvad dens tomme tilstand betyder.** En tekst, der lover noget, koden ikke
+længere mener, er en fejl — den er bare tavs.
+
 ## 7 · Uden for scope
 
 Handover §10 gælder uændret: ingen flere brugere, ingen
