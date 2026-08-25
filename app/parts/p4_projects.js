@@ -115,6 +115,24 @@ function projektRaekke(p) {
   </div>`;
 }
 
+/*
+ * »Er Done-afsnittet foldet sammen?«
+ *
+ * Gemmes som de andre UI-valg (temaet, sidebaren): i localStorage, ikke paa
+ * serveren. Det er en vane ved DENNE skaerm, ikke en indstilling, der skal
+ * foelge med til telefonen - dér ser man tit efter noget andet.
+ *
+ * Standard er UDFOLDET. Det, der er lavet, er projektets historie, og den
+ * skal kunne ses uden at lede i Logbook (Andreas, 25-08-2026).
+ */
+function faerdigeFoldet() {
+  try { return localStorage.getItem('doda_faerdige_foldet') === '1'; } catch { return false; }
+}
+
+function saetFaerdigeFoldet(foldet) {
+  try { localStorage.setItem('doda_faerdige_foldet', foldet ? '1' : '0'); } catch { /* privat */ }
+}
+
 /* ------------------------------------------------------ projektvisning */
 
 async function sideProjekt(id) {
@@ -175,10 +193,38 @@ async function sideProjekt(id) {
       <h2 class="group meta">Subprojects <span class="group-count">${d.children.length}</span></h2>
       <div class="list">${d.children.map(projektRaekke).join('')}</div>` : ''}
 
-    <h2 class="group meta">Tasks <span class="group-count">${d.tasks.length}</span></h2>
-    ${d.tasks.length ? `<div class="list" data-keynav data-sortable>
-        ${d.tasks.map((it, i) => projektOpgave(it, i, d.tasks.length)).join('')}</div>`
-    : '<p class="lead" style="padding:8px 14px">Nothing here yet.</p>'}
+    ${/*
+      * Afsluttede opgaver for sig (v65).
+      *
+      * Raekkefoelgen er `seq`, som brugeren selv har trukket paa plads - ikke
+      * status. En opgave, der blev lavet foerst og fuldfoert i sidste uge, laa
+      * derfor OEVERST i listen over det, der stadig skal goeres (Andreas,
+      * 25-08-2026, med et skaermbillede af netop dét).
+      *
+      * De bliver som standard, men i deres eget afsnit: det er projektets
+      * historie, og den skal kunne ses uden at lede i Logbook. Folder man dem
+      * vaek, huskes valget - for ALLE projekter, ikke ét ad gangen: det er en
+      * vane (»jeg vil se historik« / »jeg vil se arbejde«), ikke en egenskab
+      * ved det enkelte projekt.
+      */ ''}
+    ${(() => {
+    const aabne = d.tasks.filter((t) => t.status !== 'done' && t.status !== 'dropped');
+    const lukkede = d.tasks.filter((t) => t.status === 'done' || t.status === 'dropped');
+    const foldet = faerdigeFoldet();
+    return `
+    <h2 class="group meta">Tasks <span class="group-count">${aabne.length}</span></h2>
+    ${aabne.length ? `<div class="list" data-keynav data-sortable>
+        ${aabne.map((it, i) => projektOpgave(it, i, aabne.length)).join('')}</div>`
+    : '<p class="lead" style="padding:8px 14px">Nothing open here.</p>'}
+
+    ${lukkede.length ? `
+      <button class="group meta foldknap" id="foldFaerdige"
+        aria-expanded="${foldet ? 'false' : 'true'}">
+        ${icon('chevron', 13)} Done <span class="group-count">${lukkede.length}</span>
+      </button>
+      <div class="list" id="faerdigeListe"${foldet ? ' hidden' : ''}>
+        ${lukkede.map((it, i) => projektOpgave(it, i, lukkede.length)).join('')}</div>` : ''}`;
+  })()}
 
     ${/*
       * Overskriften skal ikke love en tom kasse.
@@ -263,6 +309,23 @@ function bindProjektvisning(p, d) {
    */
   linkRude(document.getElementById('pNotion'), p);
   document.getElementById('backToProjects').addEventListener('click', () => gaaTil('projects'));
+
+  /*
+   * Folden aabner og lukker HER - uden at tegne siden om.
+   *
+   * En gentegning ville koste et kald til serveren og sende fokus tilbage til
+   * toppen, og folden er kun en visning af noget, der allerede er hentet.
+   */
+  const foldKnap = document.getElementById('foldFaerdige');
+  if (foldKnap) {
+    foldKnap.addEventListener('click', () => {
+      const liste = document.getElementById('faerdigeListe');
+      const foldet = !liste.hidden;
+      liste.hidden = foldet;
+      foldKnap.setAttribute('aria-expanded', foldet ? 'false' : 'true');
+      saetFaerdigeFoldet(foldet);
+    });
+  }
   document.getElementById('editProject').addEventListener('click', () => redigerProjekt(p));
 
   document.querySelectorAll('[data-pstatus]').forEach((el) => {

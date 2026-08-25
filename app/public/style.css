@@ -591,6 +591,45 @@ h2.group {
 
 .group-count { color: var(--muted); opacity: .65; font-weight: 500; }
 
+/* Foldeknappen ser ud som en gruppeoverskrift, fordi den ER en - den kan bare
+   ogsaa trykkes paa. `font: inherit` foerst, ellers giver browseren knappen
+   sin egen skrift og h2.group-reglerne rammer forbi. */
+button.group.foldknap {
+  /* `h2.group`-reglen gaelder kun h2, saa flex'en maa gentages her.
+     Uden den er svg'et `display: inline` - og et inline-element kan IKKE
+     transformeres. Vinklen sad bomstille, selv med `transform` sat inline
+     direkte paa elementet. */
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 26px 0 8px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-align: left;
+}
+button.group.foldknap:hover { color: var(--text); }
+/*
+ * Vinklen drejer, fordi knappen er `display: flex` (se ovenfor) - og DERFOR
+ * er svg'et `display: block`. Et inline-element kan IKKE transformeres, og
+ * det gaelder ogsaa en `transform`, der saettes inline direkte paa elementet:
+ * den beregnede vaerdi bliver identitetsmatricen, tavst. Flytter nogen
+ * flex'en vaek fra knappen, staar vinklen bomstille uden anden forklaring.
+ *
+ * flex:none - ellers klemmer flex-foraeldren vinklen sammen (§4).
+ */
+.foldknap svg { flex: none; transition: transform .15s; }
+/* Sammenfoldet peger vinklen mod det, der er gemt vaek. */
+.foldknap[aria-expanded="false"] svg { transform: rotate(-90deg); }
+@media (prefers-reduced-motion: reduce) { .foldknap svg { transition: none; } }
+
 /* Gruppeoverskrift med noget i hoejre side - »In Sagu« og vejen DERHEN.
    `baseline`, saa chippen staar paa linje med den lille overskrift og ikke
    loefter den; `wrap`, saa et langt vaertsnavn falder ned i stedet for at

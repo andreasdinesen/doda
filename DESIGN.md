@@ -1294,6 +1294,45 @@ Bindingen kaldes ved **alle tre udgange** af `sideNoter()` (tom, kun Sagu,
 begge). En binding, der kun står ét sted, giver knapper, der ser rigtige ud og
 ikke gør noget — det var netop dét, der ramte »Recent« og »Favourites« i Sagu.
 
+## 6k · Afsluttede opgaver i et projekt (v65)
+
+Rækkefølgen i et projekt er `seq` — den brugeren selv har trukket på plads — og
+ikke status. En opgave, der blev lavet først og fuldført i sidste uge, lå derfor
+**øverst** i listen over det, der stadig skal gøres (Andreas, 25-08-2026, med et
+skærmbillede af netop dét).
+
+**De bliver, men for sig.** Det, der er lavet, er projektets historie, og den
+skal kunne ses uden at lede i Logbook. Derfor et eget **Done**-afsnit,
+**udfoldet som standard**, og Tasks-tælleren tæller kun det åbne arbejde — det
+er dét tal, man handler på.
+
+**Foldningen huskes for ALLE projekter**, ikke ét ad gangen. Det er en vane
+(»jeg vil se historik« / »jeg vil se arbejde«), ikke en egenskab ved det
+enkelte projekt. Gemt i `localStorage` som temaet og sidebaren: det er en vane
+ved denne skærm, ikke noget, der skal følge med til telefonen.
+
+**Folden tegner ikke siden om.** En gentegning ville koste et kald til serveren
+og sende fokus til toppen — for noget, der allerede er hentet.
+
+### Vinklen, der ikke ville dreje
+
+Jeg troede først, `<svg>` ikke kunne transformeres, og byggede en
+`<span>`-wrapper udenom med en kommentar, der forklarede den teori.
+
+Teorien var forkert. `h2.group` sætter `display: flex`, men reglen gælder kun
+`h2` — knappen er en `button`, så svg'et var **`display: inline`**, og et
+inline-element kan ikke transformeres. Heller ikke med `transform` sat inline
+direkte på elementet: den beregnede værdi bliver identitetsmatricen, tavst.
+
+Wrapperen blev rullet tilbage, og den rigtige forklaring står nu i CSS'en. **En
+forkert kommentar er værre end ingen** — den næste ville lede efter et
+SVG-problem, der ikke findes.
+
+**Hvorfor det tog tid:** preview-panelet komponerer ikke frames, så en
+`transition` bliver aldrig færdig, og målingen så ud, som om intet skete. Samme
+grænse ramte IntersectionObserver i §6c. **Mål med `transition: none`**, når
+det er slutstillingen og ikke animationen, der skal efterprøves.
+
 ## 7 · Uden for scope
 
 Handover §10 gælder uændret: ingen flere brugere, ingen
