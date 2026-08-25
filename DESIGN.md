@@ -1391,6 +1391,50 @@ Den prøver nu alle tags i svaret mod en **hvidliste**. En prøve, der ikke kan
 skelne et tag fra teksten om et tag, siger intet om sikkerheden — den fejler
 enten falsk eller består falsk.
 
+## 6m · Et felt, der kan sættes uden at kunne læses (v67)
+
+»Der mangler add details til en recurring task« (Andreas, 25-08-2026).
+
+Det så ud som en ny funktion og var en halv en, der allerede lå der:
+
+- `recurrences.template` har altid rummet en `note`.
+- `opretForekomst()` har altid givet den videre til hver ny opgave.
+- `POST /recurrences/:id` har altid taget imod `body.note`.
+
+Kun vejen **ud** manglede: `hentGentagelser()` sendte `title`, `project_id` og
+`contexts`, men ikke `note`. Ruden kunne derfor hverken vise eller rette den, og
+der var ingen vej til at skrive noget.
+
+Kommentaren lige ved siden af beskriver **præcis samme fejl for kontekster**:
+»kunne sættes gennem API'et, men blev aldrig sendt UD igen«. Samme sted, to
+gange.
+
+**Et felt, der kan sættes uden at kunne læses, er usynligt for den, der bruger
+det** — og det ser ud som en manglende funktion, ikke som en fejl. Når et felt
+tilføjes til en skabelon, hører det med at sende det retur i samme ombæring.
+
+Testen dækker også, at beskrivelsen kan **ryddes** igen: `if (body.note)` i
+stedet for `typeof body.note === 'string'` ville have gjort det umuligt at
+fjerne en, man havde skrevet. Den blev set fejle med vejen ud fjernet.
+
+## 6n · Browserens egne dele følger `color-scheme` (v67)
+
+Afkrydsningsfelter, rullebjælker og `select` tegnes af browseren efter
+`color-scheme` — ikke efter vores farvevariabler. `index.html` siger
+`content="light dark"`, altså »vi kan begge«, og så følger de **systemets**
+valg.
+
+Men doda har sit eget tema. Stod Mac'en i mørkt og doda i lyst, blev
+afkrydsningerne i en Sagu-note kulsorte på en lys side.
+
+`color-scheme` sættes nu de **samme tre steder**, hvor farverne sættes:
+grundtilstanden (`light`), `[data-theme="dark"]`, og systemets mørke når intet
+er valgt. Så er der kun ét sted at holde styr på, hvornår doda er mørk.
+
+Målt med systemet i mørkt: doda lyst → `light`, auto → `dark`, mørkt → `dark`.
+Rettelsen gælder også kontekstvælgeren, fokus-listen og rullebjælkerne, som
+havde samme fejl uden at nogen havde nævnt det.
+
 ## 7 · Uden for scope
 
 Handover §10 gælder uændret: ingen flere brugere, ingen

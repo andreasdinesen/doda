@@ -437,3 +437,36 @@ test('webappen bliver spurgt, før et nyt område oprettes', async () => {
   const omr = (await J('/api/v1/areas')).areas.find((a) => a.name === 'HeltNytOmraade');
   assert.equal(omr, undefined, 'omraadet maa ikke findes, foer man har sagt ja');
 });
+
+test('en gentagelse kan have en BESKRIVELSE - og hver forekomst faar den med', async () => {
+  /*
+   * »Der mangler add details til en recurring task« (Andreas, 25-08-2026).
+   *
+   * Skabelonen har altid haft en `note`, og `opretForekomst` har altid givet
+   * den videre. Den blev bare aldrig sendt UD igen, saa ruden kunne hverken
+   * vise eller rette den - praecis samme fejl, som kontekster havde haft samme
+   * sted. Et felt, der kan SAETTES uden at kunne LAESES, er usynligt for den,
+   * der bruger det.
+   */
+  const r = await J('/api/v1/capture', { text: 'vand blomsterne !every! 3 days', createNew: true });
+  const id = r.item.recurrence_id;
+
+  await J(`/api/v1/recurrences/${id}`, { note: 'Husk den bag sofaen\nog den paa badet' });
+
+  // 1. Den skal kunne LAESES tilbage - ellers kan ruden ikke vise den.
+  const rec = (await J('/api/v1/recurrences')).recurrences.find((x) => x.id === id);
+  assert.equal(rec.note, 'Husk den bag sofaen\nog den paa badet', 'noten skal med UD igen');
+
+  // 2. Og den skal foelge med til den naeste forekomst.
+  const aaben = (await J('/api/v1/items?status=next')).items.find((x) => x.recurrence_id === id);
+  await J(`/api/v1/items/${aaben.id}/complete`, {});
+  const naeste = (await J('/api/v1/items?status=next')).items.find((x) => x.recurrence_id === id);
+  assert.ok(naeste, 'der kommer en ny');
+  assert.equal(naeste.note, 'Husk den bag sofaen\nog den paa badet', 'beskrivelsen foelger med');
+
+  // 3. En tom beskrivelse skal kunne RYDDES igen - `if (body.note)` ville
+  //    have gjort det umuligt at fjerne en, man havde skrevet.
+  await J(`/api/v1/recurrences/${id}`, { note: '' });
+  const ryddet = (await J('/api/v1/recurrences')).recurrences.find((x) => x.id === id);
+  assert.equal(ryddet.note, '', 'den skal kunne fjernes igen');
+});

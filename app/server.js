@@ -1356,9 +1356,18 @@ function hentGentagelser() {
       skips: r.skips,
       last_completed_at: r.last_completed_at,
       project_id: skabelon.project_id || null,
-      // Skabelonens kontekster kunne saettes gennem API'et, men blev aldrig
-      // sendt UD igen - saa ruden kunne hverken vise eller rette dem.
+      /*
+       * Skabelonens kontekster kunne saettes gennem API'et, men blev aldrig
+       * sendt UD igen - saa ruden kunne hverken vise eller rette dem.
+       *
+       * PRAECIS det samme gjaldt `note`: den blev gemt, og hver forekomst fik
+       * den med (`opretForekomst`), men den kom aldrig tilbage, saa der var
+       * ingen vej til at se eller skrive en beskrivelse paa en gentagelse
+       * (Andreas, 25-08-2026). Samme fejl, samme sted, to gange - et felt, der
+       * kan SAETTES uden at kunne LAESES, er usynligt for den, der bruger det.
+       */
       contexts: Array.isArray(skabelon.contexts) ? skabelon.contexts : [],
+      note: skabelon.note || '',
       open_item_id: aaben ? aaben.id : null,
       due_today: !!aaben && aaben.due_date <= iDag(),
     };

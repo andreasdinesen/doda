@@ -98,6 +98,12 @@ function aabnGentagelse(r) {
         <code>@project</code> here and it moves into the fields below. The rule has its
         own field — it is never read out of the title.</p></label>
 
+    ${/* Beskrivelsen. Den foelger med til HVER forekomst, saa den hoerer
+         sammen med titlen - ikke nede ved reglen, som kun handler om naar. */ ''}
+    <label class="field"><span>Details (applies to every future one)</span>
+      <textarea class="input" id="rNote" rows="3"
+        placeholder="Anything the task should carry with it…">${esc(r.note || '')}</textarea></label>
+
     <label class="field"><span>Recurrence rule</span>
       <input class="input" id="rRule" value="${esc(r.rule.text)}"
         placeholder="every monday · every! 3 days · last workday of the month"></label>
@@ -244,6 +250,7 @@ function aabnGentagelse(r) {
 
       await api('POST', `/api/v1/recurrences/${r.id}`, {
         title: titelEl.value,
+        note: host.querySelector('#rNote').value,
         rule_text: host.querySelector('#rRule').value,
         project_id: projektId,
         contexts: valgte,
