@@ -1333,6 +1333,64 @@ SVG-problem, der ikke findes.
 grænse ramte IntersectionObserver i §6c. **Mål med `transition: none`**, når
 det er slutstillingen og ikke animationen, der skal efterprøves.
 
+## 6l · Markdown, der faktisk renderer noten (v66)
+
+»Når doda viser Sagu-noter, burde den vise dem renderet og ikke i den rene
+markdown — fx checkfelter« og »og at billede vises« (Andreas, 25-08-2026).
+
+Rendereren var skrevet til dodas EGNE noter, som er korte. En note fra en
+note-app ser anderledes ud, og tre ting brød:
+
+- **Overskrifter krævede at stå alene i deres blok** (`linjer.length === 1`).
+  `## API key til iphone` med nøglen på næste linje — den normale måde at
+  skrive sådan en liste på — blev derfor ét afsnit med rå `##`.
+- **Lister brugte `every()`**, så ét billede midt i en liste gjorde hele
+  blokken til rå tekst.
+- **Afkrydsninger fandtes ikke**, og et billede blev til et link med et løst
+  udråbstegn foran, fordi `linkify` matcher `[navn](adresse)` — som står inde i
+  `![navn](adresse)`.
+
+### Billederne hentes gennem doda
+
+Sagus billeder ligger bag dens nøgle og skrives i noten som `sagu:<id>`.
+Serveren proxier dem, som den allerede proxier søgning og kommentarer; nøglen
+bliver på serveren, og klienten ser kun `?id=`.
+
+**Kun billed-mimetyper slipper igennem, og det er ikke en smagssag.** Doda
+serverer svaret fra sin EGEN oprindelse, så kom en `text/html` igennem, kunne
+en fremmed note køre script i dodas navn — med dodas cookie. Mimetypen prøves
+på vej ud, og id'et skal være 32 hex, ellers når kaldet aldrig Sagu. Begge dele
+har tests.
+
+**Adresser ude i verden hentes ikke.** Et `![x](https://fremmed.dk/pixel.png)`
+ville sende brugerens IP til et fremmed websted, blot fordi noten nævnte det.
+De vises som en mærkat; noten selv er ét klik væk.
+
+**Felterne er deaktiverede.** Noten hører til i Sagu; doda kigger med. Et felt,
+man kan klikke på, uden at det bliver gemt, er værre end et, man ikke kan
+klikke på — man ville tro, det var afkrydset. Samme regel som at
+Sagu-kommentarer kun kan læses (§v19).
+
+### Rendereren flyttede til `app/shared/`
+
+Den tegner **fremmed** tekst, og med flere blokformer bliver den et sted, hvor
+fejl — også sikkerhedsfejl — kan gemme sig. En frontend-fil kan ikke køres i
+Node, så den havde ingen tests.
+
+`esc` og `linkify` **injiceres** i stedet for at blive kopieret ind: samme
+modulgrænse som `oauth.js` og `mcp.js`. To steder, der escaper hver for sig,
+driver fra hinanden.
+
+### En test, der ikke kunne skelne et tag fra teksten om et tag
+
+Første udgave af sikkerhedstesten ledte efter `onerror=` i hele svaret og faldt
+over `&lt;img src=x onerror=alert(1)&gt;` — som er præcis dét, escapen skal
+lave: harmløs tekst.
+
+Den prøver nu alle tags i svaret mod en **hvidliste**. En prøve, der ikke kan
+skelne et tag fra teksten om et tag, siger intet om sikkerheden — den fejler
+enten falsk eller består falsk.
+
 ## 7 · Uden for scope
 
 Handover §10 gælder uændret: ingen flere brugere, ingen

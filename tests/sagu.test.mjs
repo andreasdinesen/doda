@@ -60,6 +60,7 @@ function saguAttrap() {
   let boeger = [{ id: 'b1', name: 'Handbook' }];
   const skrevne = [];
   let kunSkriv = false;      // svarer som en ren capture-noegle
+  let filSvar = null;        // hvad /files/<id> svarer med
   let modereres = false;     // moderationskoeen er slaaet til
   const s = createServer(async (req, res) => {
     kald.push(`${req.method} ${req.url.split('?')[0]}`);
@@ -79,6 +80,15 @@ function saguAttrap() {
     }
     if (req.url.startsWith('/api/v1/state')) {
       send(200, { counts: { notes: 7 }, notebooks: boeger });
+      return;
+    }
+    /* Filer. `filSvar` lader en test bestemme, hvad Sagu svarer med -
+       ogsaa noget, en rigtig Sagu aldrig ville sende. */
+    const f = /^\/api\/v1\/files\/([a-f0-9]{32})$/.exec(req.url.split('?')[0]);
+    if (f && req.method === 'GET') {
+      const svar = filSvar || { mime: 'image/png', krop: Buffer.from('BILLEDBYTES') };
+      res.writeHead(svar.status || 200, { 'Content-Type': svar.mime });
+      res.end(svar.krop);
       return;
     }
     if (req.url.startsWith('/api/v1/search')) {
@@ -133,6 +143,7 @@ function saguAttrap() {
     saetBoeger: (b) => { boeger = b; },
     saetKunSkriv: (v) => { kunSkriv = v; },
     saetModereres: (v) => { modereres = v; },
+    saetFilSvar: (v) => { filSvar = v; },
     skrevne,
     noter,
   };
@@ -412,6 +423,47 @@ test('er Sagu ikke forbundet, er listen tom - ikke en fejl', async () => {
     const igen = await forbind(attrap.url, 'sagu_rigtig');
     assert.equal(igen.status, 200, 'forbindelsen skal vaere sat op igen bagefter');
   }
+});
+
+test('et billede fra en note hentes gennem doda - noeglen bliver paa serveren', async () => {
+  /*
+   * Sagus billeder ligger bag dens noegle, og noten skriver dem som
+   * `sagu:<id>`. Uden denne vej ville en note vises med huller, hvor
+   * billederne staar (Andreas, 25-08-2026).
+   */
+  const id = 'b'.repeat(32);
+  const r = await fetch(`${BASE}/api/v1/sagu/file?id=${id}`, { headers: { cookie } });
+  assert.equal(r.status, 200);
+  assert.equal(r.headers.get('content-type'), 'image/png');
+  assert.equal(await r.text(), 'BILLEDBYTES');
+  // Adressen maa ikke roebe noeglen.
+  assert.ok(!r.headers.get('content-security-policy').includes('sagu_rigtig'));
+});
+
+test('KUN billeder slipper igennem - ellers kunne en note koere script i dodas navn', async () => {
+  /*
+   * Doda serverer svaret fra sin EGEN oprindelse. Kom en `text/html` igennem,
+   * ville en fremmed note kunne koere script som doda - med dodas cookie.
+   * Mimetypen kommer fra Sagus svar og proeves paa vej ud.
+   */
+  const id = 'c'.repeat(32);
+  for (const mime of ['text/html', 'application/javascript', 'text/plain']) {
+    attrap.saetFilSvar({ mime, krop: Buffer.from('<script>alert(1)</script>') });
+    const r = await fetch(`${BASE}/api/v1/sagu/file?id=${id}`, { headers: { cookie } });
+    assert.equal(r.status, 404, `${mime} slap igennem`);
+  }
+  attrap.saetFilSvar(null);
+});
+
+test('et id, der ikke er 32 hex, afvises FOER der kaldes ud', async () => {
+  // Ellers kunne en note bestemme, hvad dodas server henter.
+  attrap.ryd();
+  for (const slem of ['../../etc/passwd', 'a'.repeat(31), 'xyz', '']) {
+    const r = await fetch(`${BASE}/api/v1/sagu/file?id=${encodeURIComponent(slem)}`,
+      { headers: { cookie } });
+    assert.equal(r.status, 400, `${slem} burde vaere afvist`);
+  }
+  assert.deepEqual(attrap.kald, [], 'ingen af dem maa naa Sagu overhovedet');
 });
 
 test('Sagu nede: en paen fejl - ikke en fejlet gemning', async () => {

@@ -266,7 +266,63 @@ function opret(srv) {
     };
   }
 
-  return { proev, soeg, note, opretNote, kommentarer, skrivKommentar, noteUrl, kald };
+  /**
+   * Et billede fra en note - RAA bytes, ikke JSON.
+   *
+   * `kald()` parser altid svaret som JSON og duer derfor ikke. Doda henter
+   * filen med sin egen noegle og sender den videre, saa et billede i en
+   * Sagu-note kan VISES i doda; uden det ville en note vaere tekst med huller
+   * i (Andreas, 25-08-2026).
+   *
+   * KUN billeder slipper igennem, og det er ikke en smagssag: doda serverer
+   * svaret fra sin EGEN oprindelse, saa en note, der kunne faa en `text/html`
+   * igennem, ville kunne koere script i dodas navn. Mimetypen kommer fra
+   * Sagus svar og proeves her, ikke af den, der kalder.
+   */
+  function hentFil(id) {
+    return new Promise((ok) => {
+      const base = srv.hentUrl();
+      const noegle = srv.hentNoegle();
+      if (!base || !noegle) { ok({ fejl: 'not_connected' }); return; }
+      if (!/^[a-f0-9]{32}$/.test(String(id || ''))) { ok({ fejl: 'bad_id' }); return; }
+      let u;
+      try { u = new URL(base + '/api/v1/files/' + id); } catch { ok({ fejl: 'bad_url' }); return; }
+      const lag = u.protocol === 'http:' ? http : https;
+      const req = lag.request({
+        method: 'GET',
+        hostname: u.hostname,
+        port: u.port || undefined,
+        path: u.pathname,
+        headers: { Authorization: `Bearer ${noegle}` },
+        timeout: TIMEOUT_MS,
+      }, (res) => {
+        const mime = String(res.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+        if (res.statusCode !== 200 || !/^image\/(png|jpeg|gif|webp|avif|svg\+xml)$/.test(mime)) {
+          res.resume();
+          ok({ fejl: res.statusCode === 200 ? 'ikke_billede' : 'status_' + res.statusCode });
+          return;
+        }
+        const dele = [];
+        let n = 0;
+        let brudt = false;
+        res.on('data', (d) => {
+          n += d.length;
+          // For stor: afbryd i stedet for at samle et billede, ingen faar at se.
+          if (n > MAX_SVAR) { brudt = true; req.destroy(); return; }
+          dele.push(d);
+        });
+        res.on('end', () => {
+          if (brudt) { ok({ fejl: 'for_stor' }); return; }
+          ok({ mime, data: Buffer.concat(dele) });
+        });
+      });
+      req.on('timeout', () => { req.destroy(); ok({ fejl: 'timeout' }); });
+      req.on('error', () => ok({ fejl: 'netvaerk' }));
+      req.end();
+    });
+  }
+
+  return { proev, soeg, note, opretNote, kommentarer, skrivKommentar, noteUrl, kald, hentFil };
 }
 
 module.exports = { opret, idFraUrl, erSaguUrl };

@@ -789,6 +789,45 @@ a:hover { text-decoration-thickness: 2px; }
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: .88em;
 }
+/* Afkrydsninger fra en Sagu-note. Deaktiverede: noten hoerer til dér, og et
+   felt, der ikke gemmer noget, er vaerre end et, man ikke kan trykke paa. */
+.tjekliste { list-style: none; margin: 0 0 8px; padding: 0; }
+.tjekliste .tjek {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+/* appearance:auto - grundreglen fjerner browserens egne felter (§4). */
+.tjekliste input[type="checkbox"] {
+  appearance: auto;
+  -webkit-appearance: checkbox;
+  flex: none;
+  margin: 2px 0 0;
+}
+.tjekliste .krydset { text-decoration: line-through; opacity: .6; }
+
+/* Et billede fra en note. `height:auto` sammen med max-width, ellers
+   straekkes et hoejt billede (§4). */
+.mdbillede {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 8px 0;
+  border-radius: var(--r-sm);
+  background: var(--bg);
+}
+/* Kunne ikke hentes - fx et billede ude i verden, som doda ikke selv henter. */
+.mdbillede-maerkat {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: var(--pill);
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  font-size: .88em;
+  color: var(--muted);
+}
+
 .note-preview blockquote, .notecard-body blockquote, .outcome blockquote {
   margin: 0 0 8px;
   padding-left: 12px;

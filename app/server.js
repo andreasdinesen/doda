@@ -2489,6 +2489,45 @@ const ROUTES = {
     sendJson(res, 200, { url: saguForbundet() ? getSetting('sagu_url', '') : '', items, projects });
   },
 
+  /**
+   * Et billede fra en Sagu-note.
+   *
+   * Sagus billeder ligger bag dens noegle, og noten skriver dem som
+   * `sagu:<id>`. Uden denne vej ville en note vises med huller, hvor
+   * billederne staar. Noeglen bliver paa serveren - klienten ser kun `?id=`.
+   *
+   * `godkend(..., 'read')`: den, der ikke maa laese doda, maa heller ikke
+   * bruge dodas noegle til at hente noget som helst fra Sagu.
+   */
+  'GET /api/v1/sagu/file': async (req, res, ctx) => {
+    const auth = godkend(req, res, 'read');
+    if (!auth) return;
+    if (!saguForbundet()) { apiFejl(res, 400, 'not_connected', 'Connect Sagu under Settings first.'); return; }
+    const id = String(ctx.query.get('id') || '').toLowerCase();
+    // Proeven staar OGSAA i sagu.js. Her, fordi et daarligt id skal give en
+    // laesbar 400 og ikke en netvaerksfejl langt nede.
+    if (!/^[a-f0-9]{32}$/.test(id)) { apiFejl(res, 400, 'bad_id', 'That is not a Sagu file id.'); return; }
+
+    const r = await sagu.hentFil(id);
+    if (r.fejl) {
+      // 404 og ikke 502: for den, der ser paa siden, er forskellen paa »findes
+      // ikke« og »kunne ikke hentes« et billede, der ikke kommer.
+      apiFejl(res, 404, 'no_file', 'That image could not be fetched from Sagu.');
+      return;
+    }
+    res.writeHead(200, {
+      'Content-Type': r.mime,
+      'Content-Length': r.data.length,
+      /* Billedet aendrer sig ikke: id'et ER indholdet. En time i browseren
+         sparer et kald gennem to servere, hver gang noten aabnes. */
+      'Cache-Control': 'private, max-age=3600',
+      // Et SVG fra en fremmed note maa ikke kunne noget som helst.
+      'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'",
+      'X-Content-Type-Options': 'nosniff',
+    });
+    res.end(r.data);
+  },
+
   /* Notens kommentarer. Kun LAESNING - svaret hoerer hjemme i Sagu. */
   'GET /api/v1/sagu/comments': async (req, res, ctx) => {
     const auth = godkend(req, res, 'read');

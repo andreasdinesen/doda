@@ -3,41 +3,20 @@
 
 /* ---------------------------------------------------------- markdown */
 
-/**
- * Minimal, sikker markdown. Samme princip som linkify: escape FOERST, og
- * byg derefter kun de tags, vi selv laver. Der er ingen vej fra brugerens
- * tekst til et tag, vi ikke har skrevet.
+/*
+ * Selve rendereren bor i app/shared/markdown.js, saa den kan proeves i Node -
+ * den tegner FREMMED tekst (Sagu-noter) og er dermed et sted, hvor en fejl
+ * baade kan blive grim og farlig.
+ *
+ * `esc` og `linkify` gives med i stedet for at blive kopieret derind: to
+ * steder, der escaper hver for sig, driver fra hinanden.
+ *
+ * `filUrl` oversaetter `sagu:<id>` til dodas egen proxy, som henter billedet
+ * med noeglen. Uden den ville en note staa med huller, hvor billederne er.
  */
 function markdown(raa) {
-  const blokke = String(raa || '').split(/\n{2,}/);
-  return blokke.map((blok) => {
-    const linjer = blok.split('\n');
-
-    // Punktopstilling
-    if (linjer.every((l) => /^\s*[-*+]\s+/.test(l))) {
-      return `<ul>${linjer.map((l) => `<li>${inline(l.replace(/^\s*[-*+]\s+/, ''))}</li>`).join('')}</ul>`;
-    }
-    // Nummereret liste
-    if (linjer.every((l) => /^\s*\d+[.)]\s+/.test(l))) {
-      return `<ol>${linjer.map((l) => `<li>${inline(l.replace(/^\s*\d+[.)]\s+/, ''))}</li>`).join('')}</ol>`;
-    }
-    // Overskrift
-    const h = blok.match(/^(#{1,3})\s+(.*)$/);
-    if (h && linjer.length === 1) return `<h${h[1].length + 2}>${inline(h[2])}</h${h[1].length + 2}>`;
-    // Citat
-    if (linjer.every((l) => /^\s*>\s?/.test(l))) {
-      return `<blockquote>${inline(linjer.map((l) => l.replace(/^\s*>\s?/, '')).join('\n'))}</blockquote>`;
-    }
-    return `<p>${inline(blok)}</p>`;
-  }).join('');
-
-  function inline(t) {
-    let s = linkify(t);                       // escaper og laver links
-    s = s.replace(/`([^`\n]{1,200})`/g, '<code>$1</code>');
-    s = s.replace(/\*\*([^*\n]{1,200})\*\*/g, '<strong>$1</strong>');
-    s = s.replace(/(^|[^*])\*([^*\n]{1,200})\*/g, '$1<em>$2</em>');
-    return s.replace(/\n/g, '<br>');
-  }
+  return dodaMarkdown.render(raa, esc, linkify,
+    (id) => `/api/v1/sagu/file?id=${encodeURIComponent(id)}`);
 }
 
 /* ------------------------------------------------------- projektliste */
