@@ -1210,6 +1210,45 @@ Samme mønster som §6d og §6f: **ændrer man hvad en liste indeholder, ændrer
 også hvad dens tomme tilstand betyder.** En tekst, der lover noget, koden ikke
 længere mener, er en fejl — den er bare tavs.
 
+## 6i · Én bredde for hele spalten (v63)
+
+»Indholdsfelterne skifter i bredde — de skal følge søgefeltet, uanset om der er
+noget indhold« (Andreas, 25-08-2026). Det lød som en smagssag og var en fejl.
+
+**`#pageHost` havde ingen bredde.** `.main` er en flex-kolonne med
+`align-items: center`, så et barn uden `width` bliver shrink-to-fit. En side med
+korte titler blev smal, en med lange bred — spalten skiftede bredde, hver gang
+man gik fra menupunkt til menupunkt. Sagu ramte det samme (deres kommentar
+henviser til tovo F0), så det er tredje gang i huset.
+
+Kuren er **både** `width: 100%` og `max-width`: uden den første har max-width
+ingen bredde at fylde ud.
+
+### Tre tal, ingen holdt i trit
+
+- statuslinjens bjælke: 940
+- søgefeltet: 820
+- siden: 760
+- gennemgangs-notitsen: 760
+
+Derfor fløj hverken venstre eller højre kant. Nu er der ét token, `--spalte`,
+og de fire steder peger på det. **Fire tal, der skal holdes i trit, er tre for
+mange** — det er samme grund til, at `HEMMELIGE_SETTINGS` og reglen for
+Sagu-adresser hver bor ét sted.
+
+Valget faldt på feltets 820, ikke sidens 760, fordi ønsket var, at indholdet
+følger feltet. Prisen er 60 px længere tekstlinjer; den anden vej ville koste
+et smallere felt. Ét tal at ændre, hvis vurderingen laver om.
+
+`.focuspage` beholder sine 620: dér er det smalle med vilje.
+
+### Målt, ikke antaget
+
+Ved 1440 px ligger bjælke, felt, `#pageHost` og side alle på venstre 442,
+højre 1262. Kort indhold blev derefter byttet ud med tyve lange titler i samme
+side, og bredden rørte sig ikke — det er dét, sagen handlede om, så det er dét,
+der skulle måles. På mobil flugter de også, uden vandret scroll.
+
 ## 7 · Uden for scope
 
 Handover §10 gælder uændret: ingen flere brugere, ingen
