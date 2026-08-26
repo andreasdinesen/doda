@@ -1435,6 +1435,33 @@ Målt med systemet i mørkt: doda lyst → `light`, auto → `dark`, mørkt → 
 Rettelsen gælder også kontekstvælgeren, fokus-listen og rullebjælkerne, som
 havde samme fejl uden at nogen havde nævnt det.
 
+## 6o · Sagu-ruden kan foldes sammen (v68)
+
+En note fra Sagu kan være lang, og på en projektside står den **over**
+opgaverne. Med Andreas' egen Doda-note lå den øverste opgave 2321 px nede —
+langt under skærmkanten. Foldet sammen står den 488 px nede.
+
+Overskriften **In Sagu** er knappen, med samme `.foldknap` som Done-afsnittet
+(§6k). **Udfoldet som standard:** noten er dét, man kom for. Valget huskes i
+`localStorage` for alle projekter — det er en vane, ikke en egenskab ved det
+enkelte projekt, præcis som §6k.
+
+**Kommentartælleren bliver stående, når den er foldet.** Ellers ville en foldet
+rude ikke kunne skelnes fra ingen note, og man ville skulle folde ud for at
+opdage, at der ikke var noget nyt.
+
+**Kommentarerne og skrivefeltet følger med ind i folden.** De hører til noten,
+og det ville være mærkeligt at kunne skrive en kommentar til noget, der er
+foldet væk.
+
+**Folden tegner ikke ruden om.** En gentegning ville hente noten og
+kommentarerne fra Sagu igen — to servere rundt — for noget, der allerede står
+på skærmen.
+
+Målt med `transition: none` (§6k): panelet komponerer ikke frames, så en
+animation bliver aldrig færdig, og en måling midt i den ser ud, som om intet
+sker.
+
 ## 7 · Uden for scope
 
 Handover §10 gælder uændret: ingen flere brugere, ingen

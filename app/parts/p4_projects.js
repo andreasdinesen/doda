@@ -112,6 +112,21 @@ function saetFaerdigeFoldet(foldet) {
   try { localStorage.setItem('doda_faerdige_foldet', foldet ? '1' : '0'); } catch { /* privat */ }
 }
 
+/*
+ * »Er Sagu-ruden foldet sammen?«
+ *
+ * Samme sted og samme slags valg som `faerdigeFoldet` - en vane ved skaermen,
+ * ikke en indstilling. Standard er UDFOLDET: noten er dét, man kom for
+ * (Andreas, 25-08-2026).
+ */
+function saguFoldet() {
+  try { return localStorage.getItem('doda_sagu_foldet') === '1'; } catch { return false; }
+}
+
+function saetSaguFoldet(foldet) {
+  try { localStorage.setItem('doda_sagu_foldet', foldet ? '1' : '0'); } catch { /* privat */ }
+}
+
 /* ------------------------------------------------------ projektvisning */
 
 async function sideProjekt(id) {
@@ -1065,8 +1080,24 @@ async function saguRude(host, o) {
      * (DESIGN.md §v19); Sagu-halvdelen manglede den bare.
      */
     const tekst = (d.note && d.note.body) ? String(d.note.body).trim() : '';
-    host.innerHTML = `<p class="meta" style="margin-top:18px">In Sagu${
-  liste.length ? ` · ${liste.length} comment${liste.length === 1 ? '' : 's'}` : ''}</p>
+    /*
+     * Hele ruden kan foldes sammen (Andreas, 25-08-2026).
+     *
+     * En note fra Sagu kan vaere lang - en liste af noegler, en moedereferat -
+     * og saa skubber den projektets opgaver ned under skaermkanten. Naar den
+     * er foldet, staar overskriften tilbage med sin kommentartaeller, saa man
+     * kan SE, at der er en note, uden at laese den.
+     *
+     * Kommentarerne og skrivefeltet foelger med ind: de hoerer til noten, og
+     * det ville vaere maerkeligt at kunne skrive en kommentar til noget, der
+     * er foldet vaek.
+     */
+    const foldet = saguFoldet();
+    host.innerHTML = `<button class="group meta foldknap" id="sgFold"
+        style="margin-top:18px" aria-expanded="${foldet ? 'false' : 'true'}">
+        ${icon('chevron', 13)} In Sagu${
+  liste.length ? ` · ${liste.length} comment${liste.length === 1 ? '' : 's'}` : ''}</button>
+      <div id="sgKrop"${foldet ? ' hidden' : ''}>
       ${tekst ? `<div class="note-preview saguindhold">${markdown(tekst)}</div>`
     : '<p class="lead">That note is empty.</p>'}
       ${liste.length ? `<div class="notionkom">${liste.map((k) => `
@@ -1081,8 +1112,22 @@ async function saguRude(host, o) {
         <button class="btn" id="sgKomOk">Comment</button>
       </div>
       <p class="gate-note" id="sgKomSvar" style="text-align:left">The comment goes straight
-        into the note in Sagu — it cannot be taken back from here.</p>`;
+        into the note in Sagu — it cannot be taken back from here.</p>
+      </div>`;
     bindSaguKommentar(host, o);
+    /*
+     * Folden aabner og lukker uden at tegne ruden om - en gentegning ville
+     * hente noten og kommentarerne fra Sagu igen for noget, der allerede
+     * staar paa skaermen.
+     */
+    const foldKnap = host.querySelector('#sgFold');
+    foldKnap.addEventListener('click', () => {
+      const krop = host.querySelector('#sgKrop');
+      const nu = !krop.hidden;
+      krop.hidden = nu;
+      foldKnap.setAttribute('aria-expanded', nu ? 'false' : 'true');
+      saetSaguFoldet(nu);
+    });
   } catch (ex) {
     // En fejlet forbindelse er ikke en fejlet opgave: ruden siger hvad der
     // skete, og resten af opgaven staar uroert.
