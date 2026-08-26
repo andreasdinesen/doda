@@ -571,6 +571,77 @@ async function bindData() {
     a.click();
     a.remove();
   };
+  /* ---- Logbook: start forfra, eller slet ---------------------------- */
+
+  const resetBack = document.getElementById('logResetBack');
+  // Fandtes der en graense, kan den fjernes igen - saa er »start forfra« ikke
+  // en enkeltbillet.
+  const visFortryd = (s2) => { resetBack.hidden = !(s2 && s2.logbook_reset); };
+  try { visFortryd((await api('GET', '/api/v1/settings')).settings); } catch { /* ligegyldigt */ }
+
+  document.getElementById('logReset').addEventListener('click', async () => {
+    try {
+      const d = await api('POST', '/api/v1/logbook/reset', {});
+      await hentState();
+      opdaterNav();
+      resetBack.hidden = false;
+      toast(d.hidden
+        ? `Logbook starts from now — ${d.hidden} hidden, none deleted`
+        : 'Logbook starts from now');
+    } catch (ex) { toast(ex.message); }
+  });
+
+  document.getElementById('logUndo').addEventListener('click', async () => {
+    try {
+      await api('POST', '/api/v1/logbook/reset', { clear: true });
+      await hentState();
+      opdaterNav();
+      resetBack.hidden = true;
+      toast('The Logbook shows everything again');
+    } catch (ex) { toast(ex.message); }
+  });
+
+  document.getElementById('logWipe').addEventListener('click', async () => {
+    /*
+     * To spoergsmaal, ikke ét.
+     *
+     * Det foerste siger HVOR MANGE og at det ikke kan fortrydes; det andet er
+     * en sidste haand paa roret, fordi handlingen ikke kan tages tilbage - og
+     * fordi knappen staar lige ved siden af en, der KAN fortrydes.
+     */
+    let antal = 0;
+    try { antal = (await api('GET', '/api/v1/logbook?limit=1000')).items.length; }
+    catch { /* vi spoerger alligevel */ }
+    if (!window.confirm(`Delete ${antal || 'all'} finished task${antal === 1 ? '' : 's'} for good?`
+      + '\n\nThey disappear from the Logbook, from your projects and from future exports.'
+      + '\nThis cannot be undone.')) return;
+    if (!window.confirm('Last chance — really delete them?')) return;
+    try {
+      const d = await api('DELETE', '/api/v1/logbook', {});
+      await hentState();
+      opdaterNav();
+      resetBack.hidden = true;
+      tegnSide();
+      toast(`${d.deleted} finished task${d.deleted === 1 ? '' : 's'} deleted`);
+    } catch (ex) { toast(ex.message); }
+  });
+
+  const skjulDone = document.getElementById('hideDone');
+  skjulDone.checked = !!state.hideDone;
+  skjulDone.addEventListener('change', async () => {
+    try {
+      await api('POST', '/api/v1/settings',
+        { settings: { hide_done: skjulDone.checked ? '1' : '0' } });
+      state.hideDone = skjulDone.checked;
+      // Toplinjen tegnes af state - den skal tegnes om, ikke bare gemme valget.
+      opdaterNav();
+    } catch (ex) {
+      toast(ex.message);
+      // Kontakten skal vise sandheden, ogsaa naar gemningen fejlede.
+      skjulDone.checked = !!state.hideDone;
+    }
+  });
+
   document.getElementById('expData').addEventListener('click', () => hent(false));
   document.getElementById('expAll').addEventListener('click', () => hent(true));
 

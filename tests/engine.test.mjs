@@ -470,3 +470,134 @@ test('en gentagelse kan have en BESKRIVELSE - og hver forekomst faar den med', a
   const ryddet = (await J('/api/v1/recurrences')).recurrences.find((x) => x.id === id);
   assert.equal(ryddet.note, '', 'den skal kunne fjernes igen');
 });
+
+test('hvert tal i navigationen passer med den LISTE, det staar ved siden af', async () => {
+  /*
+   * »Den maa gerne vise hvor mange opgaver der er under hvert punkt«
+   * (Andreas, 25-08-2026).
+   *
+   * Den gamle optaelling var `GROUP BY status` med ét faelles defer-filter -
+   * naesten rigtigt, og derfor svaert at opdage:
+   *
+   *  - Inbox VISER ogsaa `queued` (en opgave kan have faaet den), men taelleren
+   *    taalte kun `inbox`.
+   *  - Waiting og Someday henter UDEN hideDeferred, men taelleren skjulte det
+   *    udskudte.
+   *
+   * En taeller, der ikke passer med det, man ser, naar man klikker, er vaerre
+   * end ingen taeller. Derfor proeves TALLET mod LISTEN - ikke mod et tal, jeg
+   * selv har regnet ud.
+   */
+  const iMorgen = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+
+  // En udskudt opgave i hver af de lister, der viser udskudte.
+  const a = (await J('/api/v1/capture', { text: 'venter paa svar', createNew: true })).item;
+  await J(`/api/v1/items/${a.id}`, { status: 'waiting', defer_date: iMorgen });
+  const b = (await J('/api/v1/capture', { text: 'maaske engang', createNew: true })).item;
+  await J(`/api/v1/items/${b.id}`, { status: 'someday', defer_date: iMorgen });
+  // En opgave i `queued` - Inbox viser den, saa den skal taelles med.
+  const c = (await J('/api/v1/capture', { text: 'uafklaret', createNew: true })).item;
+  await J(`/api/v1/items/${c.id}`, { status: 'queued' });
+  // Og en udskudt `next` - den vises IKKE, saa den maa ikke taelles.
+  const d = (await J('/api/v1/capture', { text: 'senere', createNew: true })).item;
+  await J(`/api/v1/items/${d.id}`, { status: 'next', defer_date: iMorgen });
+
+  const tal = (await J('/api/v1/state')).counts;
+
+  // Praecis de kald, listerne selv laver (p3_lists.js / p8_review.js).
+  const liste = async (q) => (await J(`/api/v1/items?${q}`)).items.length;
+  assert.equal(tal.inbox, await liste('status=inbox,queued&kind=task'), 'Inbox');
+  assert.equal(tal.next, await liste('status=next&hideDeferred=1'), 'Next Actions');
+  assert.equal(tal.waiting, await liste('status=waiting'), 'Waiting For');
+  assert.equal(tal.someday, await liste('status=someday'), 'Someday');
+
+  // Og de to, der ville have vaeret forkerte foer:
+  assert.ok(tal.waiting >= 1, 'en udskudt Waiting skal TAELLES med - listen viser den');
+  assert.ok(tal.someday >= 1, 'og en udskudt Someday');
+});
+
+test('Recurring taeller de gentagelser, der faktisk laver opgaver', async () => {
+  // Gentagelser har ingen status og kan ikke taelles med de andre. En pauset
+  // laver ingen opgaver lige nu og hoerer derfor ikke med i tallet.
+  const foer = (await J('/api/v1/state')).counts.repeat;
+  const r = await J('/api/v1/capture', { text: 'luft hunden !every day', createNew: true });
+  const id = r.item.recurrence_id;
+  assert.equal((await J('/api/v1/state')).counts.repeat, foer + 1);
+
+  await J(`/api/v1/recurrences/${id}`, { paused: true });
+  assert.equal((await J('/api/v1/state')).counts.repeat, foer, 'en pauset taeller ikke med');
+});
+
+test('»start Logbook forfra« SKJULER - og sletter ingenting', async () => {
+  /*
+   * »En indstilling hvor man kan resette logbook og taelleren af afsluttet
+   * opgaver« (Andreas, 25-08-2026). Han valgte begge dele som to knapper:
+   * den her kan fortrydes, DELETE herunder kan ikke.
+   */
+  const a = (await J('/api/v1/capture', { text: 'noget gammelt', createNew: true })).item;
+  await J(`/api/v1/items/${a.id}/complete`, {});
+  assert.ok((await J('/api/v1/logbook')).items.length >= 1);
+
+  const svar = await J('/api/v1/logbook/reset', {});
+  assert.ok(svar.hidden >= 1, 'den siger hvor mange der blev skjult');
+
+  // Listen OG taelleren skal begge starte forfra - ellers siger toplinjen
+  // noget andet end siden.
+  assert.equal((await J('/api/v1/logbook')).items.length, 0, 'Logbook er tom');
+  assert.equal((await J('/api/v1/state')).counts.done, 0, 'og taelleren med');
+
+  // Men opgaven findes stadig - den skal med i en eksport.
+  const eksport = await J('/api/v1/export');
+  assert.ok(eksport.items.some((i) => i.id === a.id), 'intet er slettet');
+
+  /*
+   * Og noget afsluttet EFTER graensen kommer med igen.
+   *
+   * `completed_at` staar i hele sekunder, og testen naar det hele inden for
+   * ét - saa uret kan ikke skelne »lige efter« fra »lige foer«. Derfor
+   * flyttes den nye opgaves tidsstempel et minut frem i stedet for at vente:
+   * det er GRAENSEN, der proeves, ikke uret.
+   */
+  const b = (await J('/api/v1/capture', { text: 'noget nyt', createNew: true })).item;
+  await J(`/api/v1/items/${b.id}/complete`, {});
+  medDb((db) => db.prepare('UPDATE items SET completed_at = ? WHERE id = ?')
+    .run(svar.reset + 60, b.id));
+  const efter = (await J('/api/v1/logbook')).items;
+  assert.equal(efter.length, 1, 'kun det nye');
+  assert.equal(efter[0].id, b.id);
+
+  // Fortrydes: alt kommer tilbage.
+  await J('/api/v1/logbook/reset', { clear: true });
+  const ider = (await J('/api/v1/logbook')).items.map((i) => i.id);
+  assert.ok(ider.includes(a.id) && ider.includes(b.id), 'begge er der igen');
+});
+
+test('»slet afsluttede« roerer ALDRIG det aabne arbejde', async () => {
+  /*
+   * Den farligste knap i appen. Den maa kun tage `done` og `dropped` - uanset
+   * hvad kalderen sender - og resten af listerne skal staa uroert bagefter.
+   */
+  const aaben = (await J('/api/v1/capture', { text: 'stadig i gang', createNew: true })).item;
+  await J(`/api/v1/items/${aaben.id}`, { status: 'next' });
+  const venter = (await J('/api/v1/capture', { text: 'venter paa Per', createNew: true })).item;
+  await J(`/api/v1/items/${venter.id}`, { status: 'waiting' });
+  const faerdig = (await J('/api/v1/capture', { text: 'overstaaet', createNew: true })).item;
+  await J(`/api/v1/items/${faerdig.id}/complete`, {});
+
+  const r = await fetch(`${BASE}/api/v1/logbook`, {
+    method: 'DELETE', headers: { 'Content-Type': 'application/json', cookie }, body: '{}',
+  });
+  assert.equal(r.status, 200);
+  assert.ok((await r.json()).deleted >= 1);
+
+  assert.equal((await J('/api/v1/logbook')).items.length, 0, 'Logbook er tom');
+  // Det aabne arbejde skal vaere praecis, som det var.
+  const aabne = (await J('/api/v1/items?status=next')).items.map((i) => i.id);
+  assert.ok(aabne.includes(aaben.id), 'en aaben opgave er uroert');
+  const ventende = (await J('/api/v1/items?status=waiting')).items.map((i) => i.id);
+  assert.ok(ventende.includes(venter.id), 'og en, der venter');
+
+  // Slettede raekker skal MELDES som slettet, saa andre enheder foelger med.
+  const aendringer = await J('/api/v1/changes?since=0');
+  assert.ok(aendringer.deleted.includes(faerdig.id), 'synkroniseringen faar besked');
+});

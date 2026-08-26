@@ -1462,6 +1462,65 @@ Målt med `transition: none` (§6k): panelet komponerer ikke frames, så en
 animation bliver aldrig færdig, og en måling midt i den ser ud, som om intet
 sker.
 
+## 6p · En tæller skal vise dét, listen viser (v69)
+
+»Den må gerne vise hvor mange opgaver der er under hvert punkt, som den gør med
+Inbox« (Andreas, 25-08-2026). Tallene lå der allerede — `GROUP BY status` — så
+det så ud som en visning. Det var det ikke.
+
+Optællingen var **næsten** rigtig, og derfor svær at opdage:
+
+- **Inbox** viser også `queued` (en opgave kan have fået den status), men
+  tælleren talte kun `inbox`.
+- **Waiting** og **Someday** hentes uden `hideDeferred` og viser altså også
+  udskudte; tælleren filtrerede dem fra.
+
+Med kun Inbox synligt ramte det sjældent nok til at overleve. Med tal på alle
+punkter ville det have stået og løjet ved siden af hver liste.
+
+Hvert tal spejler nu præcis det kald, listen selv laver, og **testen prøver
+tallet mod listen** — ikke mod et tal, jeg selv har regnet ud; det ville kun
+bevise, at jeg er konsekvent (§6b).
+
+`navAntal()` samler det ét sted. Udtrykket stod tre gange — sidebaren, den
+foldede sidebar og bundlinjen på mobil — og et tal, der kun rettes to af
+stederne, er værre end intet tal.
+
+**Logbook og Review får ingen.** Et tal, der kun kan vokse, er ikke
+information, og Review er ikke en liste.
+
+## 6q · To måder at starte Logbook forfra (v69)
+
+Andreas bad om at kunne »resette Logbook«. Det kan betyde at skjule eller at
+slette, og den ene kan ikke fortrydes — så spørgsmålet blev stillet i stedet
+for gættet. Svaret var **begge dele, som to knapper**.
+
+**»Start Logbook over«** sætter et tidsstempel. Listen og tælleren begynder
+derfra; intet slettes, alt bliver i eksporten, og en knap bringer det tilbage.
+Grænsen læses ét sted (`logbookFra()`), fordi den bruges to — listen og
+toplinjens tal. To udgaver af samme regel skrider fra hinanden (§6f).
+
+**»Delete finished tasks«** sætter `deleted = 1` frem for at fjerne rækkerne:
+synkroniseringen skal kunne fortælle andre enheder, at de er væk. Kun `done` og
+`dropped`, uanset hvad kalderen sender — og der er en test på, at en åben og en
+ventende opgave står urørte bagefter. To bekræftelser, netop fordi knappen står
+ved siden af en, der *kan* fortrydes.
+
+### Sekundet, der ikke kan deles
+
+`completed_at` står i hele sekunder, så en opgave afsluttet i samme sekund som
+nulstillingen kan ikke skelnes fra de gamle og ryger med. Testen flytter
+tidsstemplet i stedet for at vente på uret: **det er grænsen, der prøves, ikke
+klokken.**
+
+### Og hvad der IKKE blev bygget
+
+Jeg læste »skjul done opgaver i doda« som opgaverne selv og byggede en bredere
+indstilling, der også fjernede Logbook fra menuen og Done-afsnittene fra
+projekterne. Det var ikke ønsket — kun tallet i toplinjen skulle væk. Rullet
+tilbage før udgivelse. **Et skærmbillede med en rød ramme om præcis dét, der
+menes, afgør sagen hurtigere end endnu et gæt.**
+
 ## 7 · Uden for scope
 
 Handover §10 gælder uændret: ingen flere brugere, ingen

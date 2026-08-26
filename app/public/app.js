@@ -1000,7 +1000,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 68;
+const APP_VERSION = 69;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -1028,6 +1028,7 @@ const state = {
   // ikke mangle noget, fordi ingen har taget stilling.
   notesEnabled: true,
   noteCount: 0,
+  hideDone: false,
 };
 
 /* ------------------------------------------------------------ hjaelpere */
@@ -1186,6 +1187,29 @@ const ICONS = {
   sync: '<path d="M19.5 12a7.5 7.5 0 01-12.9 5.3"/><path d="M4.5 12a7.5 7.5 0 0112.9-5.3"/><path d="M17.5 3v4h-4"/><path d="M6.5 21v-4h4"/>',
 };
 
+/**
+ * Tallet ved et punkt i navigationen.
+ *
+ * Andreas bad om det paa resten af punkterne 25-08-2026 - Inbox havde det i
+ * forvejen. Ét sted, fordi det stod tre gange i forvejen (sidebaren, den
+ * foldede sidebar og bundlinjen paa mobil), og et tal, der kun rettes to af
+ * stederne, er vaerre end intet tal.
+ *
+ * Projekter, kontekster og noter taelles af det, klienten ALLEREDE har - at
+ * bede serveren om tallet ville vaere en anden sandhed ved siden af listen.
+ *
+ * Logbook og Review faar bevidst ingen: Logbook vokser for evigt (og staar
+ * allerede i toplinjen), og Review er ikke en liste, man kan taelle.
+ */
+function navAntal(v) {
+  if (v.tael) return state.counts[v.tael] || 0;
+  // Kun de aktive - parkerede og afsluttede staar laengere nede paa siden.
+  if (v.id === 'projects') return state.projects.filter((p) => p.status === 'active').length;
+  if (v.id === 'contexts') return state.contexts.length;
+  if (v.id === 'notes') return state.noteCount || 0;
+  return 0;
+}
+
 function icon(name, size = 18) {
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor"
     stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
@@ -1195,11 +1219,11 @@ function icon(name, size = 18) {
 
 // Raekkefoelgen her er ogsaa sidebarens. Handover §6.
 const VIEWS = [
-  { id: 'next', label: 'Next Actions', icon: 'next', group: 1 },
+  { id: 'next', label: 'Next Actions', icon: 'next', group: 1, tael: 'next' },
   { id: 'inbox', label: 'Inbox', icon: 'inbox', group: 1, tael: 'inbox' },
-  { id: 'waiting', label: 'Waiting For', icon: 'waiting', group: 2 },
-  { id: 'someday', label: 'Someday', icon: 'someday', group: 2 },
-  { id: 'repeat', label: 'Recurring', icon: 'repeat', group: 2 },
+  { id: 'waiting', label: 'Waiting For', icon: 'waiting', group: 2, tael: 'waiting' },
+  { id: 'someday', label: 'Someday', icon: 'someday', group: 2, tael: 'someday' },
+  { id: 'repeat', label: 'Recurring', icon: 'repeat', group: 2, tael: 'repeat' },
   { id: 'projects', label: 'Projects', icon: 'projects', group: 3 },
   { id: 'contexts', label: 'Contexts', icon: 'contexts', group: 3 },
   // Noter er reference, ikke arbejde - derfor her ved siden af projekter og
@@ -1381,7 +1405,7 @@ function navHtml() {
   const iNav = VIEWS.filter((v) => v.group > 0 && (v.id !== 'notes' || state.notesEnabled));
   const grupper = [...new Set(iNav.map((v) => v.group))];
   return grupper.map((g) => `<nav class="nav">${iNav.filter((v) => v.group === g).map((v) => {
-    const antal = v.tael ? (state.counts[v.tael] || 0) : 0;
+    const antal = navAntal(v);
     return `<button class="nav-item" data-view="${v.id}" ${v.id === state.view ? 'aria-current="page"' : ''}>
         ${icon(v.icon)}<span>${esc(v.label)}</span>
         ${antal ? `<span class="nav-count">${antal}</span>` : ''}
@@ -1445,7 +1469,7 @@ function shellHtml() {
   <nav class="bottomnav" id="bottomNav">
     ${BUND.map((id) => {
     const v = viewById(id);
-    const antal = v.tael ? (state.counts[v.tael] || 0) : 0;
+    const antal = navAntal(v);
     return `<button class="bottomnav-item" data-view="${v.id}" ${v.id === state.view ? 'aria-current="page"' : ''}>
         ${icon(v.icon, 21)}<span>${esc(v.label.split(' ')[0])}</span>
         ${antal ? `<span class="bottomnav-count">${antal}</span>` : ''}
@@ -1555,7 +1579,10 @@ function statsHtml() {
   if (c.inbox) dele.push(`${c.inbox} captured`);
   if (c.next) dele.push(`${c.next} next`);
   dele.push(`${state.projects.length} projects`);
-  if (c.done) dele.push(`${c.done} done`);
+  /* En taeller, der kun kan vokse, er for nogle en paamindelse og for andre
+     stoej. Andreas bad om at kunne slaa den fra 25-08-2026 - KUN tallet i
+     toplinjen; Logbook og Done-afsnittene bliver staaende. */
+  if (c.done && !state.hideDone) dele.push(`${c.done} done`);
   return dele.map((d) => `<span>${esc(d)}</span>`).join('');
 }
 
@@ -1596,7 +1623,7 @@ function opdaterNav() {
     else el.removeAttribute('aria-current');
     const t = el.querySelector('.bottomnav-count');
     const v = viewById(el.dataset.view);
-    const antal = v.tael ? (state.counts[v.tael] || 0) : 0;
+    const antal = navAntal(v);
     if (t && !antal) t.remove();
     else if (t) t.textContent = antal;
     else if (antal) el.insertAdjacentHTML('beforeend', `<span class="bottomnav-count">${antal}</span>`);
@@ -1815,6 +1842,7 @@ async function hentState() {
     state.reviewDue = d.reviewDue;
     if (d.notesEnabled !== undefined) state.notesEnabled = d.notesEnabled;
     if (d.noteCount !== undefined) state.noteCount = d.noteCount;
+    if (d.hideDone !== undefined) state.hideDone = d.hideDone;
   } catch (ex) {
     if (ex.status !== 401) toast(ex.message);
   }
@@ -4153,6 +4181,28 @@ function sideSettings() {
       It contains <strong>only real deadlines</strong> — never your whole task list.
       The address is the secret; revoking it stops the old one immediately.</p>
       <div id="calBox">Loading…</div>
+    </div>
+
+    <div class="card"><h2>Logbook</h2>
+      <p class="lead" style="margin:6px 0 14px">The Logbook keeps everything you have
+      finished. Two ways to start over — one you can undo, one you cannot.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" id="logReset">Start Logbook over</button>
+        <button class="btn" id="logWipe">Delete finished tasks…</button>
+      </div>
+      <p class="gate-note" style="text-align:left"><strong>Start over</strong> hides what is
+      there now from the Logbook and the counter. Nothing is deleted — it all stays in your
+      export, and you can bring it back below. <strong>Delete</strong> removes the finished
+      tasks for good.</p>
+      <div id="logResetBack" hidden style="margin-top:10px">
+        <button class="btn ghost" id="logUndo">Show the hidden ones again</button>
+      </div>
+      ${/* KUN tallet i toplinjen. Logbook og Done-afsnittene bliver staaende -
+           det var netop dét, Andreas praeciserede 25-08-2026. */ ''}
+      <label class="ctxopt" style="margin-top:16px">
+        <input type="checkbox" id="hideDone">
+        <span>Hide the “done” count in the top line</span>
+      </label>
     </div>
 
     <div class="card"><h2>Your data</h2>
@@ -7118,6 +7168,77 @@ async function bindData() {
     a.click();
     a.remove();
   };
+  /* ---- Logbook: start forfra, eller slet ---------------------------- */
+
+  const resetBack = document.getElementById('logResetBack');
+  // Fandtes der en graense, kan den fjernes igen - saa er »start forfra« ikke
+  // en enkeltbillet.
+  const visFortryd = (s2) => { resetBack.hidden = !(s2 && s2.logbook_reset); };
+  try { visFortryd((await api('GET', '/api/v1/settings')).settings); } catch { /* ligegyldigt */ }
+
+  document.getElementById('logReset').addEventListener('click', async () => {
+    try {
+      const d = await api('POST', '/api/v1/logbook/reset', {});
+      await hentState();
+      opdaterNav();
+      resetBack.hidden = false;
+      toast(d.hidden
+        ? `Logbook starts from now — ${d.hidden} hidden, none deleted`
+        : 'Logbook starts from now');
+    } catch (ex) { toast(ex.message); }
+  });
+
+  document.getElementById('logUndo').addEventListener('click', async () => {
+    try {
+      await api('POST', '/api/v1/logbook/reset', { clear: true });
+      await hentState();
+      opdaterNav();
+      resetBack.hidden = true;
+      toast('The Logbook shows everything again');
+    } catch (ex) { toast(ex.message); }
+  });
+
+  document.getElementById('logWipe').addEventListener('click', async () => {
+    /*
+     * To spoergsmaal, ikke ét.
+     *
+     * Det foerste siger HVOR MANGE og at det ikke kan fortrydes; det andet er
+     * en sidste haand paa roret, fordi handlingen ikke kan tages tilbage - og
+     * fordi knappen staar lige ved siden af en, der KAN fortrydes.
+     */
+    let antal = 0;
+    try { antal = (await api('GET', '/api/v1/logbook?limit=1000')).items.length; }
+    catch { /* vi spoerger alligevel */ }
+    if (!window.confirm(`Delete ${antal || 'all'} finished task${antal === 1 ? '' : 's'} for good?`
+      + '\n\nThey disappear from the Logbook, from your projects and from future exports.'
+      + '\nThis cannot be undone.')) return;
+    if (!window.confirm('Last chance — really delete them?')) return;
+    try {
+      const d = await api('DELETE', '/api/v1/logbook', {});
+      await hentState();
+      opdaterNav();
+      resetBack.hidden = true;
+      tegnSide();
+      toast(`${d.deleted} finished task${d.deleted === 1 ? '' : 's'} deleted`);
+    } catch (ex) { toast(ex.message); }
+  });
+
+  const skjulDone = document.getElementById('hideDone');
+  skjulDone.checked = !!state.hideDone;
+  skjulDone.addEventListener('change', async () => {
+    try {
+      await api('POST', '/api/v1/settings',
+        { settings: { hide_done: skjulDone.checked ? '1' : '0' } });
+      state.hideDone = skjulDone.checked;
+      // Toplinjen tegnes af state - den skal tegnes om, ikke bare gemme valget.
+      opdaterNav();
+    } catch (ex) {
+      toast(ex.message);
+      // Kontakten skal vise sandheden, ogsaa naar gemningen fejlede.
+      skjulDone.checked = !!state.hideDone;
+    }
+  });
+
   document.getElementById('expData').addEventListener('click', () => hent(false));
   document.getElementById('expAll').addEventListener('click', () => hent(true));
 

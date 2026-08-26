@@ -1731,12 +1731,48 @@ const ROUTES = {
     // Overskredne faste planer rulles frem, foer der taelles - ellers viser
     // taellerne noget, der ikke passer med listerne.
     rulFrem();
-    const tal = db.prepare(`
-      SELECT status, COUNT(*) AS n FROM items
-       WHERE deleted = 0 AND (defer_date IS NULL OR defer_date <= ?)
-       GROUP BY status`).all(iDag());
-    const antal = {};
-    for (const r of tal) antal[r.status] = r.n;
+    /*
+     * Hvert tal spejler sin LISTE - ikke bare sin status.
+     *
+     * `GROUP BY status` med ét faelles defer-filter var naesten rigtigt og
+     * derfor svaert at opdage: Inbox VISER ogsaa `queued` (en opgave kan have
+     * faaet den, se p3_lists), mens Waiting og Someday henter UDEN
+     * `hideDeferred` og altsaa ogsaa viser det udskudte. Taelleren sagde
+     * dermed noget andet end listen, den staar ved siden af.
+     *
+     * En taeller, der ikke passer med det, man ser, naar man klikker, er
+     * vaerre end ingen taeller. Andreas bad om tal paa resten af punkterne
+     * 25-08-2026 - og saa skal de vaere rigtige.
+     *
+     * `kind = 'task'` overalt: noterne har deres eget punkt og deres eget tal.
+     */
+    const idag = iDag();
+    const taelStatus = db.prepare(`SELECT COUNT(*) AS n FROM items
+       WHERE deleted = 0 AND kind = 'task' AND status = ?`);
+    const antal = {
+      // Som listen: inbox OG queued, uden defer-filter.
+      inbox: db.prepare(`SELECT COUNT(*) AS n FROM items
+         WHERE deleted = 0 AND kind = 'task' AND status IN ('inbox','queued')`).get().n,
+      // Som listen: kun det, der ikke er skjult til senere.
+      next: db.prepare(`SELECT COUNT(*) AS n FROM items
+         WHERE deleted = 0 AND kind = 'task' AND status = 'next'
+           AND (defer_date IS NULL OR defer_date <= ?)`).get(idag).n,
+      waiting: taelStatus.get('waiting').n,
+      someday: taelStatus.get('someday').n,
+      // Samme graense som Logbook - ellers ville toplinjen blive ved med at
+      // taelle det, listen lige har lagt bag sig.
+      done: (() => {
+        const fra = logbookFra();
+        return fra
+          ? db.prepare(`SELECT COUNT(*) AS n FROM items WHERE deleted = 0 AND kind = 'task'
+               AND status = 'done' AND completed_at > ?`).get(fra).n
+          : taelStatus.get('done').n;
+      })(),
+      // Gentagelser er ikke opgaver og har ingen status - de taelles for sig.
+      // Pausede regnes ikke med: de laver ingen opgaver lige nu.
+      repeat: db.prepare(`SELECT COUNT(*) AS n FROM recurrences
+         WHERE deleted = 0 AND paused = 0`).get().n,
+    };
     sendJson(res, 200, {
       contexts: hentKontekster(),
       projects: hentProjekter(),
@@ -1748,6 +1784,9 @@ const ROUTES = {
       // Hvor mange noter der ER - saa indstillingen kan sige sandheden om,
       // hvad der sker med dem, i stedet for at lade brugeren gaette.
       noteCount: db.prepare("SELECT COUNT(*) AS n FROM items WHERE kind = 'note' AND deleted = 0").get().n,
+      // Toplinjen tegnes ved opstart, saa valget maa med HER - Settings-siden
+      // hentes foerst, naar man gaar derind, og saa ville tallet naa at blinke.
+      hideDone: getSetting('hide_done', '') === '1',
     });
   },
 
@@ -1896,6 +1935,61 @@ const ROUTES = {
     });
   },
 
+  /*
+   * Start Logbook forfra.
+   *
+   * Der SLETTES ikke. Graensen er et tidsstempel, saa listen og taelleren
+   * begynder herfra, mens opgaverne bliver liggende og kommer med i en
+   * eksport. Fortrydes ved at nulstille graensen igen (`clear: true`).
+   *
+   * Andreas bad om begge dele 25-08-2026: den her til at rydde skaermen, og
+   * DELETE herunder til at komme af med testdata for altid.
+   */
+  'POST /api/v1/logbook/reset': async (req, res) => {
+    const auth = godkend(req, res, 'write');
+    if (!auth) return;
+    const body = await readJsonBody(req, auth.viaToken);
+    if (body && body.clear) {
+      db.prepare("DELETE FROM settings WHERE key = 'logbook_reset'").run();
+      audit('logbook-nulstilling-fjernet', null, clientIp(req));
+      sendJson(res, 200, { reset: 0, hidden: 0 });
+      return;
+    }
+    const t = now();
+    const skjulte = db.prepare(`SELECT COUNT(*) AS n FROM items
+       WHERE deleted = 0 AND status IN ('done','dropped') AND completed_at IS NOT NULL
+         AND completed_at <= ?`).get(t).n;
+    setSetting('logbook_reset', String(t));
+    audit('logbook-nulstillet', null, clientIp(req));
+    log(`logbook nulstillet - ${skjulte} afsluttede skjult (ikke slettet)`);
+    sendJson(res, 200, { reset: t, hidden: skjulte });
+  },
+
+  /*
+   * Slet de afsluttede opgaver for ALTID.
+   *
+   * `deleted = 1` og ikke DELETE FROM: synkroniseringen skal kunne fortaelle
+   * andre enheder, at de er vaek (`/api/v1/changes` sender `deleted`-id'er).
+   * Slettede raekker ryddes for alvor af `sweep()`.
+   *
+   * Kun `done` og `dropped` - det aabne arbejde roeres aldrig, uanset hvad
+   * kalderen sender.
+   */
+  'DELETE /api/v1/logbook': async (req, res) => {
+    const auth = godkend(req, res, 'write');
+    if (!auth) return;
+    await readJsonBody(req, auth.viaToken);
+    const t = now();
+    const r = db.prepare(`UPDATE items SET deleted = 1, updated_at = ?
+       WHERE deleted = 0 AND status IN ('done','dropped')`).run(t);
+    /* Graensen giver ikke laengere mening, naar der intet er at skjule - og
+       stod den tilbage, ville nye afsluttede opgaver blive gemt vaek af den. */
+    db.prepare("DELETE FROM settings WHERE key = 'logbook_reset'").run();
+    audit('logbook-slettet', null, clientIp(req));
+    log(`logbook slettet permanent - ${r.changes} opgave(r)`);
+    sendJson(res, 200, { deleted: r.changes });
+  },
+
   'GET /api/v1/contexts': (req, res) => {
     const auth = godkend(req, res, 'read');
     if (!auth) return;
@@ -1916,6 +2010,10 @@ const ROUTES = {
     if (!auth) return;
     const hvor = ["i.deleted = 0", "i.status IN ('done','dropped')", 'i.completed_at IS NOT NULL'];
     const arg = [];
+    // Nulstillingen gaelder BEGGE steder - listen her og tallet i toplinjen.
+    // Se `logbookFra()`; stod graensen to steder, ville de skride fra hinanden.
+    const fra = logbookFra();
+    if (fra) { hvor.push('i.completed_at > ?'); arg.push(fra); }
     const siden = Number(ctx.query.get('since'));
     if (Number.isFinite(siden) && siden > 0) { hvor.push('i.completed_at >= ?'); arg.push(siden); }
     const projekt = ctx.query.get('project');
@@ -2926,7 +3024,10 @@ const ROUTES = {
     const body = await readJsonBody(req);
     // Whitelist - aldrig blind gennemskrivning af klientens noegler.
     const ALLOWED = new Set(['theme', 'review_weekday', 'focus_item', 'focus_started',
-      'ical_alarm', 'notes_off', 'review_time', 'review_push']);
+      'ical_alarm', 'notes_off', 'review_time', 'review_push',
+      // Skjuler »N done« i toplinjen. En taeller, der kun kan vokse, er for
+      // nogle en paamindelse og for andre stoej - derfor et valg.
+      'hide_done']);
     const written = {};
     for (const [key, value] of Object.entries(body.settings || {})) {
       if (!ALLOWED.has(key)) continue;
@@ -2936,6 +3037,17 @@ const ROUTES = {
     sendJson(res, 200, { settings: written });
   },
 };
+
+/**
+ * Hvornaar Logbook sidst blev startet forfra - 0 hvis aldrig.
+ *
+ * ÉT sted, fordi graensen bruges to: listen i Logbook og `done`-tallet i
+ * toplinjen. To udgaver af den samme regel skrider fra hinanden, uden at
+ * nogen opdager det (RUNE-ERFARINGER, doda v60).
+ */
+function logbookFra() {
+  return Number(getSetting('logbook_reset', '0')) || 0;
+}
 
 /** Et projekt med alt, hvad der hoerer til det. Opgaver OG noter (handover §5.4). */
 function projektMedIndhold(id) {

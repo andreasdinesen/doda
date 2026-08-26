@@ -1222,6 +1222,28 @@ function sideSettings() {
       <div id="calBox">Loading…</div>
     </div>
 
+    <div class="card"><h2>Logbook</h2>
+      <p class="lead" style="margin:6px 0 14px">The Logbook keeps everything you have
+      finished. Two ways to start over — one you can undo, one you cannot.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" id="logReset">Start Logbook over</button>
+        <button class="btn" id="logWipe">Delete finished tasks…</button>
+      </div>
+      <p class="gate-note" style="text-align:left"><strong>Start over</strong> hides what is
+      there now from the Logbook and the counter. Nothing is deleted — it all stays in your
+      export, and you can bring it back below. <strong>Delete</strong> removes the finished
+      tasks for good.</p>
+      <div id="logResetBack" hidden style="margin-top:10px">
+        <button class="btn ghost" id="logUndo">Show the hidden ones again</button>
+      </div>
+      ${/* KUN tallet i toplinjen. Logbook og Done-afsnittene bliver staaende -
+           det var netop dét, Andreas praeciserede 25-08-2026. */ ''}
+      <label class="ctxopt" style="margin-top:16px">
+        <input type="checkbox" id="hideDone">
+        <span>Hide the “done” count in the top line</span>
+      </label>
+    </div>
+
     <div class="card"><h2>Your data</h2>
       <p class="lead" style="margin:6px 0 14px">Everything in one open JSON file.
       Export it, wipe the database, import it back, and you have the same system.</p>
