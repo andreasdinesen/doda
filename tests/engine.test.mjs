@@ -601,3 +601,67 @@ test('»slet afsluttede« roerer ALDRIG det aabne arbejde', async () => {
   const aendringer = await J('/api/v1/changes?since=0');
   assert.ok(aendringer.deleted.includes(faerdig.id), 'synkroniseringen faar besked');
 });
+
+test('?format=text giver en liste, en skaerm uden JSON-parser kan vise', async () => {
+  /*
+   * »Kan det laves saa det ogsaa virker med Raycast uden MCP« (Andreas,
+   * 25-08-2026). Raycasts script-kommandoer er ren `curl` - der er hverken jq
+   * eller python at regne med paa en frisk Mac.
+   *
+   * /next havde vejen i forvejen (den blev lavet til iOS-genveje). Nu har
+   * /search, /items og /capture den ogsaa, og formateringen bor ét sted, saa
+   * de fire ikke kan komme til at se forskellige ud.
+   */
+  const tekst = async (sti) => {
+    const r = await fetch(`${BASE}${sti}`, { headers: { cookie } });
+    return { status: r.status, ct: r.headers.get('content-type'), krop: await r.text() };
+  };
+
+  const r = await J('/api/v1/capture', { text: 'køb "grøn" kaffe & filtre #Indkøb', createNew: true });
+  await J(`/api/v1/items/${r.item.id}`, { status: 'next' });
+
+  const naeste = await tekst('/api/v1/next?format=text');
+  assert.match(naeste.ct, /^text\/plain/, 'ren tekst, ikke JSON');
+  assert.match(naeste.krop, /^• /m, 'punkttegn foran hver linje');
+  // Anfoerselstegn og & skal staa, som brugeren skrev dem - ikke escapet til
+  // HTML eller JSON undervejs.
+  assert.match(naeste.krop, /køb "grøn" kaffe & filtre/, 'teksten er uroert');
+  assert.match(naeste.krop, /#Indkøb/);
+
+  // Samme formatering fra /search og /items - ellers ser de forskellige ud.
+  const fundet = await tekst(`/api/v1/search?format=text&q=${encodeURIComponent('grøn')}`);
+  assert.match(fundet.krop, /^• køb "grøn" kaffe & filtre/m);
+  // `m`-flag: listen har flere raekker fra de andre tests, og linjen skal bare
+  // VAERE der - ikke staa foerst.
+  const liste = await tekst('/api/v1/items?format=text&status=next&kind=task');
+  assert.match(liste.krop, /^• køb "grøn" kaffe & filtre/m);
+
+  // Tomme svar skal vaere en saetning, ikke en tom side.
+  assert.equal((await tekst('/api/v1/search?format=text&q=findesikkenoget')).krop, 'Nothing found.');
+});
+
+test('capture i ren tekst siger, hvad der blev FORSTAAET', async () => {
+  /*
+   * Ikke bare »Added«. Skrev man `!i morgen 14:00`, vil man se, at datoen blev
+   * laest - ellers opdages en tastefejl foerst naeste gang, man aabner appen.
+   */
+  /*
+   * Med en NOeGLE, ikke en cookie - det er dét, Raycast goer.
+   *
+   * Foerste udgave brugte cookien og fik 415: uden en noegle kraever serveren
+   * en rigtig JSON-krop, mens et kald med `Bearer` er tilgivende, netop fordi
+   * en klient med ét tekstfelt ikke kan bygge JSON (handover §5.10). Testen
+   * skal proeve den vej, klienten faktisk gaar.
+   */
+  const noegle = (await J('/api/v1/tokens', { name: 'raycast-test', scope: 'capture' })).key;
+  const r = await fetch(`${BASE}/api/v1/capture?format=text&text=${
+    encodeURIComponent('ring til tandlægen #Opkald !i morgen 14:00')}`, {
+    method: 'POST', headers: { Authorization: `Bearer ${noegle}` },
+  });
+  assert.equal(r.status, 200);
+  assert.match(r.headers.get('content-type'), /^text\/plain/);
+  const krop = await r.text();
+  assert.match(krop, /^Added: ring til tandlægen$/m);
+  assert.match(krop, /^Due: \d{4}-\d{2}-\d{2} 14:00$/m, 'datoen OG klokkeslættet');
+  assert.match(krop, /^Contexts: #Opkald$/m);
+});

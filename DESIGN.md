@@ -1521,6 +1521,62 @@ projekterne. Det var ikke ønsket — kun tallet i toplinjen skulle væk. Rullet
 tilbage før udgivelse. **Et skærmbillede med en rød ramme om præcis dét, der
 menes, afgør sagen hurtigere end endnu et gæt.**
 
+## 6r · Raycast, med og uden Pro (v70)
+
+»Kan du lave en integration til Raycast Pro?« — og bagefter: »kan det også
+virke uden MCP?« (Andreas, 25-08-2026).
+
+### Med Pro: der var ingenting at bygge
+
+MCP er en Pro-funktion, og Raycast taler remote MCP over HTTP med både faste
+headers og **dynamisk OAuth med PKCE** — præcis dét, doda allerede har fra
+`claude.ai`-connectoren.
+
+Det blev prøvet ende til ende mod en rigtig doda med Raycasts eget håndtryk:
+`initialize` (2025-06-18), `tools/list` (11 værktøjer), `capture`,
+`list_next_actions`, samt hele opdagelsesvejen — 401 med `WWW-Authenticate`,
+`/.well-known/oauth-protected-resource/mcp` og registrering med `S256`.
+`GET /mcp` svarer `405` med `Allow: POST`, som en server uden SSE-strøm skal.
+
+**Det rigtige svar på »kan du bygge X« er nogle gange »det virker allerede«** —
+men kun hvis man har prøvet det.
+
+### Uden Pro: script-kommandoer, ikke en udvidelse
+
+En Raycast-udvidelse er TypeScript, React, npm og en build. Det ville være det
+eneste sted i doda med en værktøjskæde. **Script-kommandoer er bash og `curl`**
+— i husets ånd, og de virker samme dag uden at nogen skal bygge noget.
+
+Prisen er, at der ikke er en liste, man kan klikke i; man får tekst. Til at
+fange og til at slå op er det nok, og har man Pro, er MCP der stadig.
+
+### Tekst-vejen i API'et
+
+`/next?format=text` fandtes fra iOS-genvejene. `/search`, `/items` og
+`/capture` fik den samme, fordi **Raycast-scripts er ren `curl`** — der er
+hverken `jq` eller `python3` at regne med på en frisk Mac.
+
+Formateringen bor ét sted (`tekstListe()`); ellers ville de fire komme til at
+se forskellige ud (§6f). Og `capture` svarer med hvad der blev **forstået** —
+dato, kontekst, projekt — ikke bare »Added«: ellers opdages en tastefejl først
+næste gang, appen åbnes.
+
+### Nøglen i nøgleringen, ikke i mappen
+
+Scriptene ligger et sted, man synkroniserer og sikkerhedskopierer. En nøgle med
+`full`-scope hører ikke til dér i klar tekst, så `doda-setup.sh` lægger adresse
+og nøgle i macOS' nøglering, og scriptene henter dem ved kørsel.
+
+`_doda.sh` har med vilje **intet `@raycast`-hoved** — så viser Raycast den ikke
+som en kommando.
+
+### Testen, der ramte forbi
+
+Første udgave kaldte `capture` med en **cookie** og fik `415`. Raycast bruger en
+**nøgle**, og serveren er med vilje mere tilgivende der: en klient med ét
+tekstfelt kan ikke bygge JSON (handover §5.10). **Prøv den vej, klienten
+faktisk går** — ellers tester man en anden sti end den, brugeren rammer.
+
 ## 7 · Uden for scope
 
 Handover §10 gælder uændret: ingen flere brugere, ingen

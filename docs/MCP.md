@@ -87,6 +87,42 @@ gennem et login. Det er dét, doda nu kan — se `docs/OAUTH.md` for hele flowet
 
 ---
 
+## 4b · Raycast
+
+MCP er en **Raycast Pro**-funktion, og doda kræver ingen udvidelse eller kode:
+Raycast taler remote MCP over HTTP, hvilket er præcis dét, doda gør. Det virker
+også i Raycast på iOS, hvor remote HTTP er den eneste mulighed.
+
+Der er to veje, og forskellen er, hvem der holder nøglen.
+
+**Med en nøgle** (enklest, og den eneste, der virker uden https):
+
+1. I Raycast: kør **Install MCP Server** (eller *Manage MCP Servers → Install
+   New Server*).
+2. Transport: **HTTP**. Adresse: `https://DIN-ADRESSE/mcp`.
+3. Under HTTP headers: `Authorization` = `Bearer doda_DIN-NØGLE`.
+
+**Med OAuth** (nøglen bliver aldrig skrevet ned):
+
+1. Samme formular, men lad headeren stå tom og vælg **Dynamic OAuth**.
+2. Raycast registrerer sig selv, sender dig til doda, hvor du logger ind og
+   trykker **Allow**. Token gemmes krypteret hos Raycast.
+3. Forbindelsen står bagefter under **Settings → Connected apps** i doda og kan
+   tilbagekaldes derfra — hvilket er hele fordelen ved den vej.
+
+Brug **`read`-scopet**, hvis Raycast kun skal kunne slå op; `full`, hvis den
+også skal kunne fange og fuldføre. En launcher, man kalder frem hele dagen, er
+et godt sted at holde tilladelserne små.
+
+> **Prøvet ende til ende 25-08-2026** mod en rigtig doda med Raycasts eget
+> håndtryk: `initialize` (protokol 2025-06-18), `tools/list` (11 værktøjer),
+> `capture` og `list_next_actions`, plus hele opdagelsesvejen — 401 med
+> `WWW-Authenticate`, `/.well-known/oauth-protected-resource/mcp`, og
+> registrering med PKCE `S256`. `GET /mcp` svarer `405` med `Allow: POST`, som
+> en server uden SSE-strøm skal.
+
+---
+
 ## 5 · Værktøjerne
 
 | Værktøj | Scope | Hvad |

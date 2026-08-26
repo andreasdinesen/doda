@@ -1794,6 +1794,20 @@ const ROUTES = {
     const user = godkend(req, res, 'read');
     if (!user) return;
     const q = ctx.query;
+    // Samme tekstvej som /next og /search - en fanget opgave lander i Inbox,
+    // og saa skal den kunne SES fra en klient uden JSON-parser.
+    if (q.get('format') === 'text') {
+      sendTekst(res, tekstListe(hentItems({
+        status: q.get('status'),
+        kind: q.get('kind'),
+        project: q.get('project'),
+        context: q.get('context'),
+        limit: q.get('limit'),
+        skjulUdskudte: q.get('hideDeferred') === '1',
+        nyesteFoerst: q.get('newest') === '1',
+      }), 'Nothing here.'));
+      return;
+    }
     sendJson(res, 200, {
       items: hentItems({
         status: q.get('status'),
@@ -1837,6 +1851,23 @@ const ROUTES = {
       return;
     }
     if (auth.viaToken) audit('fangst-via-api', auth.token.name, svar.item.title.slice(0, 80));
+    const linje = svar.recurrence
+      ? `Added: ${svar.item.title} — ${parse.beskrivGentagelse(svar.recurrence.rule)}`
+      : `Added: ${svar.item.title}`;
+    if (ctx.query.get('format') === 'text') {
+      /* Hele tolkningen med, ikke bare titlen: skrev man `!i morgen`, vil man
+         se, at den blev forstaaet - ellers opdages en tastefejl foerst i appen. */
+      const dele = [linje];
+      const t = svar.item;
+      if (t.due_date) dele.push(`Due: ${t.due_date}${t.due_time ? ` ${t.due_time}` : ''}`);
+      if (t.contexts && t.contexts.length) dele.push(`Contexts: ${t.contexts.map((c) => `#${c.name}`).join(' ')}`);
+      if (t.project_id) {
+        const pr = hentProjekter().find((x) => x.id === t.project_id);
+        if (pr) dele.push(`Project: ${pr.name}`);
+      }
+      sendTekst(res, dele.join('\n'));
+      return;
+    }
     sendJson(res, 200, {
       item: svar.item,
       recurrence: svar.recurrence || null,
@@ -1876,7 +1907,12 @@ const ROUTES = {
   'GET /api/v1/search': (req, res, ctx) => {
     const auth = godkend(req, res, 'read');
     if (!auth) return;
-    sendJson(res, 200, { items: soegItems(ctx.query.get('q')) });
+    const items = soegItems(ctx.query.get('q'));
+    // Som /next: en klient uden JSON-parser skal kunne vise svaret direkte.
+    // Raycasts script-kommandoer er ren `curl` og har hverken jq eller python
+    // at regne med (Andreas, 25-08-2026).
+    if (ctx.query.get('format') === 'text') { sendTekst(res, tekstListe(items, 'Nothing found.')); return; }
+    sendJson(res, 200, { items });
   },
 
   /* Genvejs-venligt: kun det man kan gore nu, valgfrit én kontekst, og
@@ -1898,15 +1934,7 @@ const ROUTES = {
     const items = hentItems({ status: 'next', skjulUdskudte: true, context: kontekstId, limit: ctx.query.get('limit') });
 
     if (ctx.query.get('format') === 'text') {
-      const linjer = items.map((i) => {
-        const dele = [i.title];
-        if (i.contexts.length) dele.push(i.contexts.map((c) => `#${c.name}`).join(' '));
-        if (i.due_date) dele.push(i.due_date + (i.due_time ? ` ${i.due_time}` : ''));
-        return `• ${dele.join('  ·  ')}`;
-      });
-      const krop = linjer.length ? linjer.join('\n') : 'Nothing to do right now.';
-      res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
-      res.end(krop);
+      sendTekst(res, tekstListe(items, 'Nothing to do right now.'));
       return;
     }
     sendJson(res, 200, { items, count: items.length });
@@ -3037,6 +3065,29 @@ const ROUTES = {
     sendJson(res, 200, { settings: written });
   },
 };
+
+/** Ren tekst ud - til klienter uden JSON-parser (iOS-genveje, Raycast). */
+function sendTekst(res, krop) {
+  res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
+  res.end(krop);
+}
+
+/**
+ * En liste, en skaerm kan vise som den er.
+ *
+ * ÉT sted, saa /next og /search ser ens ud. Stod formateringen to steder,
+ * ville de drive fra hinanden, og brugeren ville se to slags lister fra samme
+ * app (RUNE-ERFARINGER, doda v60).
+ */
+function tekstListe(items, tomtSvar) {
+  const linjer = items.map((i) => {
+    const dele = [i.title];
+    if (i.contexts && i.contexts.length) dele.push(i.contexts.map((c) => `#${c.name}`).join(' '));
+    if (i.due_date) dele.push(i.due_date + (i.due_time ? ` ${i.due_time}` : ''));
+    return `• ${dele.join('  ·  ')}`;
+  });
+  return linjer.length ? linjer.join('\n') : tomtSvar;
+}
 
 /**
  * Hvornaar Logbook sidst blev startet forfra - 0 hvis aldrig.

@@ -216,6 +216,9 @@ Den bruger de samme adgangsnøgler og de samme scopes — en `read`-nøgle giver
 Claude læseadgang og intet andet, og `tools/list` viser kun det, nøglen faktisk
 må. Se **[docs/MCP.md](docs/MCP.md)**.
 
+**Raycast Pro** kan det samme uden en udvidelse: tilføj `https://DIN-ADRESSE/mcp`
+som HTTP-server, enten med en nøgle i en header eller med OAuth.
+
 **claude.ai i browseren** kan ikke sende en nøgle i en header, så den kobler sig
 på med **OAuth 2.1**: tilføj `https://DIN-ADRESSE/mcp` som custom connector, og
 Claude finder selv resten og sender dig til doda for at trykke *Allow*.
@@ -387,6 +390,7 @@ Se `PLAN.md` for faseoversigt og status, `DESIGN.md` for de trufne beslutninger 
 
 | Version | Ændringer |
 |---|---|
+| 70 | **doda i Raycast — med eller uden Pro.** Har du **Raycast Pro**, virker doda som MCP-server uden at der skal bygges noget: tilføj `https://DIN-ADRESSE/mcp` med en nøgle i en header eller med OAuth, og du har alle elleve værktøjer. **Uden Pro** ligger der nu fire script-kommandoer i [extras/raycast](extras/raycast) — fang, Next Actions, Inbox og søgning. Bash og `curl`, intet npm, og nøglen gemmes i macOS' **nøglering**, ikke i en fil. Serveren fik til gengæld en **tekst-vej**: `?format=text` på `/search`, `/items` og `/capture` (den fandtes i forvejen på `/next`), så en klient uden JSON-parser kan vise svaret direkte. |
 | 69 | **Tal ved hvert punkt — og en vej til at starte Logbook forfra.** Next Actions, Waiting For, Someday, Recurring, Projects, Contexts og Notes har nu tal som Inbox. *Logbook og Review får bevidst ingen: det ene vokser for evigt, det andet er ikke en liste.* **Undervejs fundet:** optællingen var **næsten** rigtig og derfor svær at se — Inbox viser også `queued`, men tælleren talte kun `inbox`, og Waiting/Someday viser udskudte, som tælleren skjulte. Hvert tal spejler nu præcis det kald, listen selv laver. **Og Settings → Logbook:** »Start Logbook over« skjuler det hidtidige fra listen og tælleren uden at slette noget (kan fortrydes), »Delete finished tasks« sletter for altid, og »done«-tallet i toplinjen kan slås fra. |
 | 68 | **En Sagu-note kan foldes sammen.** En note kan være lang — en liste af nøgler, et mødereferat — og så skubber den projektets opgaver ned under skærmkanten. Overskriften **In Sagu** er nu en foldeknap; **udfoldet som standard**, for noten er dét, man kom for. Foldet står overskriften tilbage med sin kommentartæller, så man kan se, at der *er* en note, uden at læse den. Kommentarerne og skrivefeltet følger med ind — de hører til noten. Valget huskes, og folden henter ikke noten fra Sagu igen. |
 | 67 | **Gentagelser kan nu få en beskrivelse — og afkrydsningsfelterne følger dodas tema.** Skabelonen bag en gentagelse har altid haft en beskrivelse, og hver ny forekomst har altid fået den med; den blev bare aldrig sendt **ud** igen, så ruden kunne hverken vise eller rette den. Nu er der et **Details**-felt, og det, du skriver, følger med til hver kommende opgave. **Og temaet:** browserens egne dele — afkrydsningsfelter, rullebjælker, `select` — tegnes efter `color-scheme` og fulgte **systemets** valg. Stod Mac'en i mørkt og doda i lyst, blev afkrydsningerne i en Sagu-note kulsorte på en lys side. De følger nu dodas eget tema. |
