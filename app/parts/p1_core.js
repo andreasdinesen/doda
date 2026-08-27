@@ -5,7 +5,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 71;
+const APP_VERSION = 72;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -195,15 +195,17 @@ const ICONS = {
 /**
  * Tallet ved et punkt i navigationen.
  *
- * Andreas bad om det paa resten af punkterne 25-08-2026 - Inbox havde det i
- * forvejen. Ét sted, fordi det stod tre gange i forvejen (sidebaren, den
- * foldede sidebar og bundlinjen paa mobil), og et tal, der kun rettes to af
- * stederne, er vaerre end intet tal.
+ * Ét sted, fordi det bruges tre (sidebaren, den foldede sidebar og bundlinjen
+ * paa mobil), og et tal, der kun rettes to af stederne, er vaerre end intet.
  *
- * Projekter, kontekster og noter taelles af det, klienten ALLEREDE har - at
- * bede serveren om tallet ville vaere en anden sandhed ved siden af listen.
+ * KUN dér, hvor tallet betyder »her er noget at tage stilling til«: Next,
+ * Inbox, Waiting For og Someday. Projekter, kontekster, noter, gentagelser og
+ * All Tasks er strukturer og oversigter - deres tal aendrer sig sjaeldent og
+ * kraever ingenting, og i en menu, hvor alt har et tal, holder man op med at
+ * se dem, der betyder noget (Andreas, 26-08-2026). Antallet staar paa selve
+ * siden, hvor det er svar paa et spoergsmaal, man lige har stillet.
  *
- * Logbook og Review faar bevidst ingen: Logbook vokser for evigt (og staar
+ * Logbook og Review har aldrig haft et: Logbook vokser for evigt (og staar
  * allerede i toplinjen), og Review er ikke en liste, man kan taelle.
  */
 /*
@@ -217,12 +219,7 @@ const ICONS = {
 const BUND_TAL = new Set(['next', 'inbox']);
 
 function navAntal(v) {
-  if (v.tael) return state.counts[v.tael] || 0;
-  // Kun de aktive - parkerede og afsluttede staar laengere nede paa siden.
-  if (v.id === 'projects') return state.projects.filter((p) => p.status === 'active').length;
-  if (v.id === 'contexts') return state.contexts.length;
-  if (v.id === 'notes') return state.noteCount || 0;
-  return 0;
+  return v.tael ? (state.counts[v.tael] || 0) : 0;
 }
 
 function icon(name, size = 18) {
@@ -236,13 +233,9 @@ function icon(name, size = 18) {
 const VIEWS = [
   { id: 'next', label: 'Next Actions', icon: 'next', group: 1, tael: 'next' },
   { id: 'inbox', label: 'Inbox', icon: 'inbox', group: 1, tael: 'inbox' },
-  /* Alt, der ikke er afsluttet, i ét billede. De andre lister svarer paa
-     »hvad nu?«; den her svarer paa »hvad har jeg overhovedet?« og er stedet,
-     man leder, naar noget er blevet vaek (Andreas, 26-08-2026). */
-  { id: 'all', label: 'All Tasks', icon: 'log', group: 1, tael: 'all' },
   { id: 'waiting', label: 'Waiting For', icon: 'waiting', group: 2, tael: 'waiting' },
   { id: 'someday', label: 'Someday', icon: 'someday', group: 2, tael: 'someday' },
-  { id: 'repeat', label: 'Recurring', icon: 'repeat', group: 2, tael: 'repeat' },
+  { id: 'repeat', label: 'Recurring', icon: 'repeat', group: 2 },
   { id: 'projects', label: 'Projects', icon: 'projects', group: 3 },
   { id: 'contexts', label: 'Contexts', icon: 'contexts', group: 3 },
   // Noter er reference, ikke arbejde - derfor her ved siden af projekter og
@@ -250,6 +243,25 @@ const VIEWS = [
   { id: 'notes', label: 'Notes', icon: 'note', group: 3 },
   { id: 'log', label: 'Logbook', icon: 'log', group: 4 },
   { id: 'review', label: 'Review', icon: 'review', group: 4 },
+  /*
+   * Alt, der ikke er afsluttet, i ét billede. De andre lister svarer paa
+   * »hvad nu?«; den her svarer paa »hvad har jeg overhovedet?« og er stedet,
+   * man leder, naar noget er blevet vaek.
+   *
+   * Nederst, sammen med Logbook og gennemgangen: den bruges ikke i
+   * dagligdagen, og oeverst i menuen trak den opmaerksomhed fra de to lister,
+   * man faktisk arbejder i (Andreas, 26-08-2026).
+   *
+   * Eget ikon og ikke `log`: de to ville staa ved siden af hinanden med samme
+   * billede og betyde noget forskelligt.
+   *
+   * INTET tal i menuen. De andre tal siger »her er noget at tage stilling
+   * til«; det her ville bare vaere summen af dem - et stort tal, der aldrig
+   * kraever noget, og som trak blikket til det punkt, man netop IKKE skal
+   * arbejde i til daglig. Antallet staar paa selve siden, hvor det er svar
+   * paa et spoergsmaal, man lige har stillet (Andreas, 26-08-2026).
+   */
+  { id: 'all', label: 'All Tasks', icon: 'menu', group: 4 },
   // group: 0 = staar IKKE i navigationen. Settings naas fra menuen paa
   // brugerknappen, hvor kontoen i forvejen bor - to indgange til det samme
   // sted er én for meget.

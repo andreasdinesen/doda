@@ -51,8 +51,13 @@ async function sideProjects() {
     return a[0].localeCompare(b[0]);
   });
 
+  /* Tallet staar HER og ikke i menuen: det er svar paa et spoergsmaal, man
+     lige har stillet ved at klikke ind (Andreas, 26-08-2026). */
   return `<section class="page">
     ${projectHead()}
+    <p class="meta" style="margin-bottom:12px">${aktive.length} active${
+  parkerede.length ? ` · ${parkerede.length} someday` : ''}${
+  afsluttede.length ? ` · ${afsluttede.length} finished` : ''}</p>
     ${sorteret.map(([navn, liste]) => `
       <h2 class="group meta">${esc(navn)} <span class="group-count">${liste.length}</span></h2>
       <div class="list">${liste.map(projektRaekke).join('')}</div>`).join('')}
@@ -543,6 +548,8 @@ function administrerOmraader() {
 function sideContexts() {
   return `<section class="page">
     <div class="page-head"><h1>Contexts</h1><p class="lead">${esc(BESKRIVELSER.contexts)}</p></div>
+    ${state.contexts.length ? `<p class="meta" style="margin-bottom:12px">${
+  state.contexts.length} context${state.contexts.length === 1 ? '' : 's'}</p>` : ''}
     ${state.contexts.length ? `<div class="card"><div class="keylist">
       ${state.contexts.map((c) => `
         <div class="keyrow">

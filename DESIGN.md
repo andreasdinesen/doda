@@ -1637,6 +1637,43 @@ så en liste sorteret bagefter ville mangle netop det, der skulle ligge forrest.
 hver sit badge blev til en række uden retning, og de fleste af dem tæller
 noget, man alligevel går i sidebaren for at se på. Sidebaren viser dem alle.
 
+## 6v · Tal kun dér, hvor de betyder noget (v72)
+
+v69 satte tal ved næsten hvert punkt. Det var for meget, og det viste sig ved
+brug: »de må gerne vise antallet inde på selve siden, men ikke ude i menuen«
+(Andreas, 26-08-2026).
+
+**Et badge i en menu er et krav om opmærksomhed.** Ved Next Actions, Inbox,
+Waiting For og Someday er det rigtigt: tallet betyder »her ligger noget, du
+skal tage stilling til«, og det går i nul, når du er færdig. Ved projekter,
+kontekster, noter og gentagelser er tallet en **egenskab** — det ændrer sig
+sjældent og kræver ingenting. Står de side om side, holder man op med at se
+forskel, og så virker heller ikke de første.
+
+**All Tasks flyttede ned under Review**, sammen med Logbook og gennemgangen.
+Den svarer på »hvad har jeg overhovedet?«, ikke »hvad nu?«, og øverst i menuen
+trak den blikket fra de to lister, man arbejder i. Den fik sit eget ikon: med
+Logbooks ville de to stå ved siden af hinanden med samme billede.
+
+**Antallet står på siden i stedet — og siger dér mere.** Badget ved Projects
+talte kun de aktive; linjen på siden siger `3 active · 1 someday · 2 finished`.
+Recurring viste ikke, hvor mange der var sat på pause. Tallet er svar på et
+spørgsmål, man lige har stillet ved at klikke ind, og der er plads til at
+svare ordentligt.
+
+### Tællere, ingen henter, skal væk
+
+`counts.repeat` og `counts.all` blev beregnet ved hvert opslag af `/state`, og
+efter det her hentede ingen dem. To forespørgsler for noget, ingen viser.
+
+Der er nu en test på, at `counts` indeholder **præcis** de tællere, der vises.
+Et tal, der bliver beregnet uden at blive brugt, driver stille fra den liste,
+det engang hørte til — og det var netop dét, der var galt i §6p.
+
+`noteCount` blev derimod stående: Settings bruger den til at sige, hvor mange
+noter man har, hvis man slår Notes fra. **Ryd op efter det, du fjernede — men
+kig efter, hvem der ellers bruger det.**
+
 ## 7 · Uden for scope
 
 Handover §10 gælder uændret: ingen flere brugere, ingen

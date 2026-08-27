@@ -28,6 +28,8 @@ async function sideRepeat() {
 
   host.innerHTML = `<section class="page">
     ${repeatHead()}
+    <p class="meta" style="margin-bottom:12px">${aktive.length} active${
+  pauserede.length ? ` · ${pauserede.length} paused` : ''}</p>
     ${aktive.length ? `<div class="list">${aktive.map(gentagelsesRaekke).join('')}</div>` : ''}
     ${pauserede.length ? `
       <h2 class="group meta">Paused <span class="group-count">${pauserede.length}</span></h2>

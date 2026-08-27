@@ -516,16 +516,23 @@ test('hvert tal i navigationen passer med den LISTE, det staar ved siden af', as
   assert.ok(tal.someday >= 1, 'og en udskudt Someday');
 });
 
-test('Recurring taeller de gentagelser, der faktisk laver opgaver', async () => {
-  // Gentagelser har ingen status og kan ikke taelles med de andre. En pauset
-  // laver ingen opgaver lige nu og hoerer derfor ikke med i tallet.
-  const foer = (await J('/api/v1/state')).counts.repeat;
-  const r = await J('/api/v1/capture', { text: 'luft hunden !every day', createNew: true });
-  const id = r.item.recurrence_id;
-  assert.equal((await J('/api/v1/state')).counts.repeat, foer + 1);
-
-  await J(`/api/v1/recurrences/${id}`, { paused: true });
-  assert.equal((await J('/api/v1/state')).counts.repeat, foer, 'en pauset taeller ikke med');
+test('taellerne findes KUN for de punkter, der viser et tal', async () => {
+  /*
+   * Menuen har tal ved Next, Inbox, Waiting For og Someday - dér, hvor tallet
+   * betyder »her er noget at tage stilling til«. Projekter, kontekster,
+   * gentagelser og All Tasks har ingen (Andreas, 26-08-2026): deres tal
+   * aendrer sig sjaeldent og kraever ingenting, og i en menu, hvor alt har et
+   * tal, holder man op med at se dem, der betyder noget.
+   *
+   * Taellerne fulgte med ud af serveren. En forespoergsel pr. state-opslag for
+   * noget, ingen viser, er ren udgift - og et tal, der ligger og bliver
+   * beregnet uden at blive brugt, driver stille fra den liste, det engang
+   * hoerte til.
+   */
+  const tal = (await J('/api/v1/state')).counts;
+  assert.deepEqual(Object.keys(tal).sort(),
+    ['done', 'inbox', 'next', 'someday', 'waiting'],
+    'kun de taellere, der faktisk vises');
 });
 
 test('»start Logbook forfra« SKJULER - og sletter ingenting', async () => {
@@ -715,8 +722,8 @@ test('All Tasks skjuler INTET - heller ikke det udskudte', async () => {
   const naeste = (await J('/api/v1/items?status=next&hideDeferred=1')).items.map((i) => i.id);
   assert.ok(!naeste.includes(skjult.id), 'men Next Actions viser den ikke');
 
-  // Og tallet ved punktet skal passe med listen.
-  assert.equal((await J('/api/v1/state')).counts.all, alle.length, 'tælleren matcher listen');
+  // Punktet har med vilje intet tal i menuen (v72) - antallet staar paa selve
+  // siden, hvor det er svar paa et spoergsmaal, man lige har stillet.
 });
 
 test('>stadie lægger opgaven direkte i Next, Waiting eller Someday', async () => {

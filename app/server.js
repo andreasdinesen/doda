@@ -1811,14 +1811,6 @@ const ROUTES = {
                AND status = 'done' AND completed_at > ?`).get(fra).n
           : taelStatus.get('done').n;
       })(),
-      // Gentagelser er ikke opgaver og har ingen status - de taelles for sig.
-      // Pausede regnes ikke med: de laver ingen opgaver lige nu.
-      repeat: db.prepare(`SELECT COUNT(*) AS n FROM recurrences
-         WHERE deleted = 0 AND paused = 0`).get().n,
-      /* ALT, der ikke er afsluttet - ogsaa det udskudte, som listen selv
-         viser. Det er punktets hele idé: intet forsvinder ud af syne. */
-      all: db.prepare(`SELECT COUNT(*) AS n FROM items
-         WHERE deleted = 0 AND kind = 'task' AND status NOT IN ('done','dropped')`).get().n,
     };
     sendJson(res, 200, {
       contexts: hentKontekster(),
