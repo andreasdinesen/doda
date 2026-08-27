@@ -969,10 +969,27 @@ function hentItems(filter) {
      WHERE ${hvor.join(' AND ')}
      ORDER BY ${filter.nyesteFoerst
     ? 'i.completed_at DESC, i.created_at DESC'
-    /* Stjernede foerst. Det er hele pointen med stjernen: den skal LOEFTE
-       opgaven, ikke bare maerke den. Inden for hver gruppe er raekkefoelgen
-       uaendret, saa den, man selv har traekket paa plads, bliver staaende. */
-    : 'i.starred DESC, i.seq, i.created_at'}
+    /*
+     * »Sorteret efter dato og tidspunkt og/eller oprettelsestidspunkt, saa man
+     * kan faa et overblik over alle opgaver« (Andreas, 26-08-2026).
+     *
+     * Det med en frist foerst, i kalenderorden - dét er den raekkefoelge, man
+     * laeser en samlet liste i. Resten bagefter, nyest oprettet oeverst: har
+     * man ingen dato at gaa efter, er »hvad lavede jeg sidst« det naeste
+     * holdepunkt.
+     *
+     * Sorteringen skal ske i SQL og ikke i klienten: `LIMIT` klipper foer, og
+     * en liste sorteret efter afklipningen ville mangle netop dét, der laa
+     * forrest.
+     */
+    : filter.efterDato
+      ? `CASE WHEN i.due_date IS NULL THEN 1 ELSE 0 END,
+         i.due_date, CASE WHEN i.due_time IS NULL THEN 1 ELSE 0 END, i.due_time,
+         i.created_at DESC`
+      /* Stjernede foerst. Det er hele pointen med stjernen: den skal LOEFTE
+         opgaven, ikke bare maerke den. Inden for hver gruppe er raekkefoelgen
+         uaendret, saa den, man selv har traekket paa plads, bliver staaende. */
+      : 'i.starred DESC, i.seq, i.created_at'}
      LIMIT ?`).all(...arg, Math.min(Number(filter.limit) || 500, 2000));
 
   return medVedhaeftningsantal(medKontekster(raekker));
@@ -1454,18 +1471,44 @@ function fangst(tekst, opretNye, fra) {
     return { item: aabenForekomst(r.id), recurrence: r, tolket };
   }
 
+  /*
+   * Stadiet: dét, brugeren SELV har sagt, foerst.
+   *
+   * `>waiting` slaar skaermen, og skaermen slaar inbox. En note er reference,
+   * ikke en handling - den skal aldrig ligge og vente paa afklaring
+   * (handover §4), og hverken en markoer eller en skaerm kan aendre det.
+   */
+  let status = tolket.kind === 'note' ? 'queued' : (tolket.status || skaerm.status || 'inbox');
+  let defer = tolket.defer;
+
+  /*
+   * En DATO er en beslutning (Andreas, 26-08-2026).
+   *
+   * Har man skrevet `!fredag`, har man allerede afgjort, at opgaven skal
+   * goeres - saa hoerer den ikke hjemme i inbox og vente paa at blive afklaret
+   * én gang til. Den lander i Next Actions og SKJULER sig til dagen; ellers
+   * ville alt fremtidigt ligge og fylde i den liste, der skal svare paa »hvad
+   * kan jeg goere NU«.
+   *
+   * Kun naar brugeren ikke selv har valgt: `>waiting !fredag` er et bevidst
+   * valg om at vente, og det maa en automatik ikke overskrive. Et `~udskyd`
+   * vinder af samme grund over den dato, vi ellers ville gemme den til.
+   */
+  if (tolket.kind !== 'note' && tolket.due && !tolket.status && !skaerm.status) {
+    status = 'next';
+    if (!defer) defer = tolket.due.dato;
+  }
+
   const item = opretItem({
     kind: tolket.kind,
-    // En note er reference, ikke en handling - den skal aldrig ligge og vente
-    // pa afklaring i inbox (handover §4), og en skaerm kan ikke aendre det.
-    status: tolket.kind === 'note' ? 'queued' : (skaerm.status || 'inbox'),
+    status,
     title: tolket.title.slice(0, GRAENSER.title),
     note: tolket.note.slice(0, GRAENSER.note),
     project_id: projektId,
     area_id: omraadeId,
     due_date: tolket.due ? tolket.due.dato : null,
     due_time: tolket.due ? tolket.due.tid : null,
-    defer_date: tolket.defer,
+    defer_date: defer,
   }, kontekstIder);
 
   return { item, tolket };
@@ -1772,6 +1815,10 @@ const ROUTES = {
       // Pausede regnes ikke med: de laver ingen opgaver lige nu.
       repeat: db.prepare(`SELECT COUNT(*) AS n FROM recurrences
          WHERE deleted = 0 AND paused = 0`).get().n,
+      /* ALT, der ikke er afsluttet - ogsaa det udskudte, som listen selv
+         viser. Det er punktets hele idé: intet forsvinder ud af syne. */
+      all: db.prepare(`SELECT COUNT(*) AS n FROM items
+         WHERE deleted = 0 AND kind = 'task' AND status NOT IN ('done','dropped')`).get().n,
     };
     sendJson(res, 200, {
       contexts: hentKontekster(),
@@ -1805,6 +1852,7 @@ const ROUTES = {
         limit: q.get('limit'),
         skjulUdskudte: q.get('hideDeferred') === '1',
         nyesteFoerst: q.get('newest') === '1',
+        efterDato: q.get('sort') === 'due',
       }), 'Nothing here.'));
       return;
     }
@@ -1817,6 +1865,8 @@ const ROUTES = {
         limit: q.get('limit'),
         skjulUdskudte: q.get('hideDeferred') === '1',
         nyesteFoerst: q.get('newest') === '1',
+        // `sort=due`: frister i kalenderorden foerst, resten nyest oeverst.
+        efterDato: q.get('sort') === 'due',
       }),
     });
   },

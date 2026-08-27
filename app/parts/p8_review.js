@@ -12,6 +12,56 @@ async function sideStatusliste(status, titel) {
 
 /* Tegner listen af state ALENE - saa den kan tegnes om uden at spoerge
    serveren, naar en raekke flyttes eller en ny fanges (p3_lists §straksVaek). */
+/**
+ * Alt, der ikke er afsluttet.
+ *
+ * De andre lister svarer paa »hvad nu?«. Den her svarer paa »hvad har jeg
+ * overhovedet?« og er stedet, man leder, naar noget er blevet vaek - derfor er
+ * INTET filtreret fra: heller ikke det udskudte, som Next Actions gemmer til
+ * sin dato (Andreas, 26-08-2026).
+ *
+ * Serveren sorterer (`sort=due`): frister i kalenderorden foerst, resten nyest
+ * oeverst. Det skal ske i SQL, fordi `LIMIT` ellers klipper foer sorteringen.
+ */
+async function sideAlle() {
+  const host = document.getElementById('pageHost');
+  const d = await api('GET',
+    '/api/v1/items?status=inbox,next,queued,waiting,someday&kind=task&sort=due&limit=500');
+  state.items = d.items;
+
+  if (!d.items.length) {
+    host.innerHTML = `<section class="page">
+      <div class="page-head"><h1>All Tasks</h1><p class="lead">${esc(BESKRIVELSER.all)}</p></div>
+      <div class="empty">${icon('calm', 34)}
+        <p class="empty-title">Nothing open</p>
+        <p>Everything you capture shows up here until it is done.</p></div>
+    </section>`;
+    return;
+  }
+
+  /*
+   * To grupper, fordi de laeses forskelligt: det med en frist er en
+   * kalender, resten er en bunke. Staar de i ét, ser den foerste uden dato ud
+   * som om den hoerer til dagen ovenover.
+   */
+  const medDato = d.items.filter((i) => i.due_date);
+  const uden = d.items.filter((i) => !i.due_date);
+  let n = 0;
+
+  host.innerHTML = `<section class="page">
+    <div class="page-head"><h1>All Tasks</h1><p class="lead">${esc(BESKRIVELSER.all)}</p></div>
+    <p class="meta" style="margin-bottom:12px">${d.items.length} open</p>
+    <div data-keynav>
+      ${medDato.length ? `<h2 class="group meta">Dated <span class="group-count">${medDato.length}</span></h2>
+        <div class="list">${medDato.map((it) => elementRaekke(it, n++)).join('')}</div>` : ''}
+      ${uden.length ? `<h2 class="group meta">No date <span class="group-count">${uden.length}</span></h2>
+        <div class="list">${uden.map((it) => elementRaekke(it, n++)).join('')}</div>` : ''}
+    </div>
+    <p class="hintline meta">↑↓ select · enter open · space done · esc leave</p>
+  </section>`;
+  bindListe();
+}
+
 function tegnStatusliste(status, titel) {
   const host = document.getElementById('pageHost');
   const d = { items: state.items };

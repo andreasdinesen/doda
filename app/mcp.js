@@ -28,7 +28,10 @@ function opret(srv) {
         'Capture a task or note into doda. Accepts the same shortcut syntax as the app: '
         + '#context, @project, !date (e.g. !tomorrow, !friday, !in 2 weeks), ~hide-until-date, '
         + '!every monday for a repeating task (!every! monday counts from completion), '
-        + '"* " prefix for a note, and " // " to start a description. '
+        + '"* " prefix for a note, ": Area" with spaces on both sides, and " // " to start '
+        + 'a description. >waiting, >next, >someday or >inbox puts the task straight into '
+        + 'that stage. A task with a date goes to Next Actions and stays hidden until that '
+        + 'day, unless a stage or ~hide-until says otherwise. '
         + 'Unknown contexts and projects are created automatically.',
       inputSchema: {
         type: 'object',

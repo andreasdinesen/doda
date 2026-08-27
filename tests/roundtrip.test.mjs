@@ -92,6 +92,9 @@ test('rundtur: eksportér alt, slet databasen, importér — samme system tilbag
     '* account number 1234-5678 @Q3',
     'buy coffee #errands',
     'fix the shed #home @"Summer house"',
+    // Uden dato, saa der er nok tilbage i inbox til de fire flytninger
+    // nedenfor: siden v71 gaar en opgave MED dato direkte i Next Actions.
+    'ask about the invoice #phone',
     'water the plants !every! 3 days',
     'pay rent !every month on the 1st',
   ]) await J('/api/v1/capture', { text: t, createNew: true });
@@ -99,6 +102,16 @@ test('rundtur: eksportér alt, slet databasen, importér — samme system tilbag
   const st0 = await J('/api/v1/state');
   const q3 = st0.projects.find((p) => p.name === 'Q3');
   await J(`/api/v1/projects/${q3.id}`, { area_id: omraade.id, outcome: '## Done when\n\n- **approved**' });
+
+  /*
+   * »write the report … !friday at 9« staar IKKE i inbox: en dato er en
+   * beslutning, saa den gik direkte i Next Actions og gemte sig til fredag
+   * (v71). Rundturen skal baere netop dét igennem en eksport og import.
+   */
+  const medDato = (await J('/api/v1/items?status=next')).items
+    .find((i) => i.title === 'write the report');
+  assert.ok(medDato, 'opgaven med dato ligger i next');
+  assert.equal(medDato.defer_date, medDato.due_date, 'og er skjult indtil sin dag');
 
   const inbox = (await J('/api/v1/items?status=inbox')).items;
   await J(`/api/v1/items/${inbox[0].id}`, { status: 'next' });

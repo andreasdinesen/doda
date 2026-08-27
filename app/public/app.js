@@ -674,7 +674,24 @@
   // `:` er omraadet. Den er ufarlig af samme grund som de andre: en markoer
   // SKAL have mellemrum eller start foran sig, saa "12:30", "Moede: husk" og
   // "https://x.dk" har alle et tegn foer kolonet og roeres ikke.
-  const MARKOERER = '#@!~/:';
+  const MARKOERER = '#@!~/:>';
+
+  /*
+   * `>next`, `>waiting`, `>someday`, `>inbox` - stadiet, opgaven skal starte i.
+   *
+   * Foer kunne kun SKAERMEN bestemme det (fanger man fra Waiting For, lander
+   * den dér). Det hjalp ikke den, der fanger fra kommandobaren eller udefra
+   * (Andreas, 26-08-2026).
+   *
+   * `>` er valgt, fordi det peger: »læg den herhen«. Det staar aldrig i almindelig
+   * dansk tekst uden mellemrum bagved, og markoerer skal klaebe til deres vaerdi.
+   */
+  const STADIER = {
+    next: 'next', n: 'next',
+    waiting: 'waiting', w: 'waiting', venter: 'waiting',
+    someday: 'someday', s: 'someday', maaske: 'someday',
+    inbox: 'inbox', i: 'inbox',
+  };
 
   /**
    * Tolker en fangst-tekst til felter.
@@ -688,7 +705,7 @@
     const ud = {
       kind: 'task', title: '', note: '',
       contexts: [], project: null, area: null,
-      due: null, defer: null,
+      due: null, defer: null, status: null,
       recurrenceText: null, warnings: [],
     };
 
@@ -748,6 +765,21 @@
         if (!vaerdi2) continue;
         ud.area = vaerdi2;
         spis.push([her.pos, her.pos + 1 + m2[0].length]);
+        continue;
+      }
+
+      if (her.tegn === '>') {
+        // Ét ord, klaebende - som # og @. Et ukendt ord er ikke et stadie, og
+        // saa bliver `>` staaende som tekst i stedet for at forsvinde tavst.
+        const ord = raat.match(/^[\p{L}]+/u);
+        if (!ord) continue;
+        const stadie = STADIER[ord[0].toLowerCase()];
+        if (!stadie) {
+          ud.warnings.push(`Did not understand ">${ord[0]}".`);
+          continue;
+        }
+        ud.status = stadie;
+        spis.push([her.pos, her.pos + 1 + ord[0].length]);
         continue;
       }
 
@@ -1000,7 +1032,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 70;
+const APP_VERSION = 71;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -1201,6 +1233,16 @@ const ICONS = {
  * Logbook og Review faar bevidst ingen: Logbook vokser for evigt (og staar
  * allerede i toplinjen), og Review er ikke en liste, man kan taelle.
  */
+/*
+ * Bundlinjen paa mobil viser KUN tal ved Next og Inbox.
+ *
+ * Seks smaa ikoner paa en telefonbredde, hver med et tal, blev til en raekke
+ * badges uden retning - og de fleste af dem taeller noget, man alligevel gaar
+ * ind i sidebaren for at se paa. De to her er dem, der siger »der er noget at
+ * tage stilling til« (Andreas, 26-08-2026). Sidebaren viser dem alle.
+ */
+const BUND_TAL = new Set(['next', 'inbox']);
+
 function navAntal(v) {
   if (v.tael) return state.counts[v.tael] || 0;
   // Kun de aktive - parkerede og afsluttede staar laengere nede paa siden.
@@ -1221,6 +1263,10 @@ function icon(name, size = 18) {
 const VIEWS = [
   { id: 'next', label: 'Next Actions', icon: 'next', group: 1, tael: 'next' },
   { id: 'inbox', label: 'Inbox', icon: 'inbox', group: 1, tael: 'inbox' },
+  /* Alt, der ikke er afsluttet, i ét billede. De andre lister svarer paa
+     »hvad nu?«; den her svarer paa »hvad har jeg overhovedet?« og er stedet,
+     man leder, naar noget er blevet vaek (Andreas, 26-08-2026). */
+  { id: 'all', label: 'All Tasks', icon: 'log', group: 1, tael: 'all' },
   { id: 'waiting', label: 'Waiting For', icon: 'waiting', group: 2, tael: 'waiting' },
   { id: 'someday', label: 'Someday', icon: 'someday', group: 2, tael: 'someday' },
   { id: 'repeat', label: 'Recurring', icon: 'repeat', group: 2, tael: 'repeat' },
@@ -1250,6 +1296,7 @@ const viewById = (id) => VIEWS.find((v) => v.id === id) || VIEWS[0];
 const BUND = ['next', 'inbox', 'projects', 'repeat', 'review'];
 
 const BESKRIVELSER = {
+  all: 'Everything still open — deadlines first, then newest.',
   next: 'What you can actually do right now, grouped by context.',
   inbox: 'Unprocessed items waiting for clarification.',
   waiting: 'Delegated — you are waiting on someone else.',
@@ -1469,7 +1516,7 @@ function shellHtml() {
   <nav class="bottomnav" id="bottomNav">
     ${BUND.map((id) => {
     const v = viewById(id);
-    const antal = navAntal(v);
+    const antal = BUND_TAL.has(v.id) ? navAntal(v) : 0;
     return `<button class="bottomnav-item" data-view="${v.id}" ${v.id === state.view ? 'aria-current="page"' : ''}>
         ${icon(v.icon, 21)}<span>${esc(v.label.split(' ')[0])}</span>
         ${antal ? `<span class="bottomnav-count">${antal}</span>` : ''}
@@ -1623,7 +1670,7 @@ function opdaterNav() {
     else el.removeAttribute('aria-current');
     const t = el.querySelector('.bottomnav-count');
     const v = viewById(el.dataset.view);
-    const antal = navAntal(v);
+    const antal = BUND_TAL.has(v.id) ? navAntal(v) : 0;
     if (t && !antal) t.remove();
     else if (t) t.textContent = antal;
     else if (antal) el.insertAdjacentHTML('beforeend', `<span class="bottomnav-count">${antal}</span>`);
@@ -2166,7 +2213,7 @@ const MODER = {
   '+': { id: 'task', pil: '+ New Task', ph: 'Task title… try !tomorrow at 9',
     // `: area` staar med mellemrum EFTER kolonet, fordi det er saadan den
     // skrives - legenden er en kravspecifikation (§v9) og skal vise formen.
-    legend: ['/ project', '# context', '! date', '~ hide until', ': area'], enter: 'Create' },
+    legend: ['/ project', '# context', '! date', '~ hide until', ': area', '> stage'], enter: 'Create' },
   '*': { id: 'note', pil: '* New Note', ph: 'Note title…', legend: ['/ project', '# context'], enter: 'Create' },
   '/': { id: 'project', pil: '/ Projects', ph: 'Find or create a project…', legend: [], enter: 'Open' },
   '#': { id: 'context', pil: '# Contexts', ph: 'Find or create a context…', legend: [], enter: 'Open' },
@@ -2228,11 +2275,30 @@ function tolkNu(tekst) {
  *   - navnet er ét ord af bogstaver, tal, _ og -
  *   - der maa ikke vaere naaet et mellemrum efter markoeren
  */
+/*
+ * Stadierne. En FAST liste - modsat projekter og kontekster, som brugeren
+ * selv laver. `name` er dét, der skrives ind, saa man ser, hvad man faar.
+ *
+ * »Hvis jeg laver en > saa skal den vise en liste med de valgmuligheder der
+ * er« (Andreas, 26-08-2026): ellers skal man huske de fire ord, og en markoer,
+ * man skal huske udenad, bliver ikke brugt.
+ */
+const STADIE_FORSLAG = [
+  { name: 'next', vis: 'Next Actions', ikon: 'next' },
+  { name: 'waiting', vis: 'Waiting For', ikon: 'waiting' },
+  { name: 'someday', vis: 'Someday', ikon: 'someday' },
+  { name: 'inbox', vis: 'Inbox', ikon: 'inbox' },
+];
+
 const MARKOER_KILDE = {
   '/': { hvad: 'project', kilde: () => state.projects, ikon: 'projects' },
   '@': { hvad: 'project', kilde: () => state.projects, ikon: 'projects' },
   '#': { hvad: 'context', kilde: () => state.contexts, ikon: 'contexts' },
   ':': { hvad: 'area', kilde: () => state.areas, ikon: 'someday' },
+  /* `fast`: stadierne skal IKKE sorteres alfabetisk. De staar i menuens
+     raekkefoelge med de hyppigste oeverst - alfabetisk ville sætte `inbox`
+     foerst, som er den, man sjaeldnest skriver, fordi den er standarden. */
+  '>': { hvad: 'stage', kilde: () => STADIE_FORSLAG, ikon: 'next', fast: true },
 };
 
 /** Hvilken markoer staar markoeren (caret'en) i? Null, hvis ingen. */
@@ -2244,7 +2310,7 @@ function markoerVedCaret() {
   const pos = el.selectionStart;
   if (pos === null || pos === undefined) return null;
   const foer = el.value.slice(0, pos);
-  const m = foer.match(/(^|\s)([/@#])([\p{L}\p{N}_-]*)$/u);
+  const m = foer.match(/(^|\s)([/@#>])([\p{L}\p{N}_-]*)$/u);
   if (m) return { tegn: m[2], delvist: m[3], start: pos - m[3].length - 1, slut: pos };
   /* Omraadet skriver man `: Navn` - med mellemrum paa begge sider. Derfor sit
      eget moenster: mellemrummet efter kolonet er en del af markoeren, ikke af
@@ -2264,15 +2330,28 @@ function forslagsRaekker() {
   // Det, der BEGYNDER med det skrevne, foerst. Med ren "indeholder"-sortering
   // foreslog "/hus" projektet Sommerhus foer "Hus og have" - og Tab satte det
   // forkerte navn ind. Naar man fuldfoerer et navn, vejer begyndelsen tungest.
-  return k.kilde()
-    .filter((x) => !q || x.name.toLowerCase().includes(q))
-    .sort((a, b) => {
+  const fundne = k.kilde().filter((x) => !q || x.name.toLowerCase().includes(q));
+  return (k.fast
+    // Kun det, der BEGYNDER med det skrevne, flyttes frem; resten beholder
+    // sin plads. Ellers ville `>n` liste inbox og waiting alfabetisk.
+    ? fundne.slice().sort((a, b) =>
+      (a.name.toLowerCase().startsWith(q) ? 0 : 1) - (b.name.toLowerCase().startsWith(q) ? 0 : 1))
+    : fundne.slice().sort((a, b) => {
       const aa = a.name.toLowerCase().startsWith(q) ? 0 : 1;
       const bb = b.name.toLowerCase().startsWith(q) ? 0 : 1;
       return aa - bb || a.name.localeCompare(b.name);
-    })
+    }))
     .slice(0, 6)
-    .map((x) => ({ type: 'forslag', navn: x.name, tegn: t.tegn, ikon: k.ikon, hvad: k.hvad, token: t }));
+    .map((x) => ({
+      type: 'forslag',
+      navn: x.name,
+      tegn: t.tegn,
+      // Stadierne baerer deres eget ikon: de fire ser ens ud som ord, og
+      // ikonet er dét, der goer dem til de lister, man kender fra menuen.
+      ikon: x.ikon || k.ikon,
+      hvad: x.vis ? x.vis.toLowerCase() : k.hvad,
+      token: t,
+    }));
 }
 
 /**
@@ -2996,6 +3075,7 @@ async function tegnSideIndhold() {
   if (view.id === 'repeat') { await sideRepeat(); return; }
   if (view.id === 'waiting') { await sideStatusliste('waiting', 'Waiting For'); return; }
   if (view.id === 'someday') { await sideStatusliste('someday', 'Someday'); return; }
+  if (view.id === 'all') { await sideAlle(); return; }
   if (view.id === 'notes') { await sideNoter(); return; }
   if (view.id === 'log') { await sideLog(); return; }
   if (view.id === 'review') { await sideReview(); return; }
@@ -6609,6 +6689,56 @@ async function sideStatusliste(status, titel) {
 
 /* Tegner listen af state ALENE - saa den kan tegnes om uden at spoerge
    serveren, naar en raekke flyttes eller en ny fanges (p3_lists §straksVaek). */
+/**
+ * Alt, der ikke er afsluttet.
+ *
+ * De andre lister svarer paa »hvad nu?«. Den her svarer paa »hvad har jeg
+ * overhovedet?« og er stedet, man leder, naar noget er blevet vaek - derfor er
+ * INTET filtreret fra: heller ikke det udskudte, som Next Actions gemmer til
+ * sin dato (Andreas, 26-08-2026).
+ *
+ * Serveren sorterer (`sort=due`): frister i kalenderorden foerst, resten nyest
+ * oeverst. Det skal ske i SQL, fordi `LIMIT` ellers klipper foer sorteringen.
+ */
+async function sideAlle() {
+  const host = document.getElementById('pageHost');
+  const d = await api('GET',
+    '/api/v1/items?status=inbox,next,queued,waiting,someday&kind=task&sort=due&limit=500');
+  state.items = d.items;
+
+  if (!d.items.length) {
+    host.innerHTML = `<section class="page">
+      <div class="page-head"><h1>All Tasks</h1><p class="lead">${esc(BESKRIVELSER.all)}</p></div>
+      <div class="empty">${icon('calm', 34)}
+        <p class="empty-title">Nothing open</p>
+        <p>Everything you capture shows up here until it is done.</p></div>
+    </section>`;
+    return;
+  }
+
+  /*
+   * To grupper, fordi de laeses forskelligt: det med en frist er en
+   * kalender, resten er en bunke. Staar de i ét, ser den foerste uden dato ud
+   * som om den hoerer til dagen ovenover.
+   */
+  const medDato = d.items.filter((i) => i.due_date);
+  const uden = d.items.filter((i) => !i.due_date);
+  let n = 0;
+
+  host.innerHTML = `<section class="page">
+    <div class="page-head"><h1>All Tasks</h1><p class="lead">${esc(BESKRIVELSER.all)}</p></div>
+    <p class="meta" style="margin-bottom:12px">${d.items.length} open</p>
+    <div data-keynav>
+      ${medDato.length ? `<h2 class="group meta">Dated <span class="group-count">${medDato.length}</span></h2>
+        <div class="list">${medDato.map((it) => elementRaekke(it, n++)).join('')}</div>` : ''}
+      ${uden.length ? `<h2 class="group meta">No date <span class="group-count">${uden.length}</span></h2>
+        <div class="list">${uden.map((it) => elementRaekke(it, n++)).join('')}</div>` : ''}
+    </div>
+    <p class="hintline meta">↑↓ select · enter open · space done · esc leave</p>
+  </section>`;
+  bindListe();
+}
+
 function tegnStatusliste(status, titel) {
   const host = document.getElementById('pageHost');
   const d = { items: state.items };
@@ -8293,6 +8423,19 @@ const GUIDE_DELE = [
                 + '<code>!om 3 timer</code>, <code>!om 30 minutter</code>.'],
               ['!3/9', '<code>!3/9-2027</code>, <code>!3 sep</code> and <code>!sep 3 at 9</code> all land.'],
               ['~', 'The same words, but for hiding a task until that day.'],
+              ['!friday', 'A date is a decision: the task goes straight to <strong>Next '
+                + 'Actions</strong> and hides itself until that day. Write <code>~</code> '
+                + 'yourself, or <code>&gt;waiting</code>, to overrule it.'],
+            ],
+          },
+          {
+            titel: 'Stages',
+            lead: 'Where the task starts out. Without one it goes to the Inbox — unless it has a date.',
+            raekker: [
+              ['&gt;waiting', 'Straight to Waiting For. <code>&gt;w</code> is the same.'],
+              ['&gt;next', 'Straight to Next Actions. <code>&gt;n</code>.'],
+              ['&gt;someday', 'Parked without a commitment. <code>&gt;s</code>.'],
+              ['&gt;inbox', 'The default — say it out loud when a date would otherwise move it.'],
             ],
           },
           {

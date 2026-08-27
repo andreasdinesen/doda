@@ -110,6 +110,10 @@ Der er to veje, og forskellen er, hvem der holder nøglen.
 3. Forbindelsen står bagefter under **Settings → Connected apps** i doda og kan
    tilbagekaldes derfra — hvilket er hele fordelen ved den vej.
 
+**Har du ikke Pro**, ligger der fire script-kommandoer i
+[extras/raycast/](../extras/raycast/) — bash og `curl`, ingen udvidelse. De to
+udelukker ikke hinanden.
+
 Brug **`read`-scopet**, hvis Raycast kun skal kunne slå op; `full`, hvis den
 også skal kunne fange og fuldføre. En launcher, man kalder frem hele dagen, er
 et godt sted at holde tilladelserne små.

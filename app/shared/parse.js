@@ -480,7 +480,24 @@
   // `:` er omraadet. Den er ufarlig af samme grund som de andre: en markoer
   // SKAL have mellemrum eller start foran sig, saa "12:30", "Moede: husk" og
   // "https://x.dk" har alle et tegn foer kolonet og roeres ikke.
-  const MARKOERER = '#@!~/:';
+  const MARKOERER = '#@!~/:>';
+
+  /*
+   * `>next`, `>waiting`, `>someday`, `>inbox` - stadiet, opgaven skal starte i.
+   *
+   * Foer kunne kun SKAERMEN bestemme det (fanger man fra Waiting For, lander
+   * den dér). Det hjalp ikke den, der fanger fra kommandobaren eller udefra
+   * (Andreas, 26-08-2026).
+   *
+   * `>` er valgt, fordi det peger: »læg den herhen«. Det staar aldrig i almindelig
+   * dansk tekst uden mellemrum bagved, og markoerer skal klaebe til deres vaerdi.
+   */
+  const STADIER = {
+    next: 'next', n: 'next',
+    waiting: 'waiting', w: 'waiting', venter: 'waiting',
+    someday: 'someday', s: 'someday', maaske: 'someday',
+    inbox: 'inbox', i: 'inbox',
+  };
 
   /**
    * Tolker en fangst-tekst til felter.
@@ -494,7 +511,7 @@
     const ud = {
       kind: 'task', title: '', note: '',
       contexts: [], project: null, area: null,
-      due: null, defer: null,
+      due: null, defer: null, status: null,
       recurrenceText: null, warnings: [],
     };
 
@@ -554,6 +571,21 @@
         if (!vaerdi2) continue;
         ud.area = vaerdi2;
         spis.push([her.pos, her.pos + 1 + m2[0].length]);
+        continue;
+      }
+
+      if (her.tegn === '>') {
+        // Ét ord, klaebende - som # og @. Et ukendt ord er ikke et stadie, og
+        // saa bliver `>` staaende som tekst i stedet for at forsvinde tavst.
+        const ord = raat.match(/^[\p{L}]+/u);
+        if (!ord) continue;
+        const stadie = STADIER[ord[0].toLowerCase()];
+        if (!stadie) {
+          ud.warnings.push(`Did not understand ">${ord[0]}".`);
+          continue;
+        }
+        ud.status = stadie;
+        spis.push([her.pos, her.pos + 1 + ord[0].length]);
         continue;
       }
 

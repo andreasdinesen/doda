@@ -8,9 +8,25 @@ set -euo pipefail
 echo "doda for Raycast"
 echo
 read -r -p "Adresse (fx https://doda.eksempel.dk): " url
-# -s: noeglen skal ikke staa paa skaermen.
-read -r -s -p "API-nøgle (Settings → Access keys i doda): " key
-echo
+
+# Noeglen vises MENS den tastes.
+#
+# Den er lang og let at forvanske, og skjult indtastning gav ingen maade at se
+# paa, om en indsaettelse kom hel med - fejlen dukkede foerst op som en 401
+# (Andreas, 25-08-2026).
+#
+# Bagefter ryddes linjen og erstattes af en maskeret udgave: man har set det,
+# man skulle, og noeglen bliver ikke staaende i terminalens historik, hvor den
+# kan rulles frem af den naeste, der kigger paa skaermen.
+read -r -p "API-nøgle (Settings → Access keys i doda): " key
+# Kun mod en RIGTIG terminal: koeres scriptet gennem en pipe, ville
+# styretegnene staa som tekst i stedet for at rydde noget.
+[ -t 1 ] && printf '\033[1A\033[2K'   # én linje op, og ryd den
+if [ ${#key} -gt 14 ]; then
+  printf 'API-nøgle: %s…%s\n' "${key:0:9}" "${key: -4}"
+else
+  printf 'API-nøgle: (for kort til at være en doda-nøgle?)\n'
+fi
 
 url="${url%/}"   # en skraastreg til sidst giver //api/v1/... og en 404
 

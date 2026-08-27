@@ -21,9 +21,31 @@ og de virker uden Raycast Pro.
    ```
 
    Den spørger om adresse og nøgle, prøver forbindelsen, og gemmer dem i macOS'
-   **nøglering**.
-3. I Raycast: **Extensions → Scripts → Add Script Directory**, og peg på denne
-   mappe.
+   **nøglering**. Nøglen er **synlig, mens du taster** — den er lang, og du skal
+   kunne se, at den kom hel med. Bagefter rydder scriptet linjen og viser kun
+   `doda_ATbK…bAZg`, så den ikke bliver stående i terminalens historik.
+3. Åbn Raycast Settings med **⌘,** og find **Script Commands** i listen til
+   venstre (langt nede, under de indbyggede udvidelser).
+4. Øverst står **Script Folders** med et **+** ude til højre. Tryk på det, og
+   vælg denne mappe:
+
+   ```
+   ~/ClaudeMacBook/doda/extras/raycast
+   ```
+
+   I filvælgeren kan du trykke **⇧⌘G** og indsætte stien direkte.
+
+Så skifter »No folders configured« til mappen, og de fire kommandoer står
+nedenunder. Derfra kan du give dem alias eller genvejstast i samme vindue.
+
+> **Ikke** *Create Script Command* og **ikke** *Create Extension*. Den første
+> skriver en tom skabelon, du selv skal fylde ud; den anden laver en
+> TypeScript-udvidelse med npm og en build. Vi skal bare have Raycast til at
+> **finde** scripts, der allerede ligger der — og det er `+` ved *Script
+> Folders*, intet andet.
+
+Metadataene står i toppen af hver fil (titel, mode, ikon, argumenter), så
+Raycast læser dem selv. Retter du dem, opdager Raycast det uden genstart.
 
 ## Hvorfor nøgleringen og ikke en fil
 

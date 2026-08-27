@@ -665,3 +665,127 @@ test('capture i ren tekst siger, hvad der blev FORSTAAET', async () => {
   assert.match(krop, /^Due: \d{4}-\d{2}-\d{2} 14:00$/m, 'datoen OG klokkeslættet');
   assert.match(krop, /^Contexts: #Opkald$/m);
 });
+
+test('All Tasks: frister i kalenderorden, resten nyest oeverst', async () => {
+  /*
+   * »Et nyt punkt som viser alle opgaver som ikke er afsluttet, sorteret efter
+   * dato og tidspunkt og/eller oprettelsestidspunkt« (Andreas, 26-08-2026).
+   *
+   * Sorteringen sker i SQL og ikke i klienten: `LIMIT` klipper foer, saa en
+   * liste sorteret bagefter ville mangle netop dét, der skulle ligge forrest.
+   */
+  const lav = async (titel, felter) => {
+    const it = (await J('/api/v1/capture', { text: titel, createNew: true })).item;
+    if (felter) await J(`/api/v1/items/${it.id}`, felter);
+    return it.id;
+  };
+  const sent = await lav('møde sent på dagen', { status: 'next', due_date: '2027-03-10', due_time: '16:00' });
+  const tidligt = await lav('møde tidligt', { status: 'next', due_date: '2027-03-10', due_time: '08:00' });
+  const udenTid = await lav('samme dag, intet klokkeslæt', { status: 'next', due_date: '2027-03-10' });
+  const foer = await lav('dagen før', { status: 'next', due_date: '2027-03-09' });
+  const ingenDato = await lav('ingen dato overhovedet', { status: 'next' });
+
+  const ider = (await J('/api/v1/items?status=inbox,next,queued,waiting,someday'
+    + '&kind=task&sort=due&limit=500')).items.map((i) => i.id);
+  const plads = (id) => ider.indexOf(id);
+
+  assert.ok(plads(foer) < plads(tidligt), 'den tidligste dato foerst');
+  assert.ok(plads(tidligt) < plads(sent), 'samme dag: klokkeslaettet afgoer');
+  // Uden klokkeslaet er opgaven ikke »kl. 00« - den hoerer til dagen, efter
+  // dem der har et tidspunkt.
+  assert.ok(plads(sent) < plads(udenTid), 'uden klokkeslæt sidst på dagen');
+  assert.ok(plads(udenTid) < plads(ingenDato), 'alt med dato foer alt uden');
+});
+
+test('All Tasks skjuler INTET - heller ikke det udskudte', async () => {
+  /*
+   * Det er punktets hele idé: de andre lister svarer paa »hvad nu?«, den her
+   * paa »hvad har jeg overhovedet?«. En opgave, der er gemt til om en maaned,
+   * er netop dén, man leder efter, naar noget er blevet vaek.
+   */
+  const iMorgen = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  const skjult = (await J('/api/v1/capture', { text: 'gemt til senere', createNew: true })).item;
+  await J(`/api/v1/items/${skjult.id}`, { status: 'next', defer_date: iMorgen });
+
+  const alle = (await J('/api/v1/items?status=inbox,next,queued,waiting,someday'
+    + '&kind=task&sort=due&limit=500')).items.map((i) => i.id);
+  assert.ok(alle.includes(skjult.id), 'den udskudte er MED');
+
+  // Next Actions gemmer den stadig - de to lister har hver sit formaal.
+  const naeste = (await J('/api/v1/items?status=next&hideDeferred=1')).items.map((i) => i.id);
+  assert.ok(!naeste.includes(skjult.id), 'men Next Actions viser den ikke');
+
+  // Og tallet ved punktet skal passe med listen.
+  assert.equal((await J('/api/v1/state')).counts.all, alle.length, 'tælleren matcher listen');
+});
+
+test('>stadie lægger opgaven direkte i Next, Waiting eller Someday', async () => {
+  /*
+   * »Kan det gøres muligt at oprette en opgave direkte ind i next eller
+   * waiting …« (Andreas, 26-08-2026). Før kunne kun SKÆRMEN bestemme det,
+   * hvilket ikke hjalp den, der fanger fra kommandobaren eller udefra.
+   */
+  const fang = async (t) => (await J('/api/v1/capture', { text: t, createNew: true })).item;
+
+  assert.equal((await fang('ring til Per >waiting')).status, 'waiting');
+  assert.equal((await fang('lær at sejle >someday')).status, 'someday');
+  assert.equal((await fang('skriv referat >next')).status, 'next');
+  // Korte former, saa det kan gå hurtigt i en kommandobar.
+  assert.equal((await fang('hent pakken >n')).status, 'next');
+  assert.equal((await fang('svar fra banken >w')).status, 'waiting');
+
+  // Markøren må ikke blive stående i titlen, og resten skal stadig tolkes.
+  const helt = await fang('køb mælk >waiting #Indkøb @Doda');
+  assert.equal(helt.title, 'køb mælk');
+  assert.equal(helt.status, 'waiting');
+  assert.deepEqual(helt.contexts.map((c) => c.name), ['Indkøb']);
+});
+
+test('en DATO sender opgaven i Next Actions - og skjuler den til dagen', async () => {
+  /*
+   * »Hvis man sætter en dato eller et tidspunkt, skal den automatisk lægge sig
+   * i Next Action, men skjule sig indtil datoen« (Andreas, 26-08-2026).
+   *
+   * Har man skrevet en dato, har man besluttet at gøre opgaven - så skal den
+   * ikke afklares i inbox én gang til. Og den må ikke fylde i Next Actions før
+   * sin dag; den liste svarer på »hvad kan jeg gøre NU«.
+   */
+  const fang = async (t) => (await J('/api/v1/capture', { text: t, createNew: true })).item;
+
+  const medDato = await fang('aflever rapport !om 3 dage');
+  assert.equal(medDato.status, 'next', 'ikke inbox');
+  assert.equal(medDato.defer_date, medDato.due_date, 'skjult indtil sin dag');
+
+  // Et klokkeslæt følger samme regel - den dukker op på DAGEN, ikke på slaget.
+  const medTid = await fang('møde !om 3 timer');
+  assert.equal(medTid.status, 'next');
+  assert.equal(medTid.defer_date, medTid.due_date);
+  assert.ok(medTid.due_time, 'klokkeslættet er der stadig');
+
+  // Uden dato: uændret - inbox er stadig stedet, hvor noget venter på at
+  // blive afklaret.
+  assert.equal((await fang('noget uafklaret')).status, 'inbox');
+
+  // Og den bliver væk fra Next Actions, indtil dagen kommer.
+  const naeste = (await J('/api/v1/items?status=next&hideDeferred=1')).items.map((i) => i.id);
+  assert.ok(!naeste.includes(medDato.id), 'skjult i Next Actions indtil videre');
+});
+
+test('brugerens EGET valg slår dato-automatikken', async () => {
+  /*
+   * `>waiting !fredag` er et bevidst valg om at vente. En automatik, der
+   * overskrev det, ville gøre markøren ubrugelig netop dér, hvor den betyder
+   * mest - og fejlen ville være tavs.
+   */
+  const fang = async (t) => (await J('/api/v1/capture', { text: t, createNew: true })).item;
+
+  const venter = await fang('svar fra revisor >waiting !om 5 dage');
+  assert.equal(venter.status, 'waiting', 'markøren vinder over automatikken');
+  assert.ok(venter.due_date, 'datoen er der stadig');
+  assert.equal(venter.defer_date, null, 'og den skjules ikke');
+
+  // Et eksplicit ~udskyd vinder over den dato, vi ellers ville gemme til.
+  const eget = await fang('planlæg ferie !om 10 dage ~om 2 dage');
+  assert.equal(eget.status, 'next');
+  assert.notEqual(eget.defer_date, eget.due_date, 'brugerens eget ~ står ved magt');
+});

@@ -282,6 +282,19 @@ const GUIDE_DELE = [
                 + '<code>!om 3 timer</code>, <code>!om 30 minutter</code>.'],
               ['!3/9', '<code>!3/9-2027</code>, <code>!3 sep</code> and <code>!sep 3 at 9</code> all land.'],
               ['~', 'The same words, but for hiding a task until that day.'],
+              ['!friday', 'A date is a decision: the task goes straight to <strong>Next '
+                + 'Actions</strong> and hides itself until that day. Write <code>~</code> '
+                + 'yourself, or <code>&gt;waiting</code>, to overrule it.'],
+            ],
+          },
+          {
+            titel: 'Stages',
+            lead: 'Where the task starts out. Without one it goes to the Inbox — unless it has a date.',
+            raekker: [
+              ['&gt;waiting', 'Straight to Waiting For. <code>&gt;w</code> is the same.'],
+              ['&gt;next', 'Straight to Next Actions. <code>&gt;n</code>.'],
+              ['&gt;someday', 'Parked without a commitment. <code>&gt;s</code>.'],
+              ['&gt;inbox', 'The default — say it out loud when a date would otherwise move it.'],
             ],
           },
           {

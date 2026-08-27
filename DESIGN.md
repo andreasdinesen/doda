@@ -1577,6 +1577,66 @@ Første udgave kaldte `capture` med en **cookie** og fik `415`. Raycast bruger e
 tekstfelt kan ikke bygge JSON (handover §5.10). **Prøv den vej, klienten
 faktisk går** — ellers tester man en anden sti end den, brugeren rammer.
 
+## 6s · En dato er en beslutning (v71)
+
+»Sætter man en dato eller et tidspunkt, skal den automatisk lægge sig i Next
+Actions, men skjule sig indtil datoen« (Andreas, 26-08-2026).
+
+Det er en ændring af GTD-flowet, og den er rigtig: **har man skrevet `!fredag`,
+har man allerede afklaret opgaven.** At lade den ligge i Inbox og vente på en
+afklaring til er at bede om den samme beslutning to gange.
+
+`defer_date` sættes til `due_date`, så den ikke fylder i Next Actions før sin
+dag — den liste skal svare på »hvad kan jeg gøre NU«. Et klokkeslæt følger
+samme regel: opgaven dukker op på **dagen**, ikke på slaget.
+
+**Automatikken viger for et valg.** `>waiting !fredag` er et bevidst valg om at
+vente, og et `~udskyd` er en bevidst dato. En automatik, der overskrev dem,
+ville gøre markørerne ubrugelige netop dér, hvor de betyder mest — og fejlen
+ville være tavs.
+
+Ændringen brød `roundtrip`-testen, som forudsatte, at en opgave med dato lå i
+Inbox. Den er rettet **og** udvidet, så den nu bærer den nye adfærd gennem
+eksport og import.
+
+## 6t · `>stadie` — og listen, der viser hvad man kan vælge (v71)
+
+`SKAERM_STATUS` fandtes: fanger man fra Waiting For, lander opgaven dér. Det
+hjalp ikke den, der fanger fra kommandobaren, fra en genvej eller fra Raycast.
+
+`>` er valgt, fordi det **peger**: »læg den herhen«. Det kræver mellemrum
+foran som de andre markører, så `> som pil` og `a>b` er urørte, og et ukendt
+ord bliver stående med en advarsel i stedet for at forsvinde tavst.
+
+**Forslagslisten er ikke pynt.** En markør, man skal huske fire ord til, bliver
+ikke brugt. `>` genbruger mekanismen fra `#`, `@` og `:`, så filtrering, Tab og
+tastaturnavigation følger med gratis. To ting måtte tilpasses:
+
+- **Rækkefølgen.** Den almindelige sortering er alfabetisk og satte `inbox`
+  først — den, man sjældnest skriver, fordi den er standarden. Stadierne står i
+  menuens rækkefølge (`fast: true`), og kun det, der *begynder* med det
+  skrevne, springer frem.
+- **Ikonerne.** De fire ser ens ud som ord; ikonet er det, der forbinder dem
+  med listerne i menuen.
+
+## 6u · All Tasks, og tal kun hvor de betyder noget (v71)
+
+**All Tasks** svarer på »hvad har jeg overhovedet?«, hvor de andre lister
+svarer på »hvad nu?«. Derfor er **intet** filtreret fra — heller ikke det
+udskudte, som Next Actions gemmer til sin dag. Det er netop dét, man leder
+efter, når noget er blevet væk.
+
+To grupper, fordi de læses forskelligt: det daterede er en kalender, resten er
+en bunke. Står de i ét, ser den første uden dato ud, som om den hører til dagen
+ovenover.
+
+**Sorteringen sker i SQL** (`sort=due`), ikke i klienten: `LIMIT` klipper før,
+så en liste sorteret bagefter ville mangle netop det, der skulle ligge forrest.
+
+**Bundlinjen på mobil viser kun tal ved Next og Inbox.** Seks små ikoner med
+hver sit badge blev til en række uden retning, og de fleste af dem tæller
+noget, man alligevel går i sidebaren for at se på. Sidebaren viser dem alle.
+
 ## 7 · Uden for scope
 
 Handover §10 gælder uændret: ingen flere brugere, ingen

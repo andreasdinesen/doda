@@ -35,6 +35,7 @@ async function tegnSideIndhold() {
   if (view.id === 'repeat') { await sideRepeat(); return; }
   if (view.id === 'waiting') { await sideStatusliste('waiting', 'Waiting For'); return; }
   if (view.id === 'someday') { await sideStatusliste('someday', 'Someday'); return; }
+  if (view.id === 'all') { await sideAlle(); return; }
   if (view.id === 'notes') { await sideNoter(); return; }
   if (view.id === 'log') { await sideLog(); return; }
   if (view.id === 'review') { await sideReview(); return; }

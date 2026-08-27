@@ -5,7 +5,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 70;
+const APP_VERSION = 71;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -206,6 +206,16 @@ const ICONS = {
  * Logbook og Review faar bevidst ingen: Logbook vokser for evigt (og staar
  * allerede i toplinjen), og Review er ikke en liste, man kan taelle.
  */
+/*
+ * Bundlinjen paa mobil viser KUN tal ved Next og Inbox.
+ *
+ * Seks smaa ikoner paa en telefonbredde, hver med et tal, blev til en raekke
+ * badges uden retning - og de fleste af dem taeller noget, man alligevel gaar
+ * ind i sidebaren for at se paa. De to her er dem, der siger »der er noget at
+ * tage stilling til« (Andreas, 26-08-2026). Sidebaren viser dem alle.
+ */
+const BUND_TAL = new Set(['next', 'inbox']);
+
 function navAntal(v) {
   if (v.tael) return state.counts[v.tael] || 0;
   // Kun de aktive - parkerede og afsluttede staar laengere nede paa siden.
@@ -226,6 +236,10 @@ function icon(name, size = 18) {
 const VIEWS = [
   { id: 'next', label: 'Next Actions', icon: 'next', group: 1, tael: 'next' },
   { id: 'inbox', label: 'Inbox', icon: 'inbox', group: 1, tael: 'inbox' },
+  /* Alt, der ikke er afsluttet, i ét billede. De andre lister svarer paa
+     »hvad nu?«; den her svarer paa »hvad har jeg overhovedet?« og er stedet,
+     man leder, naar noget er blevet vaek (Andreas, 26-08-2026). */
+  { id: 'all', label: 'All Tasks', icon: 'log', group: 1, tael: 'all' },
   { id: 'waiting', label: 'Waiting For', icon: 'waiting', group: 2, tael: 'waiting' },
   { id: 'someday', label: 'Someday', icon: 'someday', group: 2, tael: 'someday' },
   { id: 'repeat', label: 'Recurring', icon: 'repeat', group: 2, tael: 'repeat' },
@@ -255,6 +269,7 @@ const viewById = (id) => VIEWS.find((v) => v.id === id) || VIEWS[0];
 const BUND = ['next', 'inbox', 'projects', 'repeat', 'review'];
 
 const BESKRIVELSER = {
+  all: 'Everything still open — deadlines first, then newest.',
   next: 'What you can actually do right now, grouped by context.',
   inbox: 'Unprocessed items waiting for clarification.',
   waiting: 'Delegated — you are waiting on someone else.',
@@ -474,7 +489,7 @@ function shellHtml() {
   <nav class="bottomnav" id="bottomNav">
     ${BUND.map((id) => {
     const v = viewById(id);
-    const antal = navAntal(v);
+    const antal = BUND_TAL.has(v.id) ? navAntal(v) : 0;
     return `<button class="bottomnav-item" data-view="${v.id}" ${v.id === state.view ? 'aria-current="page"' : ''}>
         ${icon(v.icon, 21)}<span>${esc(v.label.split(' ')[0])}</span>
         ${antal ? `<span class="bottomnav-count">${antal}</span>` : ''}
@@ -628,7 +643,7 @@ function opdaterNav() {
     else el.removeAttribute('aria-current');
     const t = el.querySelector('.bottomnav-count');
     const v = viewById(el.dataset.view);
-    const antal = navAntal(v);
+    const antal = BUND_TAL.has(v.id) ? navAntal(v) : 0;
     if (t && !antal) t.remove();
     else if (t) t.textContent = antal;
     else if (antal) el.insertAdjacentHTML('beforeend', `<span class="bottomnav-count">${antal}</span>`);

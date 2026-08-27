@@ -26,11 +26,14 @@ Mens du skriver, viser små chips under feltet, hvordan teksten er blevet forst�
 | Skriv | Betydning |
 |---|---|
 | `ring til lægen` | opgave i Inbox |
+| `svar fra banken >waiting` | opgave direkte i Waiting For |
 | `* kontonummer 1234` | note |
 | `#telefon` | kontekst (nye skal bekræftes med et ekstra Enter) |
 | `@Sundhed` · `/Sundhed` · `/"Sommerhus i Rørvig"` | projekt — begge tegn virker, som legenden lover |
-| `!tomorrow` `!friday` `!3/9` `!in 2 weeks` `!sep 3 at 9` | deadline |
-| `~in 2 months` | skjul indtil den dato |
+| `!tomorrow` `!friday` `!3/9` `!in 2 weeks` `!sep 3 at 9` | deadline — og opgaven går **direkte i Next Actions**, skjult indtil dagen |
+| `~in 2 months` | skjul indtil den dato (slår automatikken ovenfor) |
+| `>waiting` · `>next` · `>someday` · `>inbox` | start i det stadie. `>w`, `>n`, `>s`, `>i` er det samme |
+| `: Privat` | område — mellemrum på begge sider |
 | `køb dæk // se https://dæk.dk og husk rabatkoden` | alt efter ` // ` bliver beskrivelsen |
 
 Links i både titel og beskrivelse bliver klikbare — også `[tekst](url)`.
@@ -216,8 +219,16 @@ Den bruger de samme adgangsnøgler og de samme scopes — en `read`-nøgle giver
 Claude læseadgang og intet andet, og `tools/list` viser kun det, nøglen faktisk
 må. Se **[docs/MCP.md](docs/MCP.md)**.
 
-**Raycast Pro** kan det samme uden en udvidelse: tilføj `https://DIN-ADRESSE/mcp`
-som HTTP-server, enten med en nøgle i en header eller med OAuth.
+### Raycast
+
+**Med Raycast Pro** taler doda MCP direkte: tilføj `https://DIN-ADRESSE/mcp` som
+HTTP-server, enten med en nøgle i en header eller med OAuth. Se
+[docs/MCP.md §4b](docs/MCP.md).
+
+**Uden Pro** ligger der fire script-kommandoer i
+**[extras/raycast/](extras/raycast/)** — fang, Next Actions, Inbox og søgning.
+Bash og `curl`, intet npm. Opsætning og de præcise trin i Raycast står i
+[extras/raycast/README.md](extras/raycast/README.md).
 
 **claude.ai i browseren** kan ikke sende en nøgle i en header, så den kobler sig
 på med **OAuth 2.1**: tilføj `https://DIN-ADRESSE/mcp` som custom connector, og
@@ -390,6 +401,7 @@ Se `PLAN.md` for faseoversigt og status, `DESIGN.md` for de trufne beslutninger 
 
 | Version | Ændringer |
 |---|---|
+| 71 | **En dato er en beslutning — og `>stadie` ved fangst.** Skriver du `!fredag`, går opgaven nu **direkte i Next Actions** og skjuler sig til dagen; har du sat en dato, har du allerede besluttet at gøre den, og så skal den ikke afklares i Inbox én gang til. Dit eget valg vinder: `>waiting !fredag` bliver i Waiting For, og et `~udskyd` står ved magt. **`>waiting`, `>next`, `>someday`, `>inbox`** (eller `>w`, `>n`, `>s`, `>i`) lægger opgaven direkte i det stadie — før kunne kun *skærmen* bestemme det. Skriver du `>`, viser paletten de fire med hvert sit ikon. **Nyt punkt: All Tasks** — alt åbent i ét billede, med frister i kalenderorden og resten nyest øverst; **intet er filtreret fra**, heller ikke det udskudte. Og på mobil har kun **Next** og **Inbox** tal i bundlinjen; sidebaren viser dem alle. |
 | 70 | **doda i Raycast — med eller uden Pro.** Har du **Raycast Pro**, virker doda som MCP-server uden at der skal bygges noget: tilføj `https://DIN-ADRESSE/mcp` med en nøgle i en header eller med OAuth, og du har alle elleve værktøjer. **Uden Pro** ligger der nu fire script-kommandoer i [extras/raycast](extras/raycast) — fang, Next Actions, Inbox og søgning. Bash og `curl`, intet npm, og nøglen gemmes i macOS' **nøglering**, ikke i en fil. Serveren fik til gengæld en **tekst-vej**: `?format=text` på `/search`, `/items` og `/capture` (den fandtes i forvejen på `/next`), så en klient uden JSON-parser kan vise svaret direkte. |
 | 69 | **Tal ved hvert punkt — og en vej til at starte Logbook forfra.** Next Actions, Waiting For, Someday, Recurring, Projects, Contexts og Notes har nu tal som Inbox. *Logbook og Review får bevidst ingen: det ene vokser for evigt, det andet er ikke en liste.* **Undervejs fundet:** optællingen var **næsten** rigtig og derfor svær at se — Inbox viser også `queued`, men tælleren talte kun `inbox`, og Waiting/Someday viser udskudte, som tælleren skjulte. Hvert tal spejler nu præcis det kald, listen selv laver. **Og Settings → Logbook:** »Start Logbook over« skjuler det hidtidige fra listen og tælleren uden at slette noget (kan fortrydes), »Delete finished tasks« sletter for altid, og »done«-tallet i toplinjen kan slås fra. |
 | 68 | **En Sagu-note kan foldes sammen.** En note kan være lang — en liste af nøgler, et mødereferat — og så skubber den projektets opgaver ned under skærmkanten. Overskriften **In Sagu** er nu en foldeknap; **udfoldet som standard**, for noten er dét, man kom for. Foldet står overskriften tilbage med sin kommentartæller, så man kan se, at der *er* en note, uden at læse den. Kommentarerne og skrivefeltet følger med ind — de hører til noten. Valget huskes, og folden henter ikke noten fra Sagu igen. |

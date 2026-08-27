@@ -25,7 +25,7 @@ const MODER = {
   '+': { id: 'task', pil: '+ New Task', ph: 'Task title… try !tomorrow at 9',
     // `: area` staar med mellemrum EFTER kolonet, fordi det er saadan den
     // skrives - legenden er en kravspecifikation (§v9) og skal vise formen.
-    legend: ['/ project', '# context', '! date', '~ hide until', ': area'], enter: 'Create' },
+    legend: ['/ project', '# context', '! date', '~ hide until', ': area', '> stage'], enter: 'Create' },
   '*': { id: 'note', pil: '* New Note', ph: 'Note title…', legend: ['/ project', '# context'], enter: 'Create' },
   '/': { id: 'project', pil: '/ Projects', ph: 'Find or create a project…', legend: [], enter: 'Open' },
   '#': { id: 'context', pil: '# Contexts', ph: 'Find or create a context…', legend: [], enter: 'Open' },
@@ -87,11 +87,30 @@ function tolkNu(tekst) {
  *   - navnet er ét ord af bogstaver, tal, _ og -
  *   - der maa ikke vaere naaet et mellemrum efter markoeren
  */
+/*
+ * Stadierne. En FAST liste - modsat projekter og kontekster, som brugeren
+ * selv laver. `name` er dét, der skrives ind, saa man ser, hvad man faar.
+ *
+ * »Hvis jeg laver en > saa skal den vise en liste med de valgmuligheder der
+ * er« (Andreas, 26-08-2026): ellers skal man huske de fire ord, og en markoer,
+ * man skal huske udenad, bliver ikke brugt.
+ */
+const STADIE_FORSLAG = [
+  { name: 'next', vis: 'Next Actions', ikon: 'next' },
+  { name: 'waiting', vis: 'Waiting For', ikon: 'waiting' },
+  { name: 'someday', vis: 'Someday', ikon: 'someday' },
+  { name: 'inbox', vis: 'Inbox', ikon: 'inbox' },
+];
+
 const MARKOER_KILDE = {
   '/': { hvad: 'project', kilde: () => state.projects, ikon: 'projects' },
   '@': { hvad: 'project', kilde: () => state.projects, ikon: 'projects' },
   '#': { hvad: 'context', kilde: () => state.contexts, ikon: 'contexts' },
   ':': { hvad: 'area', kilde: () => state.areas, ikon: 'someday' },
+  /* `fast`: stadierne skal IKKE sorteres alfabetisk. De staar i menuens
+     raekkefoelge med de hyppigste oeverst - alfabetisk ville sætte `inbox`
+     foerst, som er den, man sjaeldnest skriver, fordi den er standarden. */
+  '>': { hvad: 'stage', kilde: () => STADIE_FORSLAG, ikon: 'next', fast: true },
 };
 
 /** Hvilken markoer staar markoeren (caret'en) i? Null, hvis ingen. */
@@ -103,7 +122,7 @@ function markoerVedCaret() {
   const pos = el.selectionStart;
   if (pos === null || pos === undefined) return null;
   const foer = el.value.slice(0, pos);
-  const m = foer.match(/(^|\s)([/@#])([\p{L}\p{N}_-]*)$/u);
+  const m = foer.match(/(^|\s)([/@#>])([\p{L}\p{N}_-]*)$/u);
   if (m) return { tegn: m[2], delvist: m[3], start: pos - m[3].length - 1, slut: pos };
   /* Omraadet skriver man `: Navn` - med mellemrum paa begge sider. Derfor sit
      eget moenster: mellemrummet efter kolonet er en del af markoeren, ikke af
@@ -123,15 +142,28 @@ function forslagsRaekker() {
   // Det, der BEGYNDER med det skrevne, foerst. Med ren "indeholder"-sortering
   // foreslog "/hus" projektet Sommerhus foer "Hus og have" - og Tab satte det
   // forkerte navn ind. Naar man fuldfoerer et navn, vejer begyndelsen tungest.
-  return k.kilde()
-    .filter((x) => !q || x.name.toLowerCase().includes(q))
-    .sort((a, b) => {
+  const fundne = k.kilde().filter((x) => !q || x.name.toLowerCase().includes(q));
+  return (k.fast
+    // Kun det, der BEGYNDER med det skrevne, flyttes frem; resten beholder
+    // sin plads. Ellers ville `>n` liste inbox og waiting alfabetisk.
+    ? fundne.slice().sort((a, b) =>
+      (a.name.toLowerCase().startsWith(q) ? 0 : 1) - (b.name.toLowerCase().startsWith(q) ? 0 : 1))
+    : fundne.slice().sort((a, b) => {
       const aa = a.name.toLowerCase().startsWith(q) ? 0 : 1;
       const bb = b.name.toLowerCase().startsWith(q) ? 0 : 1;
       return aa - bb || a.name.localeCompare(b.name);
-    })
+    }))
     .slice(0, 6)
-    .map((x) => ({ type: 'forslag', navn: x.name, tegn: t.tegn, ikon: k.ikon, hvad: k.hvad, token: t }));
+    .map((x) => ({
+      type: 'forslag',
+      navn: x.name,
+      tegn: t.tegn,
+      // Stadierne baerer deres eget ikon: de fire ser ens ud som ord, og
+      // ikonet er dét, der goer dem til de lister, man kender fra menuen.
+      ikon: x.ikon || k.ikon,
+      hvad: x.vis ? x.vis.toLowerCase() : k.hvad,
+      token: t,
+    }));
 }
 
 /**
