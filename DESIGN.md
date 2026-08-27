@@ -1674,6 +1674,46 @@ det engang hørte til — og det var netop dét, der var galt i §6p.
 noter man har, hvis man slår Notes fra. **Ryd op efter det, du fjernede — men
 kig efter, hvem der ellers bruger det.**
 
+## 6w · Da den klistrende bjælke fik siden til at flimre (v73)
+
+»Scroller jeg ned i Next Actions, flimrer hele billedet, som om den går i hak«
+(Andreas, 26-08-2026, på en side med fire opgaver).
+
+### Loopet
+
+Bjælken fra §6b vinder plads, når den folder sig sammen — og så bliver
+**dokumentet kortere**. Er der mindre tilbage at rulle i end den højde,
+bjælken gav slip på, klipper browseren rullepositionen til det, der er plads
+til. Vagtposten kommer i syne, klassen ryger af, bjælken vokser, dokumentet
+bliver længere, man kan rulle igen. Frem og tilbage, mange gange i sekundet.
+
+Målt på præcis hans side: **0 px** tilbage at rulle i, mens bjælken gav
+**60 px** slip. Betingelsen er `(dokument − skærm) < bjælkens krympning`.
+
+### To tærskler i stedet for én
+
+En `IntersectionObserver` på en vagtpost kan kun ét skifte. Der skal to til, og
+**afstanden mellem dem skal være større end det, bjælken krymper** (60 px på
+desktop, 93 px på mobil) — ellers kan browserens justering nå ned under den
+nedre tærskel, og loopet er der igen. Folder ved 120, folder ud ved 8.
+
+En rulle-lytter var utryg, da vagtposten blev valgt (§6b), fordi den skulle
+vide, hvem der ruller. Det ved `rulletNed()` siden §6c.
+
+### Og en anden fejl, som først målingen viste
+
+Med to tærskler alene foldede bjælken sig **aldrig** på en kort side: der var
+29 px at rulle i, og man kan ikke nå 120. Rettelsen fjernede flimmeret ved at
+fjerne funktionen.
+
+Derfor kræves der også **mindst 200 px rulleplads**. Er der mindre, er der
+heller ingen plads at vinde — og så er det rigtige svar at lade bjælken stå.
+
+**Lærestykket:** da den første rettelse var på plads, så tallene rigtige ud
+(0 skift, ingen flimmer). Det var kun, fordi jeg målte *begge* tilfælde — kort
+og lang side — at det viste sig, at den ene var blevet rigtig ved at gøre den
+anden ubrugelig.
+
 ## 7 · Uden for scope
 
 Handover §10 gælder uændret: ingen flere brugere, ingen

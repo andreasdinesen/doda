@@ -352,8 +352,10 @@ button.version-old:hover { text-decoration: underline; }
  * laeser man én gang; feltet vil man kunne naa hele tiden. Andreas bad om det
  * 23-08-2026 med Sagu som forbillede, hvor det samme oenske blev loest i F20.
  *
- * Klassen saettes af en observer paa `.rulvagt`, ikke paa bjaelken: en
- * observer paa noget, der ER sticky, udloeser aldrig.
+ * Klassen saettes af en rulle-lytter med TO taerskler - se
+ * `registrerRullevagt()`. Med ét skifte flimrer siden: bjaelken vinder plads,
+ * dokumentet bliver kortere, browseren tvinger rullepositionen op, og klassen
+ * ryger af igen.
  */
 body.rullet .toprow,
 body.rullet .omni-legend { display: none; }

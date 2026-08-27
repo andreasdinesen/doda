@@ -1032,7 +1032,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 72;
+const APP_VERSION = 73;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -1489,9 +1489,6 @@ function shellHtml() {
       </div>
     </aside>
     <main class="main">
-      <!-- Vagtposten: 1 px, usynlig, lige over den klaebende bjaelke. Den er
-           kun til for at kunne SES forsvinde - se registrerRullevagt(). -->
-      <div class="rulvagt" id="rulVagt" aria-hidden="true"></div>
       <div class="topbar">
         <!-- Versionslinjen i sidebarens fod har kunnet sige det hele tiden,
              men paa en telefon staar foden BAG hamburgeren, saa man ser den
@@ -1834,18 +1831,60 @@ document.addEventListener('click', (e) => {
  * EFTER den op - stod vagten under, kunne den komme til syne igen af selve
  * sammenfoldningen og saette klassen i et blink frem og tilbage.
  */
+/*
+ * To taerskler, ikke én. Uden dem FLIMRER siden.
+ *
+ * Folder bjaelken sig sammen, bliver dokumentet kortere - den vinder jo plads.
+ * Er der mindre tilbage at rulle i end den hoejde, bjaelken lige gav slip paa,
+ * tvinger browseren rullepositionen op igen, klassen ryger af, bjaelken vokser,
+ * og saa forfra. Andreas saa det som »hele billedet flimrer, som om den gaar i
+ * hak« 26-08-2026 - paa en kort side med fire opgaver, hvor der var praecis 0
+ * px tilbage at rulle i, mens bjaelken gav 60 px slip.
+ *
+ * Derfor skal AFSTANDEN mellem de to taerskler vaere stoerre end det, bjaelken
+ * krymper (60 px paa desktop, 93 px paa mobil). Saa kan browserens justering
+ * ikke naa ned under den nedre, og loekken er brudt.
+ *
+ * En `IntersectionObserver` paa en vagtpost kan ikke det her: den har ét
+ * skifte, ikke to. Og en rulle-lytter er nu forsvarlig, fordi `rulletNed()`
+ * ved, hvem der ruller (§6c) - det var netop dét, der gjorde den skroebelig,
+ * da vagtposten blev valgt.
+ */
+const RULLET_TIL = 120;   // folder sammen efter saa mange px
+const RULLET_FRA = 8;     // og folder foerst ud igen her
+/*
+ * Og kun hvis der er RIGELIGT at rulle i.
+ *
+ * To taerskler alene raekker ikke: paa en kort side kan man aldrig naa de 120
+ * px, og saa foldede bjaelken sig aldrig sammen. Maalt paa en side med fire
+ * opgaver var der 29 px at rulle i, mens bjaelken gav 60 px slip.
+ *
+ * 200 px er stoerre end det, bjaelken krymper (60 paa desktop, 93 paa mobil),
+ * plus den oevre taerskel. Er der mindre, er der heller ikke plads at vinde -
+ * og saa er det rigtige svar at lade bjaelken staa.
+ */
+const RULLET_PLADS = 200;
+
 function registrerRullevagt() {
-  const vagt = document.getElementById('rulVagt');
-  if (!vagt) return;
-  if (!('IntersectionObserver' in window)) {
-    // Uden observer: ingen sammenfoldning. Bjaelken klaeber stadig - man
-    // mister kun den ekstra plads, og det er bedre end en klasse, der
-    // saetter sig fast i den forkerte stilling.
-    return;
-  }
-  new IntersectionObserver(([post]) => {
-    document.body.classList.toggle('rullet', !post.isIntersecting);
-  }, { rootMargin: '-8px 0px 0px 0px', threshold: 0 }).observe(vagt);
+  let rullet = false;
+  const rulleplads = () => Math.max(
+    document.body.scrollHeight, document.documentElement.scrollHeight,
+  ) - window.innerHeight;
+
+  const tjek = () => {
+    const y = rulletNed();
+    if (!rullet && y > RULLET_TIL && rulleplads() > RULLET_PLADS) {
+      rullet = true;
+      document.body.classList.add('rullet');
+    } else if (rullet && y < RULLET_FRA) {
+      rullet = false;
+      document.body.classList.remove('rullet');
+    }
+  };
+  // Begge: under mobilgraensen er det body, der ruller, ellers vinduet (§6c).
+  window.addEventListener('scroll', tjek, { passive: true });
+  document.body.addEventListener('scroll', tjek, { passive: true });
+  tjek();
 }
 
 /*
