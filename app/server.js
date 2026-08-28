@@ -982,7 +982,28 @@ function hentItems(filter) {
      * en liste sorteret efter afklipningen ville mangle netop dét, der laa
      * forrest.
      */
-    : filter.efterDato
+    : filter.hasterFoerst
+      /*
+       * Next Actions: stjernen oeverst, saa det, klokken er ved at loebe fra.
+       *
+       * »Vis de opgaver i toppen lige under dem, som er stjernemarkeret, naar
+       * det tidspunkt de er sat til naermer sig« (Andreas, 26-08-2026).
+       *
+       * Der skal ingen »naermer sig«-graense til: siden v71 skjuler en dateret
+       * opgave sig til sin egen dag, saa ALT med en dato i denne liste er
+       * forfaldent i dag eller tidligere. Kronologisk raekkefoelge ER derfor
+       * »det mest presserende foerst«, og listen skifter af sig selv, naar
+       * dagen skrider frem.
+       *
+       * `seq` til sidst: den raekkefoelge, man selv har trukket paa plads,
+       * gaelder stadig blandt dem, der ikke har et tidspunkt at rette sig
+       * efter.
+       */
+      ? `i.starred DESC,
+         CASE WHEN i.due_date IS NULL THEN 1 ELSE 0 END,
+         i.due_date, CASE WHEN i.due_time IS NULL THEN 1 ELSE 0 END, i.due_time,
+         i.seq, i.created_at`
+      : filter.efterDato
       ? `CASE WHEN i.due_date IS NULL THEN 1 ELSE 0 END,
          i.due_date, CASE WHEN i.due_time IS NULL THEN 1 ELSE 0 END, i.due_time,
          i.created_at DESC`
@@ -1845,6 +1866,7 @@ const ROUTES = {
         skjulUdskudte: q.get('hideDeferred') === '1',
         nyesteFoerst: q.get('newest') === '1',
         efterDato: q.get('sort') === 'due',
+        hasterFoerst: q.get('sort') === 'urgent',
       }), 'Nothing here.'));
       return;
     }
@@ -1859,6 +1881,8 @@ const ROUTES = {
         nyesteFoerst: q.get('newest') === '1',
         // `sort=due`: frister i kalenderorden foerst, resten nyest oeverst.
         efterDato: q.get('sort') === 'due',
+        // `sort=urgent`: stjernen oeverst, saa det mest presserende.
+        hasterFoerst: q.get('sort') === 'urgent',
       }),
     });
   },

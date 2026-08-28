@@ -1714,6 +1714,45 @@ heller ingen plads at vinde — og så er det rigtige svar at lade bjælken stå
 og lang side — at det viste sig, at den ene var blevet rigtig ved at gøre den
 anden ubrugelig.
 
+## 6x · Next Actions sorterer efter hastighed (v74)
+
+»Vis de opgaver i toppen lige under dem, som er stjernemarkeret, når det
+tidspunkt de er sat til nærmer sig« (Andreas, 26-08-2026).
+
+Rækkefølgen inden for hver kontekstgruppe er nu:
+
+1. **Stjernemarkerede** — også uden frist
+2. **Det, klokken løber fra** — kronologisk
+3. **Resten** — `seq`, altså den rækkefølge, brugeren selv har trukket på plads
+
+### Der skulle ingen »nærmer sig«-grænse til
+
+Det følger af §6s: en dateret opgave skjuler sig nu til sin egen dag, så **alt
+med en dato i Next Actions er forfaldent i dag eller tidligere**. Kronologisk
+rækkefølge *er* derfor »det mest presserende først«, og listen skifter af sig
+selv, mens dagen går.
+
+Det er bedre end en tærskel som »inden for to timer«: ingen kant, hvor en
+opgave pludselig hopper, intet tal at vedligeholde, og ingen forskel på, om man
+kigger klokken 8 eller 15.
+
+**To regler, der er sat sammen, kan gøre den tredje overflødig.** Det er værd
+at kigge efter, før man bygger en tærskel.
+
+### Stjernen slår et tidspunkt
+
+Den er den eneste markering, brugeren selv sætter for at sige »den her først«
+(§v54). Lod et klokkeslæt den falde ned under noget andet, ville stjernen holde
+op med at betyde noget. Der er en test på netop det.
+
+Og `seq` sorterer **sidst**, ikke først: den manuelle rækkefølge gælder stadig
+blandt dem, der ikke har et tidspunkt at rette sig efter.
+
+### Testen opretter i modsat rækkefølge
+
+Ellers beviser den kun, at listen ikke blev rodet rundt — ikke at den blev
+sorteret.
+
 ## 7 · Uden for scope
 
 Handover §10 gælder uændret: ingen flere brugere, ingen

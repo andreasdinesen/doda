@@ -796,3 +796,55 @@ test('brugerens EGET valg slår dato-automatikken', async () => {
   assert.equal(eget.status, 'next');
   assert.notEqual(eget.defer_date, eget.due_date, 'brugerens eget ~ står ved magt');
 });
+
+test('Next Actions: stjernen øverst, så det klokken løber fra', async () => {
+  /*
+   * »Vis de opgaver i toppen lige under dem, som er stjernemarkeret, når det
+   * tidspunkt de er sat til nærmer sig« (Andreas, 26-08-2026).
+   *
+   * Der skal ingen »nærmer sig«-grænse til: siden v71 skjuler en dateret
+   * opgave sig til sin egen dag, så alt med en dato i DENNE liste er
+   * forfaldent i dag eller tidligere. Kronologisk rækkefølge ER derfor »det
+   * mest presserende først«.
+   */
+  const iDag = new Date().toISOString().slice(0, 10);
+  const lav = async (titel, felter) => {
+    const it = (await J('/api/v1/capture', { text: titel, createNew: true })).item;
+    await J(`/api/v1/items/${it.id}`, Object.assign({ status: 'next' }, felter));
+    return it.id;
+  };
+  // Oprettes i den MODSATTE raekkefoelge af den, de skal staa i - ellers
+  // beviser testen kun, at listen ikke blev rodet rundt.
+  const udenTid = await lav('ingen frist', {});
+  const sent = await lav('sent på dagen', { due_date: iDag, due_time: '16:00' });
+  const tidligt = await lav('tidligt', { due_date: iDag, due_time: '07:00' });
+  const stjerne = await lav('stjernet uden frist', { starred: 1 });
+
+  const ider = (await J('/api/v1/items?status=next&hideDeferred=1&sort=urgent')).items
+    .map((i) => i.id);
+  const plads = (id) => ider.indexOf(id);
+
+  assert.ok(plads(stjerne) < plads(tidligt), 'stjernen ligger øverst - også uden frist');
+  assert.ok(plads(tidligt) < plads(sent), 'og så det, der falder først');
+  assert.ok(plads(sent) < plads(udenTid), 'alt med et tidspunkt før det uden');
+});
+
+test('en stjerne slår et tidspunkt - den er brugerens eget råb', async () => {
+  /*
+   * Stjernen skal LOEFTE opgaven (v54). Lod et tidspunkt den falde ned under
+   * noget andet, ville stjernen ikke længere betyde noget - og det er den
+   * eneste markering, brugeren selv sætter for at sige »den her først«.
+   */
+  const iDag = new Date().toISOString().slice(0, 10);
+  const lav = async (titel, felter) => {
+    const it = (await J('/api/v1/capture', { text: titel, createNew: true })).item;
+    await J(`/api/v1/items/${it.id}`, Object.assign({ status: 'next' }, felter));
+    return it.id;
+  };
+  const haster = await lav('kl. seks om morgenen', { due_date: iDag, due_time: '06:00' });
+  const stjernet = await lav('stjernet, ingen frist', { starred: 1 });
+
+  const ider = (await J('/api/v1/items?status=next&hideDeferred=1&sort=urgent')).items
+    .map((i) => i.id);
+  assert.ok(ider.indexOf(stjernet) < ider.indexOf(haster), 'stjernen vinder');
+});

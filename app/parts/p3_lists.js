@@ -70,7 +70,8 @@ async function tegnSideIndhold() {
       host.innerHTML = sideInbox();
     } else {
       const q = state.filterContext ? `&context=${encodeURIComponent(state.filterContext)}` : '';
-      const d = await api('GET', `/api/v1/items?status=next&hideDeferred=1${q}`);
+      // `sort=urgent`: stjernen oeverst, saa det, klokken loeber fra.
+      const d = await api('GET', `/api/v1/items?status=next&hideDeferred=1&sort=urgent${q}`);
       state.items = d.items;
       host.innerHTML = sideNext();
     }

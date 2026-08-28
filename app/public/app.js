@@ -1032,7 +1032,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 73;
+const APP_VERSION = 74;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -3161,7 +3161,8 @@ async function tegnSideIndhold() {
       host.innerHTML = sideInbox();
     } else {
       const q = state.filterContext ? `&context=${encodeURIComponent(state.filterContext)}` : '';
-      const d = await api('GET', `/api/v1/items?status=next&hideDeferred=1${q}`);
+      // `sort=urgent`: stjernen oeverst, saa det, klokken loeber fra.
+      const d = await api('GET', `/api/v1/items?status=next&hideDeferred=1&sort=urgent${q}`);
       state.items = d.items;
       host.innerHTML = sideNext();
     }
