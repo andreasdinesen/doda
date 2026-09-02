@@ -1846,6 +1846,29 @@ har givet lov — det er en tilstand, brugeren ellers ikke kan se.
 **To led, to prøver.** En enkelt knap, der dækker hele kæden, kan kun sige
 »virker« eller »virker ikke«; den kan ikke sige hvor.
 
+### Tallet var ikke nok — listen var
+
+»Vis en her« kom frem på telefonen, mens pushen ikke gjorde. Så var fejlen i
+**leveringen** — og skærmen sagde `6 devices in all`.
+
+Tilmeldinger hober sig op: hvert »slå til« giver en ny, og de gamle bliver
+liggende. **Apple svarer `201` på en forældet tilmelding** — `201` betyder
+»modtaget«, ikke »leveret«. Prøven sagde derfor *kom igennem* seks gange og
+forklarede ingenting.
+
+Listen viser tjeneste, oprettelse, **sidst set** og fejl i træk. »Sidst set« er
+det, der skiller en levende fra en efterladt: en, der aldrig har kvitteret, er
+formentlig fra en app, der er væk. Hver har en **Fjern**-knap.
+
+Og prøven rammer nu **kun den enhed, man sidder med** — det er den eneste, hvis
+resultat man kan bedømme.
+
+**Endepunktet forlader aldrig serveren.** Det er hemmeligheden bag et
+abonnement; den, der har det, kan sende til telefonen. Listen viser værtsnavnet
+og en `sha256`-hash, som også er det, sletningen bruger. Markeringen af »denne
+enhed« regnes derfor i **browseren**: den hasher sit eget endepunkt og
+sammenligner. De to udregninger blev efterprøvet mod hinanden.
+
 ### Det, prøven ikke kan
 
 `sendTil` taler kun https, så en attrap kræver et certifikat. Første udgave af

@@ -1123,6 +1123,31 @@ async function sideNoter() {
 
 /* Push-kortet i Settings. Siger hvad der mangler, frem for at vise en knap,
    der ikke kan virke. */
+/** Denne enheds eget push-endpoint, eller null hvis den ikke er tilmeldt. */
+async function mitAbonnement() {
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const ab = await reg.pushManager.getSubscription();
+    return ab ? ab.endpoint : null;
+  } catch { return null; }
+}
+
+/**
+ * Samme hash, som serveren bruger som `id` (sha256 i hex).
+ *
+ * Regnes HER, saa listen kan markere »denne enhed« uden at endepunktet
+ * nogensinde sendes til serveren for at blive genkendt - det er hemmeligheden
+ * bag abonnementet, og den bor allerede der.
+ */
+async function minAbonnementsId() {
+  const ep = await mitAbonnement();
+  if (!ep || !window.crypto || !crypto.subtle) return null;
+  try {
+    const sum = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(ep));
+    return [...new Uint8Array(sum)].map((b) => b.toString(16).padStart(2, '0')).join('');
+  } catch { return null; }
+}
+
 async function bindPush() {
   const boks = document.getElementById('pushBox');
   if (!boks) return;
@@ -1132,6 +1157,11 @@ async function bindPush() {
     boks.innerHTML = `<p class="lead" style="margin:12px 0 0">${esc(spaerre)}</p>`;
     return;
   }
+
+  /* Hashen for denne enheds eget abonnement, saa listen kan markere den. Den
+     regnes ud paa serveren og kommer med i listen; her matcher vi paa den. */
+  let mitEndpoint = null;
+  try { mitEndpoint = await minAbonnementsId(); } catch { /* markeringen udelades */ }
 
   const tegn = (d, tilmeldt) => {
     boks.innerHTML = `
@@ -1172,6 +1202,29 @@ async function bindPush() {
       ? `<strong>This device is off.</strong> ${d.devices} other device${
         d.devices === 1 ? '' : 's'} will be reminded — this one will not.`
       : 'No device is subscribed yet.')}</p>
+      ${/*
+        * Listen, ikke bare tallet. Gamle tilmeldinger hober sig op - hvert
+        * »slå til« giver en ny, og de gamle bliver liggende. Apple svarer 201
+        * på dem alligevel, så de gør prøven ulæselig uden nogensinde at fejle
+        * (Andreas, 02-09-2026).
+        *
+        * »Sidst set« er dét, der skiller en levende fra en efterladt: en, der
+        * aldrig har kvitteret, er formentlig fra en app, der er væk.
+        */ ''}
+      ${(d.subscriptions || []).length ? `<div class="keylist" style="margin-top:14px">
+        ${d.subscriptions.map((a) => {
+    const mit = mitEndpoint && a.id === mitEndpoint;
+    const set = a.lastOk ? `sidst set ${esc(visTid(a.lastOk))}` : 'aldrig set i live';
+    return `<div class="keyrow">
+          <div style="flex:1;min-width:0">
+            <div>${esc(a.service)}${mit ? ' <strong>· denne enhed</strong>' : ''}</div>
+            <div class="meta">tilmeldt ${esc(visTid(a.createdAt))} · ${set}${
+  a.fails ? ` · ${a.fails} fejl i træk` : ''}</div>
+          </div>
+          <button class="btn ghost" data-pushdel="${esc(a.id)}">Fjern</button>
+        </div>`;
+  }).join('')}
+      </div>` : ''}
       <div id="pushSvar"></div>
       <label class="field" style="margin-top:14px"><span>Send it</span>
         <select class="input" id="pushLead" style="max-width:260px">
@@ -1228,6 +1281,16 @@ async function bindPush() {
       }
     });
 
+    boks.querySelectorAll('[data-pushdel]').forEach((el) => {
+      el.addEventListener('click', async () => {
+        try {
+          await api('DELETE', '/api/v1/push', { id: el.dataset.pushdel });
+          await bindPush();
+          toast('Tilmeldingen er fjernet');
+        } catch (ex) { toast(ex.message); }
+      });
+    });
+
     const test = boks.querySelector('#pushTest');
     if (test) {
       test.addEventListener('click', async () => {
@@ -1235,7 +1298,10 @@ async function bindPush() {
         test.disabled = true;
         svar.innerHTML = '<p class="meta" style="margin-top:12px">Sender…</p>';
         try {
-          const d2 = await api('POST', '/api/v1/push/test', {});
+          /* KUN denne enhed, naar den er tilmeldt. Det er dén, man sidder med
+             og kan se skaermen paa - de andre kan man ikke bedoemme. */
+          const mit = await mitAbonnement();
+          const d2 = await api('POST', '/api/v1/push/test', mit ? { only: mit } : {});
           const raekker = (d2.devices || []).map((e2) => {
             if (e2.ok) return `<li>${esc(e2.service)} — <strong>kom igennem</strong></li>`;
             if (e2.gone) {

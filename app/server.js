@@ -3004,9 +3004,30 @@ const ROUTES = {
   'GET /api/v1/push': (req, res) => {
     const user = godkend(req, res, 'read');
     if (!user) return;
+    /*
+     * Listen, ikke bare tallet.
+     *
+     * »6 devices« sagde intet om, hvilke der stadig virkede - og gamle
+     * abonnementer hober sig op, fordi hvert »slaa til« giver et nyt, mens de
+     * gamle bliver liggende. Andreas bad om at kunne se og rydde dem
+     * enkeltvis 02-09-2026.
+     *
+     * `id` er en HASH af endepunktet, ikke endepunktet selv - det er
+     * hemmeligheden bag et abonnement og maa ikke paa en skaerm. Hashen kan
+     * bruges til at slette med, og det er alt, klienten skal bruge.
+     */
+    const liste = db.prepare(`SELECT id, endpoint, created_at, last_ok, fails
+       FROM push_subs ORDER BY created_at`).all().map((a) => ({
+      id: a.id,
+      service: (() => { try { return new URL(a.endpoint).host; } catch { return 'ukendt'; } })(),
+      createdAt: a.created_at,
+      lastOk: a.last_ok,
+      fails: a.fails,
+    }));
     sendJson(res, 200, {
       publicKey: push.offentligNoegle(),
-      devices: db.prepare('SELECT COUNT(*) AS n FROM push_subs').get().n,
+      devices: liste.length,
+      subscriptions: liste,
       lead: Number(getSetting('push_lead', '0')),
     });
   },
@@ -3058,8 +3079,18 @@ const ROUTES = {
   'POST /api/v1/push/test': async (req, res) => {
     const user = godkend(req, res, 'write');
     if (!user) return;
-    await readJsonBody(req);
-    const abon = db.prepare('SELECT id, endpoint, created_at, last_ok, fails FROM push_subs').all();
+    const body = await readJsonBody(req);
+    /*
+     * `only`: send KUN til den enhed, man sidder med.
+     *
+     * Med seks abonnementer - fem gamle fra tidligere til/fra - sagde proeven
+     * »kom igennem« seks gange, og man vidste stadig ikke, om TELEFONENS eget
+     * naaede frem. Apple svarer 201 paa et forældet abonnement; 201 betyder
+     * »modtaget«, ikke »leveret« (Andreas, 02-09-2026).
+     */
+    const kun = body && typeof body.only === 'string' ? body.only : null;
+    let abon = db.prepare('SELECT id, endpoint, created_at, last_ok, fails FROM push_subs').all();
+    if (kun) abon = abon.filter((a) => a.endpoint === kun);
     if (!abon.length) {
       sendJson(res, 200, { devices: [], hint: 'No device is subscribed yet.' });
       return;
@@ -3109,8 +3140,22 @@ const ROUTES = {
     if (!user) return;
     const body = await readJsonBody(req, user.viaToken);
     const endpoint = str(body.endpoint, 1000);
-    if (endpoint) fjernAbonnement(hashToken(endpoint));
-    else db.prepare('DELETE FROM push_subs').run();
+    /*
+     * `keep`: ryd alle ANDRE end den, kalderen sidder med.
+     *
+     * Gamle abonnementer hober sig op - hvert »slå til« giver et nyt, og de
+     * gamle bliver liggende. Apple svarer 201 paa dem alligevel, saa de goer
+     * proeven ulaeselig uden nogensinde at fejle (Andreas, 02-09-2026).
+     */
+    const behold = str(body.keep, 1000);
+    // `id` er hashen fra listen - saa kan en enhed slettes fra skaermen uden
+    // at endepunktet nogensinde har vaeret sendt DERUD.
+    const id = str(body.id, 128);
+    if (id) fjernAbonnement(id);
+    else if (endpoint) fjernAbonnement(hashToken(endpoint));
+    else if (behold) {
+      db.prepare('DELETE FROM push_subs WHERE id != ?').run(hashToken(behold));
+    } else db.prepare('DELETE FROM push_subs').run();
     sendJson(res, 200, { devices: db.prepare('SELECT COUNT(*) AS n FROM push_subs').get().n });
   },
 

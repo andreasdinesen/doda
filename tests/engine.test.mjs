@@ -13,6 +13,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { createServer } from 'node:http';
+import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 import test, { before, after } from 'node:test';
 
@@ -944,4 +945,48 @@ test('push-prøven siger, HVAD der gik galt - ikke bare at intet skete', async (
   // Og de ryddes, så »slå til igen« er den rigtige besked bagefter.
   const tilbage = medDb((db) => db.prepare('SELECT id FROM push_subs').all().map((r) => r.id));
   assert.deepEqual(tilbage, [], 'begge er ryddet');
+});
+
+test('push-tilmeldinger kan LISTES og fjernes enkeltvis', async () => {
+  /*
+   * »Kan du liste dem, der er oprettet, så man også kan slette dem?«
+   * (Andreas, 02-09-2026).
+   *
+   * Gamle tilmeldinger hober sig op: hvert »slå til« giver en ny, og de gamle
+   * bliver liggende. Apple svarer 201 på dem alligevel, så seks abonnementer
+   * gav seks gange »kom igennem« — og sagde intet om, hvilken der virkede.
+   */
+  medDb((db) => {
+    db.prepare('DELETE FROM push_subs').run();
+    const ind = db.prepare(`INSERT INTO push_subs (id, endpoint, p256dh, auth, created_at, last_ok, fails)
+      VALUES (?,?,?,?,?,?,?)`);
+    // `id` er sha256 af endepunktet - som serveren selv laver dem.
+    const hash = (s) => createHash('sha256').update(s, 'utf8').digest('hex');
+    const e1 = 'https://web.push.apple.com/hemmeligt-et';
+    const e2 = 'https://web.push.apple.com/hemmeligt-to';
+    ind.run(hash(e1), e1, 'x', 'y', 1000, 2000, 0);
+    ind.run(hash(e2), e2, 'x', 'y', 3000, null, 4);
+  });
+
+  const d = await J('/api/v1/push');
+  assert.equal(d.devices, 2);
+  assert.equal(d.subscriptions.length, 2, 'listen kommer med, ikke bare tallet');
+
+  // Værtsnavn og tilstand - aldrig endepunktet, som ER hemmeligheden.
+  assert.ok(!JSON.stringify(d).includes('hemmeligt-'), 'endepunktet må ikke sendes ud');
+  assert.equal(d.subscriptions[0].service, 'web.push.apple.com');
+  assert.equal(d.subscriptions[0].lastOk, 2000);
+  assert.equal(d.subscriptions[1].lastOk, null, 'en, der aldrig har kvitteret');
+  assert.equal(d.subscriptions[1].fails, 4);
+
+  // Fjern én på dens id - hashen, ikke adressen.
+  const r = await fetch(`${BASE}/api/v1/push`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', cookie },
+    body: JSON.stringify({ id: d.subscriptions[1].id }),
+  });
+  assert.equal(r.status, 200);
+  const efter = await J('/api/v1/push');
+  assert.equal(efter.devices, 1, 'kun den ene blev fjernet');
+  assert.equal(efter.subscriptions[0].id, d.subscriptions[0].id, 'og det var den rigtige');
 });
