@@ -621,6 +621,38 @@ async function bindData() {
     a.click();
     a.remove();
   };
+  /* ---- fanerne i indstillingerne ------------------------------------ */
+
+  /*
+   * Valget bor i localStorage, ikke i `state`: det afhaenger af, hvad man
+   * sidst var i gang med paa DENNE maskine, ikke af kontoen - samme
+   * begrundelse som temaet og den skjulte sidemenu (RUNE-ERFARINGER §9f).
+   */
+  const faner = [...document.querySelectorAll('.fane')].map((el) => el.dataset.fane);
+  const visFane = (id) => {
+    /* Findes den gemte fane ikke, falder vi tilbage til den foerste. Ellers
+       aabner man indstillingerne og ser en TOM side - fx hvis en fane engang
+       forsvinder, eller navnet aendrer sig. */
+    const valgt = faner.includes(id) ? id : faner[0];
+    document.querySelectorAll('.fane').forEach((el) => { el.hidden = el.dataset.fane !== valgt; });
+    document.querySelectorAll('.fanebtn').forEach((el) => {
+      const paa = el.dataset.fane === valgt;
+      el.classList.toggle('on', paa);
+      el.setAttribute('aria-selected', paa ? 'true' : 'false');
+    });
+    try { localStorage.setItem('doda_settings_fane', valgt); } catch { /* privat */ }
+    // En fane, man skifter til, skal begynde ved sin foerste overskrift - ikke
+    // midt i, fordi den forrige var laengere.
+    tilToppen();
+  };
+
+  let gemt = null;
+  try { gemt = localStorage.getItem('doda_settings_fane'); } catch { /* privat */ }
+  visFane(gemt || faner[0]);
+  document.querySelectorAll('.fanebtn').forEach((el) => {
+    el.addEventListener('click', () => visFane(el.dataset.fane));
+  });
+
   /* ---- Logbook: start forfra, eller slet ---------------------------- */
 
   const resetBack = document.getElementById('logResetBack');

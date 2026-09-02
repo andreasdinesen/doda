@@ -848,3 +848,46 @@ test('en stjerne slår et tidspunkt - den er brugerens eget råb', async () => {
     .map((i) => i.id);
   assert.ok(ider.indexOf(stjernet) < ider.indexOf(haster), 'stjernen vinder');
 });
+
+test('en gentagelse kan slettes HELT - eller kun stoppes', async () => {
+  /*
+   * »Jeg mangler en slette knap på en recurring opgave, så jeg kan slette den
+   * helt« (Andreas, 02-09-2026).
+   *
+   * Forskellen er den ÅBNE forekomst. At stoppe en vane er ikke det samme som
+   * at slette det, man allerede har taget på sig — men der var ingen vej til
+   * det sidste uden bagefter at finde den efterladte opgave og slette den for
+   * sig.
+   */
+  const slet = (id, krop) => fetch(`${BASE}/api/v1/recurrences/${id}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', cookie },
+    body: JSON.stringify(krop || {}),
+  }).then((r) => r.json());
+
+  // 1. STOP: vanen ophører, opgaven bliver som en almindelig.
+  const a = await J('/api/v1/capture', { text: 'vand blomster !every day', createNew: true });
+  const aabenA = a.item.id;
+  await slet(a.item.recurrence_id, {});
+  const efterStop = (await J(`/api/v1/items/${aabenA}`)).item;
+  assert.ok(efterStop, 'opgaven findes stadig');
+  assert.equal(efterStop.recurrence_id, null, 'men hører ikke længere til en gentagelse');
+  assert.equal(efterStop.defer_date, null, 'og er ikke længere skjult');
+
+  // 2. SLET: også den åbne.
+  const b = await J('/api/v1/capture', { text: 'tøm skraldespand !every day', createNew: true });
+  const aabenB = b.item.id;
+  const svar = await slet(b.item.recurrence_id, { alsoOpen: true });
+  assert.equal(svar.deletedOpen, true, 'den siger, at den tog opgaven med');
+
+  const r = await fetch(`${BASE}/api/v1/items/${aabenB}`, { headers: { cookie } });
+  assert.equal(r.status, 404, 'opgaven er væk');
+
+  // Og synkroniseringen skal kunne fortælle andre enheder det.
+  const aendringer = await J('/api/v1/changes?since=0');
+  assert.ok(aendringer.deleted.includes(aabenB), 'meldt som slettet');
+
+  // Begge gentagelser er væk fra listen.
+  const ider = (await J('/api/v1/recurrences')).recurrences.map((x) => x.id);
+  assert.ok(!ider.includes(a.item.recurrence_id) && !ider.includes(b.item.recurrence_id));
+});

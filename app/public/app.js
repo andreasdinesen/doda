@@ -1032,7 +1032,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 74;
+const APP_VERSION = 75;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -4198,7 +4198,30 @@ function sideSettings() {
   return `<section class="page">
     <div class="page-head"><h1>Settings</h1><p class="lead">${esc(BESKRIVELSER.settings)}</p></div>
 
-    <div class="card"><h2>Theme</h2>
+    ${/*
+      * Faner, fordi siden var vokset til SEKSTEN afsnit i én stribe: man rullede
+      * forbi ti ting for at naa den ellevte (RUNE-ERFARINGER §9f, Andreas
+      * 02-09-2026).
+      *
+      * ALT tegnes, ét vises. Fanerne skjuler med `hidden`; de udelader intet fra
+      * dokumentet. Grunden er ikke ryddelighed, men BINDINGERNE: bindSettings()
+      * binder tredive elementer paa deres id. Tegnede vi kun den aabne fane,
+      * fandtes halvdelen ikke, og hver eneste binding skulle laves om til noget,
+      * der koerer igen ved hvert faneskift - den slags omskrivning taber en knap
+      * undervejs UDEN at noget fejler.
+      *
+      * Prisen er, at de skjulte afsnit stadig tegnes. Det gjorde de i forvejen.
+      */ ''}
+    <div class="faner" role="tablist">
+      <button class="fanebtn" data-fane="general">General</button>
+      <button class="fanebtn" data-fane="account">Account</button>
+      <button class="fanebtn" data-fane="links">Connections</button>
+      <button class="fanebtn" data-fane="keys">Keys</button>
+      <button class="fanebtn" data-fane="data">Data</button>
+    </div>
+
+    <div class="fane" data-fane="general">
+<div class="card"><h2>Theme</h2>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
         ${valg.map(([v, l]) => `<button class="btn ${tema === v ? 'primary' : ''}" data-tema="${v}">${l}</button>`).join('')}
       </div></div>
@@ -4221,7 +4244,23 @@ function sideSettings() {
     : 'Nothing is deleted either way: this only hides the ways in.'}</p>
     </div>
 
-    <div class="card"><h2>Passkeys</h2>
+    <div class="card"><h2>Notifications</h2>
+      <p class="lead" style="margin:6px 0 0">A push notification when a task with a
+      <strong>time</strong> comes due — also when doda is closed. The push itself is
+      empty: your phone asks doda what to show, so the push service never learns what
+      your tasks are called.</p>
+      <div id="pushBox">Loading…</div>
+      <p class="gate-note" style="text-align:left">If you already subscribe with your
+      calendar, you do not need this — that reminder works without any permission at all.</p>
+    </div>
+
+    <div class="card"><h2>About</h2>
+      <p class="lead" style="margin-top:6px">doda version ${APP_VERSION}.
+      ${state.config.secureContext ? 'Secure connection (https).' : 'Plain http — passkeys and notifications are unavailable here.'}</p></div>
+    </div>
+
+    <div class="fane" data-fane="account">
+<div class="card"><h2>Passkeys</h2>
       <p class="lead" style="margin:6px 0 0">Sign in with Touch ID, Face ID or a security
       key instead of typing your password.</p>
       <div id="pkList" class="keylist">Loading…</div>
@@ -4237,7 +4276,59 @@ function sideSettings() {
       <div id="totpBox">Loading…</div>
     </div>
 
-    <div class="card"><h2>Access keys</h2>
+    <div class="card"><h2>Change password</h2>
+      <p class="gate-error" id="pwMsg" hidden></p>
+      <form id="pwForm" style="margin-top:12px">
+        <label class="field"><span>Current password</span>
+          <input class="input" id="pwCur" type="password" autocomplete="current-password" required></label>
+        <label class="field"><span>New password (at least 8 characters)</span>
+          <input class="input" id="pwNew" type="password" autocomplete="new-password" required></label>
+        <button class="btn primary" type="submit">Change password</button>
+      </form>
+      <p class="gate-note" style="text-align:left">Every other session is signed out when the password changes.</p>
+    </div>
+
+    <div class="card"><h2>Account</h2>
+      <p class="lead" style="margin:6px 0 14px">Signed in as <strong>${esc(visNavn(state.user.username))}</strong>.</p>
+      <button class="btn" id="logoutBtn">Sign out</button></div>
+    </div>
+
+    <div class="fane" data-fane="links">
+<div class="card"><h2>Sagu</h2>
+      <p class="lead" style="margin:6px 0 0">Sagu is the sister app where the notes live.
+      Connect it, and you can search your notes when you link one to a task — or create a
+      note in the right notebook without leaving doda. The two are tied together with
+      <strong>links</strong>: nothing is synchronised, so neither can quietly overwrite
+      the other.</p>
+      <div id="saguBox">Loading…</div>
+      <p class="gate-note" style="text-align:left">In Sagu: Settings → Access keys →
+      create a <strong>link</strong> key. That one can search and create notes — and
+      <strong>not delete anything</strong>. The key stays on this server and is never
+      sent back to this browser.</p>
+    </div>
+
+    <div class="card"><h2>Notion</h2>
+      <p class="lead" style="margin:6px 0 0">Connect Notion, and you can search your
+      pages from inside doda when you link one to a task — and the chip gets the page's
+      real title instead of a row of hex.</p>
+      <div id="notionBox">Loading…</div>
+      <p class="gate-note" style="text-align:left">Create an <strong>internal
+      integration</strong> at notion.so/my-integrations, copy its secret, and paste it
+      here. <strong>Notion only lets an integration see pages you share with it</strong> —
+      open a page, ⋯ → Connections → add yours. Sharing a parent page covers everything
+      under it. The token stays on the server and is never sent back to this browser.</p>
+    </div>
+
+    <div class="card"><h2>Calendar subscription</h2>
+      <p class="lead" style="margin:6px 0 12px">A feed your calendar app can follow.
+      It contains <strong>only real deadlines</strong> — never your whole task list.
+      The address is the secret; revoking it stops the old one immediately.</p>
+      <div id="calBox">Loading…</div>
+    </div>
+    </div>
+
+    <div class="fane" data-fane="keys">
+<div class="card"><h2>Access keys</h2>
       <p class="lead" style="margin:6px 0 0">For iOS Shortcuts, Siri and anything else
       that talks to doda from outside. One key per device or purpose, so you can revoke
       a single one without touching the rest.</p>
@@ -4272,50 +4363,10 @@ function sideSettings() {
       connector with the address <code>${esc(location.origin)}/mcp</code>. Claude finds
       the rest by itself and sends you here to approve it.</p>
     </div>
-
-    <div class="card"><h2>Sagu</h2>
-      <p class="lead" style="margin:6px 0 0">Sagu is the sister app where the notes live.
-      Connect it, and you can search your notes when you link one to a task — or create a
-      note in the right notebook without leaving doda. The two are tied together with
-      <strong>links</strong>: nothing is synchronised, so neither can quietly overwrite
-      the other.</p>
-      <div id="saguBox">Loading…</div>
-      <p class="gate-note" style="text-align:left">In Sagu: Settings → Access keys →
-      create a <strong>link</strong> key. That one can search and create notes — and
-      <strong>not delete anything</strong>. The key stays on this server and is never
-      sent back to this browser.</p>
     </div>
 
-    <div class="card"><h2>Notion</h2>
-      <p class="lead" style="margin:6px 0 0">Connect Notion, and you can search your
-      pages from inside doda when you link one to a task — and the chip gets the page's
-      real title instead of a row of hex.</p>
-      <div id="notionBox">Loading…</div>
-      <p class="gate-note" style="text-align:left">Create an <strong>internal
-      integration</strong> at notion.so/my-integrations, copy its secret, and paste it
-      here. <strong>Notion only lets an integration see pages you share with it</strong> —
-      open a page, ⋯ → Connections → add yours. Sharing a parent page covers everything
-      under it. The token stays on the server and is never sent back to this browser.</p>
-    </div>
-
-    <div class="card"><h2>Notifications</h2>
-      <p class="lead" style="margin:6px 0 0">A push notification when a task with a
-      <strong>time</strong> comes due — also when doda is closed. The push itself is
-      empty: your phone asks doda what to show, so the push service never learns what
-      your tasks are called.</p>
-      <div id="pushBox">Loading…</div>
-      <p class="gate-note" style="text-align:left">If you already subscribe with your
-      calendar, you do not need this — that reminder works without any permission at all.</p>
-    </div>
-
-    <div class="card"><h2>Calendar subscription</h2>
-      <p class="lead" style="margin:6px 0 12px">A feed your calendar app can follow.
-      It contains <strong>only real deadlines</strong> — never your whole task list.
-      The address is the secret; revoking it stops the old one immediately.</p>
-      <div id="calBox">Loading…</div>
-    </div>
-
-    <div class="card"><h2>Logbook</h2>
+    <div class="fane" data-fane="data">
+<div class="card"><h2>Logbook</h2>
       <p class="lead" style="margin:6px 0 14px">The Logbook keeps everything you have
       finished. Two ways to start over — one you can undo, one you cannot.</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -4351,26 +4402,8 @@ function sideSettings() {
       file can be run twice without creating duplicates. Large files are sent in
       portions, so nothing is rejected for being too big.</p>
     </div>
-
-    <div class="card"><h2>Change password</h2>
-      <p class="gate-error" id="pwMsg" hidden></p>
-      <form id="pwForm" style="margin-top:12px">
-        <label class="field"><span>Current password</span>
-          <input class="input" id="pwCur" type="password" autocomplete="current-password" required></label>
-        <label class="field"><span>New password (at least 8 characters)</span>
-          <input class="input" id="pwNew" type="password" autocomplete="new-password" required></label>
-        <button class="btn primary" type="submit">Change password</button>
-      </form>
-      <p class="gate-note" style="text-align:left">Every other session is signed out when the password changes.</p>
     </div>
 
-    <div class="card"><h2>Account</h2>
-      <p class="lead" style="margin:6px 0 14px">Signed in as <strong>${esc(visNavn(state.user.username))}</strong>.</p>
-      <button class="btn" id="logoutBtn">Sign out</button></div>
-
-    <div class="card"><h2>About</h2>
-      <p class="lead" style="margin-top:6px">doda version ${APP_VERSION}.
-      ${state.config.secureContext ? 'Secure connection (https).' : 'Plain http — passkeys and notifications are unavailable here.'}</p></div>
   </section>`;
 }
 
@@ -5870,6 +5903,7 @@ function aabnGentagelse(r) {
 
     <div class="modal-foot" style="flex-wrap:wrap">
       <button class="btn ghost" id="rDelete">Stop recurring</button>
+      <button class="btn ghost" id="rWipe">Delete…</button>
       <button class="btn ghost" id="rSkip"${r.paused ? ' disabled' : ''}>Skip this one</button>
       <button class="btn ghost" id="rPause">${r.paused ? 'Resume' : 'Pause'}</button>
       <span style="flex:1"></span>
@@ -6016,6 +6050,24 @@ function aabnGentagelse(r) {
   host.querySelector('#rDelete').addEventListener('click', async () => {
     await api('DELETE', `/api/v1/recurrences/${r.id}`, {});
     await efter('Stopped recurring — the open one is now a normal task');
+  });
+
+  /*
+   * Helt vaek: baade vanen og den opgave, der ligger og venter.
+   *
+   * Bekraeftelse, fordi den ikke kan fortrydes - og fordi knappen staar lige
+   * ved siden af »Stop recurring«, som netop BEHOLDER opgaven. To knapper, der
+   * begge fjerner noget, skal sige praecis hvad de tager.
+   */
+  host.querySelector('#rWipe').addEventListener('click', async () => {
+    const aaben = r.open_item_id
+      ? '\n\nDen åbne opgave slettes med.'
+      : '';
+    if (!window.confirm(`Slet »${r.title}« helt?${aaben}\n\nDet kan ikke fortrydes.`)) return;
+    try {
+      await api('DELETE', `/api/v1/recurrences/${r.id}`, { alsoOpen: true });
+      await efter('Deleted');
+    } catch (ex) { toast(ex.message); }
   });
 
   host.querySelector('#rTitle').focus();
@@ -7359,6 +7411,38 @@ async function bindData() {
     a.click();
     a.remove();
   };
+  /* ---- fanerne i indstillingerne ------------------------------------ */
+
+  /*
+   * Valget bor i localStorage, ikke i `state`: det afhaenger af, hvad man
+   * sidst var i gang med paa DENNE maskine, ikke af kontoen - samme
+   * begrundelse som temaet og den skjulte sidemenu (RUNE-ERFARINGER §9f).
+   */
+  const faner = [...document.querySelectorAll('.fane')].map((el) => el.dataset.fane);
+  const visFane = (id) => {
+    /* Findes den gemte fane ikke, falder vi tilbage til den foerste. Ellers
+       aabner man indstillingerne og ser en TOM side - fx hvis en fane engang
+       forsvinder, eller navnet aendrer sig. */
+    const valgt = faner.includes(id) ? id : faner[0];
+    document.querySelectorAll('.fane').forEach((el) => { el.hidden = el.dataset.fane !== valgt; });
+    document.querySelectorAll('.fanebtn').forEach((el) => {
+      const paa = el.dataset.fane === valgt;
+      el.classList.toggle('on', paa);
+      el.setAttribute('aria-selected', paa ? 'true' : 'false');
+    });
+    try { localStorage.setItem('doda_settings_fane', valgt); } catch { /* privat */ }
+    // En fane, man skifter til, skal begynde ved sin foerste overskrift - ikke
+    // midt i, fordi den forrige var laengere.
+    tilToppen();
+  };
+
+  let gemt = null;
+  try { gemt = localStorage.getItem('doda_settings_fane'); } catch { /* privat */ }
+  visFane(gemt || faner[0]);
+  document.querySelectorAll('.fanebtn').forEach((el) => {
+    el.addEventListener('click', () => visFane(el.dataset.fane));
+  });
+
   /* ---- Logbook: start forfra, eller slet ---------------------------- */
 
   const resetBack = document.getElementById('logResetBack');

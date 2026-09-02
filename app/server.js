@@ -4108,13 +4108,32 @@ const MOENSTRE = [
     async kald(req, res, ctx) {
       const auth = godkend(req, res, 'write');
       if (!auth) return;
-      await readJsonBody(req, auth.viaToken);
-      db.prepare('UPDATE recurrences SET deleted = 1, updated_at = ? WHERE id = ?').run(now(), ctx.params[0]);
+      const body = await readJsonBody(req, auth.viaToken);
+      const t = now();
+      db.prepare('UPDATE recurrences SET deleted = 1, updated_at = ? WHERE id = ?').run(t, ctx.params[0]);
       const aaben = aabenForekomst(ctx.params[0]);
-      // Den aabne forekomst bliver staaende som en almindelig opgave - man
-      // stopper en vane, man sletter ikke det, der ligger og venter.
-      if (aaben) db.prepare('UPDATE items SET recurrence_id = NULL, defer_date = NULL WHERE id = ?').run(aaben.id);
-      sendJson(res, 200, { ok: true });
+      /*
+       * To slags »vaek«, og forskellen er den aabne forekomst.
+       *
+       * STOP (standard): vanen ophoerer, men den opgave, der ligger og venter,
+       * bliver staaende som en almindelig - man stopper en vane, man sletter
+       * ikke det, man allerede har taget paa sig.
+       *
+       * SLET (`alsoOpen`): ogsaa den. Andreas bad om vejen 02-09-2026 - der var
+       * ingen maade at faa en gentagelse HELT vaek paa uden bagefter at finde
+       * den efterladte opgave og slette den for sig.
+       *
+       * `deleted = 1` og ikke DELETE FROM: synkroniseringen skal kunne
+       * fortaelle andre enheder, at raekken er vaek.
+       */
+      if (aaben) {
+        if (body && body.alsoOpen) {
+          db.prepare('UPDATE items SET deleted = 1, updated_at = ? WHERE id = ?').run(t, aaben.id);
+        } else {
+          db.prepare('UPDATE items SET recurrence_id = NULL, defer_date = NULL WHERE id = ?').run(aaben.id);
+        }
+      }
+      sendJson(res, 200, { ok: true, deletedOpen: !!(aaben && body && body.alsoOpen) });
     },
   },
   {

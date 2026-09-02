@@ -1753,6 +1753,56 @@ blandt dem, der ikke har et tidspunkt at rette sig efter.
 Ellers beviser den kun, at listen ikke blev rodet rundt — ikke at den blev
 sorteret.
 
+## 6y · Faner i indstillingerne (v75)
+
+Siden var vokset til **seksten afsnit** i én stribe. Opskriften står i
+RUNE-ERFARINGER §9f — Sagu havde nøjagtig samme tal, og Andreas bad om, at det
+bliver måden i alle runerne.
+
+Dodas inddeling: **General · Account · Connections · Keys · Data**.
+
+**Alt tegnes, ét vises** (`hidden`). Ikke af ryddelighed: `bindSettings()`
+binder tredive elementer på deres `id`. Tegnede vi kun den åbne fane, fandtes
+halvdelen ikke, og hver binding skulle laves om til noget, der kører igen ved
+hvert faneskift — den slags omskrivning taber en knap undervejs, **uden at
+noget fejler**.
+
+De fire fælder fra §9f er fulgt: valget i `localStorage` (det hører til
+maskinen, ikke kontoen), fald tilbage til første fane når en gemt ikke findes,
+rækken ruller vandret frem for at ombryde, og understregningen tegnes altid
+gennemsigtig, så rækken ikke hopper. Og der rulles til toppen ved skift.
+
+### Sådan blev det efterprøvet
+
+Opdelingen flytter blokke rundt i én stor skabelon, og en blok, der ryger ved
+et uheld, ser ud som ingenting. Derfor blev kortene skåret ud **programmatisk**,
+og delene sat sammen igen og sammenlignet med originalen, **før** noget blev
+omordnet:
+
+    assert hoved + ''.join(stykker) + hale == krop
+
+Bagefter: 16 afsnit stadig til stede, 5 faner i DOM'en med 1 synlig, og hver
+`getElementById` i `bindSettings()` har sit element i markup'en — altså også
+dem i faner, der var **skjult ved tegningen**.
+
+## 6z · To slags »væk« for en gentagelse (v75)
+
+»Jeg mangler en slette-knap, så jeg kan slette den helt« (Andreas,
+02-09-2026). Forskellen er den **åbne forekomst**:
+
+- **Stop recurring** — vanen ophører, opgaven bliver stående som en almindelig.
+  Man stopper en vane; man sletter ikke det, man allerede har taget på sig.
+- **Delete** — også den. Der var ingen vej til det uden bagefter at finde den
+  efterladte opgave og slette den for sig.
+
+Bekræftelse på den sidste, netop fordi den står ved siden af en, der
+**beholder** opgaven. To knapper, der begge fjerner noget, skal sige præcis
+hvad de tager.
+
+`deleted = 1` frem for `DELETE FROM`: synkroniseringen skal kunne fortælle
+andre enheder, at rækken er væk — der er test på, at id'et kommer med i
+`/changes`.
+
 ## 7 · Uden for scope
 
 Handover §10 gælder uændret: ingen flere brugere, ingen

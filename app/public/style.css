@@ -609,6 +609,38 @@ h2.group {
 
 .group-count { color: var(--muted); opacity: .65; font-weight: 500; }
 
+/* ------------------------------------------------- faner i indstillinger */
+
+/* Raekken RULLER vandret paa en smal skaerm frem for at ombryde: to linjer
+   faner flytter indholdet ned og ligner to raekker knapper (§9f). */
+.faner {
+  display: flex;
+  gap: 4px;
+  margin: 4px 0 22px;
+  border-bottom: 1px solid var(--border-soft);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.faner::-webkit-scrollbar { display: none; }
+
+.fanebtn {
+  flex: none;
+  padding: 9px 14px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  color: var(--muted);
+  white-space: nowrap;
+  /* Understregningen tegnes ALTID - gennemsigtig, naar fanen ikke er valgt.
+     Ellers hopper raekken en pixel ved hvert faneskift. */
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.fanebtn:hover { color: var(--text); }
+.fanebtn.on { color: var(--accent-text); border-bottom-color: var(--accent); }
+
 /* Foldeknappen ser ud som en gruppeoverskrift, fordi den ER en - den kan bare
    ogsaa trykkes paa. `font: inherit` foerst, ellers giver browseren knappen
    sin egen skrift og h2.group-reglerne rammer forbi. */

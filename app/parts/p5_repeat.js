@@ -128,6 +128,7 @@ function aabnGentagelse(r) {
 
     <div class="modal-foot" style="flex-wrap:wrap">
       <button class="btn ghost" id="rDelete">Stop recurring</button>
+      <button class="btn ghost" id="rWipe">Delete…</button>
       <button class="btn ghost" id="rSkip"${r.paused ? ' disabled' : ''}>Skip this one</button>
       <button class="btn ghost" id="rPause">${r.paused ? 'Resume' : 'Pause'}</button>
       <span style="flex:1"></span>
@@ -274,6 +275,24 @@ function aabnGentagelse(r) {
   host.querySelector('#rDelete').addEventListener('click', async () => {
     await api('DELETE', `/api/v1/recurrences/${r.id}`, {});
     await efter('Stopped recurring — the open one is now a normal task');
+  });
+
+  /*
+   * Helt vaek: baade vanen og den opgave, der ligger og venter.
+   *
+   * Bekraeftelse, fordi den ikke kan fortrydes - og fordi knappen staar lige
+   * ved siden af »Stop recurring«, som netop BEHOLDER opgaven. To knapper, der
+   * begge fjerner noget, skal sige praecis hvad de tager.
+   */
+  host.querySelector('#rWipe').addEventListener('click', async () => {
+    const aaben = r.open_item_id
+      ? '\n\nDen åbne opgave slettes med.'
+      : '';
+    if (!window.confirm(`Slet »${r.title}« helt?${aaben}\n\nDet kan ikke fortrydes.`)) return;
+    try {
+      await api('DELETE', `/api/v1/recurrences/${r.id}`, { alsoOpen: true });
+      await efter('Deleted');
+    } catch (ex) { toast(ex.message); }
   });
 
   host.querySelector('#rTitle').focus();
