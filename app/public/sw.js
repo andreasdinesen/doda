@@ -6,7 +6,7 @@
  * browserens cache, og SW'en kan servere en gammel app.js i det uendelige
  * (RUNE-ERFARINGER §5). */
 
-const VERSION = 79;
+const VERSION = 80;
 const CACHE = `doda-v${VERSION}`;
 
 // Praecis de samme URL'er som index.html henter - ellers ligger der to
@@ -124,6 +124,27 @@ self.addEventListener('fetch', (e) => {
  * showNotification til sidst - ogsaa naar hentningen fejler. */
 self.addEventListener('push', (e) => {
   e.waitUntil((async () => {
+    /*
+     * FOERST af alt: vis noget.
+     *
+     * Timeout-rettelsen i v79 hjalp ikke, og saa er spoergsmaalet ikke
+     * laengere, hvor LANG TID handleren har - men om den overhovedet bliver
+     * vaekket. Den her notifikation vises, foer der roeres ved noget som helst
+     * andet, og erstattes af den rigtige med samme `tag`, saa brugeren kun ser
+     * én (Andreas, 02-09-2026).
+     *
+     * Kommer DEN ikke frem, naar pushen aldrig service workeren, og saa er der
+     * intet i doda at rette.
+     */
+    const TAG = 'doda-nu';
+    try {
+      await self.registration.showNotification('doda', {
+        body: 'Noget forfalder nu.',
+        tag: TAG, icon: './icon-192.png', badge: './icon-192.png',
+        data: { url: './' },
+      });
+    } catch { /* saa proever vi alligevel nedenfor */ }
+
     let items = [];
     let review = false;
     /*
@@ -158,7 +179,7 @@ self.addEventListener('push', (e) => {
     if (review) {
       return self.registration.showNotification('Weekly review', {
         body: 'It is the day you set aside for it. Open doda to start.',
-        tag: 'doda-review', icon: './icon-192.png', badge: './icon-192.png',
+        tag: TAG, icon: './icon-192.png', badge: './icon-192.png',
         data: { url: './?view=review' },
       });
     }
@@ -167,20 +188,20 @@ self.addEventListener('push', (e) => {
       const it = items[0];
       return self.registration.showNotification(it.title, {
         body: it.due_time ? `Due at ${it.due_time}` : 'Due now',
-        tag: `doda-${it.id}`, icon: './icon-192.png', badge: './icon-192.png',
+        tag: TAG, icon: './icon-192.png', badge: './icon-192.png',
         data: { url: './' },
       });
     }
     if (items.length > 1) {
       return self.registration.showNotification(`${items.length} tasks are due`, {
         body: items.map((i) => i.title).join(' · ').slice(0, 120),
-        tag: 'doda-many', icon: './icon-192.png', badge: './icon-192.png',
+        tag: TAG, icon: './icon-192.png', badge: './icon-192.png',
         data: { url: './' },
       });
     }
     return self.registration.showNotification('doda', {
       body: 'Something is due — open doda to see it.',
-      tag: 'doda-generisk', icon: './icon-192.png', data: { url: './' },
+      tag: TAG, icon: './icon-192.png', data: { url: './' },
     });
   })());
 });

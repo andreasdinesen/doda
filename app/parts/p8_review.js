@@ -1271,7 +1271,21 @@ async function bindPush() {
           body: 'Kom denne frem? Så virker visningen — og fejlen ligger i leveringen.',
           tag: 'doda-lokal', icon: './icon-192.png', badge: './icon-192.png',
         });
-        svar.innerHTML = `<p class="gate-note" style="text-align:left">Sendt uden om Apple.
+        /*
+         * Venter der en NY service worker, hoerer abonnementet til den gamle -
+         * og saa kan en push blive leveret til en worker, der er paa vej ud.
+         * Det er en tilstand, man ellers ikke kan se, og den forklarer »Apple
+         * kvitterer, men intet kommer frem«.
+         */
+        const venter = !!reg.waiting;
+        const aktiv = reg.active ? reg.active.state : 'ingen';
+        svar.innerHTML = `${venter
+    ? `<p class="gate-note" style="text-align:left"><strong>Der venter en ny udgave af doda</strong>
+        på at appen lukkes helt. Indtil da hører din notifikations-tilmelding til den gamle.
+        <strong>Luk doda helt</strong> (swipe den væk i app-skifteren), åbn den igen, og slå
+        notifikationer fra og til på denne enhed.</p>`
+    : ''}<p class="gate-note" style="text-align:left">Sendt uden om Apple. Service worker: ${
+  esc(aktiv)}${venter ? ', og en ny venter' : ''}.
           <strong>Kom den frem?</strong> Så viser iOS gerne doda, og fejlen ligger i leveringen.
           <strong>Kom den ikke?</strong> Så er det telefonen, der holder den tilbage — se efter et
           måne-ikon (Fokus) og under Indstillinger → Notifikationer → doda. Notifikationer fra en

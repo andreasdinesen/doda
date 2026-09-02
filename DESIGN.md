@@ -1887,10 +1887,26 @@ besked — den fortæller stadig, at noget forfalder, og appen er ét tryk væk.
 bestemmer.** Det er stadig det rigtige valg her (push-tjenesten skal ikke kende
 opgavernes navne, §v43), men hentningen må aldrig kunne bruge hele tidsrummet.
 
-*Det er en hypotese.* Den passer på alt, vi har set — Apple kvitterer, iOS
-viser gerne, Mac'en henter over et hurtigere net — men den er ikke efterprøvet
-på selve telefonen. Hjælper den ikke, er næste spor, om push-hændelsen
-overhovedet når frem til service workeren.
+*Det var en hypotese, og den holdt ikke.* Rettelsen bliver stående — kaldet
+skal stadig ikke kunne bruge hele tidsrummet — men den var ikke årsagen.
+
+### Så: vækkes service workeren overhovedet?
+
+Handleren viser nu noget som **allerførste handling**, før den rører ved noget
+andet, og erstatter det med det rigtige via samme `tag`. Kommer dét ikke frem,
+når push-hændelsen aldrig frem, og så er der intet i doda at rette.
+
+**Og en tilstand, man ellers ikke kan se:** venter der en ny service worker på,
+at appen lukkes helt, hører abonnementet til den gamle. Push-tjenesten
+kvitterer stadig med `201`, men leveringen går til en worker på vej ud. Det
+passer på, at Mac'en virker — dér lukkes fanen jævnligt, mens en PWA på
+hjemmeskærmen kan ligge åben i dagevis.
+
+`reg.waiting` afslører det, og prøven siger det nu højt med den rækkefølge, der
+skal til: luk appen helt, åbn igen, slå til og fra, prøv.
+
+**Rettelser, der ikke virkede, skal stå i dokumentationen.** Ellers prøver den
+næste dem igen.
 
 ### Det, prøven ikke kan
 
