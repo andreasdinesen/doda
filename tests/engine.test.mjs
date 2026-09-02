@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
+import { createServer } from 'node:http';
 import assert from 'node:assert/strict';
 import test, { before, after } from 'node:test';
 
@@ -890,4 +891,57 @@ test('en gentagelse kan slettes HELT - eller kun stoppes', async () => {
   // Begge gentagelser er væk fra listen.
   const ider = (await J('/api/v1/recurrences')).recurrences.map((x) => x.id);
   assert.ok(!ider.includes(a.item.recurrence_id) && !ider.includes(b.item.recurrence_id));
+});
+
+test('push-prøven siger, HVAD der gik galt - ikke bare at intet skete', async () => {
+  /*
+   * »Jeg modtager ingen notifikationer på min iPhone« (Andreas, 02-09-2026).
+   *
+   * Uden en prøve er push et sort hul: fejler den, sker der ingenting, og der
+   * er intet at se på. »Der kom ingen notifikation« kan være fem ting —
+   * enheden er ikke tilmeldt, serveren kan ikke nå ud, nøglen er afvist,
+   * abonnementet er dødt, eller opgaven havde intet klokkeslæt.
+   *
+   * HVAD DER IKKE ER DÆKKET HER: et rigtigt svar fra Apple eller Google.
+   * `sendTil` taler kun https, og en attrap med et selvsigneret certifikat er
+   * mere maskineri, end det beviser. Første udgave af denne test kørte en
+   * http-attrap og så grøn ud — men kaldene nåede den aldrig, fordi
+   * protokol-vagten afviste dem først. Den prøvede altså noget andet, end den
+   * påstod.
+   *
+   * Det, der kan prøves, er dodas egen halvdel: at hver enhed rapporteres, at
+   * et ubrugeligt abonnement ryddes, og at adressen ikke lækker.
+   */
+  const test = () => J('/api/v1/push/test', {});
+
+  // Ingen enheder: en forklaring, ikke en tom liste.
+  const tom = await test();
+  assert.deepEqual(tom.devices, []);
+  assert.match(tom.hint, /No device/);
+
+  /*
+   * Abonnementer indsættes direkte - der findes ingen browser her til at lave
+   * dem. `http` er ugyldigt for web push, og `sendTil` melder det som `borte`:
+   * samme kodesti, som når en tjeneste svarer 410.
+   */
+  medDb((db) => {
+    const ind = db.prepare(`INSERT INTO push_subs (id, endpoint, p256dh, auth, created_at, fails)
+      VALUES (?,?,?,?,?,0)`);
+    ind.run('a1', 'http://push.eksempel.dk/hemmeligt-abonnement-1', 'x', 'y', Math.floor(Date.now() / 1000));
+    ind.run('a2', 'ikke-en-adresse', 'x', 'y', Math.floor(Date.now() / 1000));
+  });
+
+  const svar = await test();
+  assert.equal(svar.devices.length, 2, 'hver enhed rapporteres for sig');
+  for (const e of svar.devices) {
+    assert.equal(e.ok, false);
+    assert.equal(e.gone, true, 'et ubrugeligt abonnement meldes som væk');
+  }
+  // Adressen ER hemmeligheden bag et abonnement og må ikke stå på en skærm.
+  assert.ok(!JSON.stringify(svar).includes('hemmeligt-abonnement'),
+    'kun værtsnavnet, aldrig hele adressen');
+
+  // Og de ryddes, så »slå til igen« er den rigtige besked bagefter.
+  const tilbage = medDb((db) => db.prepare('SELECT id FROM push_subs').all().map((r) => r.id));
+  assert.deepEqual(tilbage, [], 'begge er ryddet');
 });

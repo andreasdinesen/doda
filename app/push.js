@@ -90,9 +90,26 @@ function opret(srv) {
         },
         timeout: 10000,
       }, (res) => {
-        res.resume();
-        ok({ ok: res.statusCode >= 200 && res.statusCode < 300,
-          borte: res.statusCode === 404 || res.statusCode === 410 });
+        /*
+         * Kroppen med, naar det gik galt. Apple og Google skriver HVORFOR de
+         * afviste (»VapidPkHashMismatch«, »BadJwtToken«), og uden den er en
+         * 400 bare en 400 - man kan ikke se, om det er noeglen, `sub` eller
+         * uret, der er galt.
+         */
+        const godt = res.statusCode >= 200 && res.statusCode < 300;
+        if (godt) {
+          res.resume();
+          ok({ ok: true, borte: false, status: res.statusCode });
+          return;
+        }
+        let tekst = '';
+        res.on('data', (d) => { if (tekst.length < 400) tekst += d; });
+        res.on('end', () => ok({
+          ok: false,
+          borte: res.statusCode === 404 || res.statusCode === 410,
+          status: res.statusCode,
+          besked: String(tekst).trim().slice(0, 200) || null,
+        }));
       });
       req.on('timeout', () => { req.destroy(); ok({ ok: false, borte: false }); });
       req.on('error', () => ok({ ok: false, borte: false }));

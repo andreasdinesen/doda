@@ -1803,6 +1803,58 @@ hvad de tager.
 andre enheder, at rækken er væk — der er test på, at id'et kommer med i
 `/changes`.
 
+## 6æ · Push var et sort hul (v76)
+
+»Jeg modtager ingen notifikationer på min iPhone« (Andreas, 02-09-2026).
+
+Der var **intet at se på**. Fejler en push, sker der ingenting: ingen fejl i
+appen, ingen markering ved enheden, kun en notifikation der udebliver. Og
+»der kom ingen« kan være fem ting:
+
+1. enheden er ikke tilmeldt
+2. serveren kan ikke nå push-tjenesten
+3. tjenesten afviser nøglen
+4. abonnementet er dødt
+5. opgaven havde intet klokkeslæt
+
+**`POST /api/v1/push/test`** sender én med det samme og svarer pr. enhed. Det
+skiller de fire første fra hinanden; den femte står i teksten under knappen.
+
+Push-tjenesternes **svartekst** kom ikke med før — en `400` var bare en `400`.
+Apple og Google skriver hvorfor (`VapidPkHashMismatch`, `BadJwtToken`), og
+uden den kan man ikke se, om det er nøglen, `sub` eller uret, der er galt.
+
+**Kun værtsnavnet i svaret, aldrig hele adressen.** Endepunktet *er*
+hemmeligheden bag et abonnement — den, der har den, kan sende til telefonen.
+
+### Det, prøven ikke kan
+
+`sendTil` taler kun https, så en attrap kræver et certifikat. Første udgave af
+testen kørte en http-attrap og **så grøn ud** — men kaldene nåede den aldrig,
+fordi protokol-vagten afviste dem først. Den prøvede altså noget andet, end den
+påstod. Testen dækker nu dodas egen halvdel og siger udtrykkeligt, at et
+rigtigt svar fra Apple ikke er med.
+
+### Stemplet sættes før afsendelsen
+
+`notified_at` sættes **før** pushen sendes, så en fejl ikke gentages hvert
+minut i en time (§v43). Prisen er, at en enkelt fejlet push er tabt for altid
+for netop den opgave. Det er stadig det rigtige valg, men det er værd at vide,
+når man leder: har opgaverne allerede været forsøgt, kommer de aldrig igen.
+
+## 6ø · To skærme, der sagde noget forskelligt (v76)
+
+Datochippen i redigeringsruden viste kun dagen (`2 Sep`), mens listen udenfor
+viste `today 20:20`. Tidspunktet var gemt hele tiden — `visDatoKort()` så bare
+aldrig på `due_time`.
+
+Det er en visningsfejl, men den kostede tid i en fejlsøgning: den så ud som
+årsagen til, at pushen udeblev. **To visninger af det samme felt, der ikke
+siger det samme, sender fejlsøgningen det forkerte sted hen.**
+
+Chippen for »hidden until« bruger samme funktion og har intet klokkeslæt —
+derfor er tiden en parameter, ikke noget funktionen selv finder.
+
 ## 7 · Uden for scope
 
 Handover §10 gælder uændret: ingen flere brugere, ingen

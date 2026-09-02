@@ -1032,7 +1032,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 75;
+const APP_VERSION = 76;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -3796,10 +3796,23 @@ async function aabnElement(listeItem) {
 
   /* --- chips ---------------------------------------------------- */
 
-  const visDatoKort = (iso) => {
+  /*
+   * Datoen paa en chip - MED klokkeslaettet, naar der er et.
+   *
+   * Chippen viste kun dagen, mens listen udenfor viste »today 20:20«. De to
+   * skaerme sagde altsaa noget forskelligt om den samme opgave, og man kunne
+   * med rimelighed tro, at tidspunktet var gaaet tabt (Andreas, 02-09-2026,
+   * mens vi ledte efter en push, der ikke kom).
+   *
+   * `tid` gives med, fordi chippen for »skjult indtil« bruger samme funktion
+   * og IKKE har et klokkeslaet - den skal stadig vise dagen alene.
+   */
+  const visDatoKort = (iso, tid) => {
     if (!iso) return null;
     const [y, m, d] = iso.split('-').map(Number);
-    return new Date(y, m - 1, d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    const dag = new Date(y, m - 1, d)
+      .toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    return tid ? `${dag} ${tid}` : dag;
   };
 
   const tegnChipsRow = () => {
@@ -3819,7 +3832,8 @@ async function aabnElement(listeItem) {
       <button class="chip flat${u.area_id ? ' set' : ''}" data-edit="area">${
   esc(omraade || 'no area')}</button>
       <button class="chip flat" data-edit="status">${esc(statusNavn(u.status))}</button>
-      <button class="chip flat${u.due_date ? ' set' : ''}" data-edit="due">${esc(visDatoKort(u.due_date) || 'no date')}</button>
+      <button class="chip flat${u.due_date ? ' set' : ''}" data-edit="due">${
+  esc(visDatoKort(u.due_date, u.due_time) || 'no date')}</button>
       ${u.defer_date ? `<button class="chip flat set" data-edit="defer">hidden until ${esc(visDatoKort(u.defer_date))}</button>`
     : '<button class="chip flat" data-edit="defer">no hide-until</button>'}
       ${kontekster.map((c) => `<button class="chip" data-ctx="${esc(c.id)}">#${esc(c.name)}</button>`).join('')}${nye}
@@ -7928,8 +7942,12 @@ async function bindPush() {
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px">
         <button class="btn ${tilmeldt ? '' : 'primary'}" id="pushBtn">
           ${tilmeldt ? 'Turn off on this device' : 'Turn on for this device'}</button>
+        ${/* Uden en proeve er push et sort hul: fejler den, sker der ingenting,
+             og der er intet at se paa (Andreas, 02-09-2026). */ ''}
+        ${d.devices ? '<button class="btn" id="pushTest">Send a test</button>' : ''}
         <span class="meta">${d.devices} device${d.devices === 1 ? '' : 's'} connected</span>
       </div>
+      <div id="pushSvar"></div>
       <label class="field" style="margin-top:14px"><span>Send it</span>
         <select class="input" id="pushLead" style="max-width:260px">
           ${[['0', 'At the time'], ['5', '5 minutes before'], ['15', '15 minutes before'],
@@ -7950,6 +7968,45 @@ async function bindPush() {
       await api('POST', '/api/v1/push', { lead: e.target.value });
       toast('Saved');
     });
+
+    /*
+     * Proeven svarer PR. ENHED og med push-tjenestens egen fejlkode.
+     *
+     * »Der kom ingen notifikation« kan vaere fem ting: enheden er ikke
+     * tilmeldt, serveren kan ikke naa ud, noeglen er afvist, abonnementet er
+     * doedt, eller opgaven havde intet klokkeslaet. Svaret her skiller de fire
+     * foerste fra hinanden - den femte staar i teksten under.
+     */
+    const test = boks.querySelector('#pushTest');
+    if (test) {
+      test.addEventListener('click', async () => {
+        const svar = boks.querySelector('#pushSvar');
+        test.disabled = true;
+        svar.innerHTML = '<p class="meta" style="margin-top:12px">Sender…</p>';
+        try {
+          const d2 = await api('POST', '/api/v1/push/test', {});
+          const raekker = (d2.devices || []).map((e2) => {
+            if (e2.ok) return `<li>${esc(e2.service)} — <strong>kom igennem</strong></li>`;
+            if (e2.gone) {
+              return `<li>${esc(e2.service)} — abonnementet findes ikke længere og er ryddet.
+                Slå til igen på den enhed.</li>`;
+            }
+            return `<li>${esc(e2.service)} — <strong>afvist${e2.status ? ` (${e2.status})` : ''}</strong>${
+  e2.message ? `: ${esc(e2.message)}` : ''}. Fejl i træk: ${e2.fails}.</li>`;
+          }).join('');
+          svar.innerHTML = raekker
+            ? `<ul class="meta" style="margin:12px 0 0;padding-left:20px">${raekker}</ul>
+               <p class="gate-note" style="text-align:left">Kom den igennem, men dukkede intet op
+               på telefonen: så er det iOS, der ikke viser den — tjek at doda er åbnet fra
+               <strong>hjemmeskærmen</strong>, og at Notifikationer er slået til for den under
+               Indstillinger.</p>`
+            : `<p class="meta" style="margin-top:12px">${esc(d2.hint || 'Ingen enheder tilmeldt.')}</p>`;
+        } catch (ex) {
+          svar.innerHTML = `<p class="meta" style="margin-top:12px">${esc(ex.message)}</p>`;
+        }
+        test.disabled = false;
+      });
+    }
   };
 
   try {

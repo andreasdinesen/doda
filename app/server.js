@@ -3043,6 +3043,57 @@ const ROUTES = {
     });
   },
 
+  /**
+   * Send en push NU, og sig hvad der skete.
+   *
+   * Uden den er push et sort hul: fejler den, sker der ingenting, og der er
+   * intet at se paa. Andreas fik ingen notifikationer paa sin iPhone
+   * 02-09-2026, og der var ingen maade at afgoere HVOR det gik galt - er
+   * enheden tilmeldt? naar serveren Apple? afviser Apple noeglen?
+   *
+   * Svaret siger det pr. enhed, med den fejlkode push-tjenesten gav. `borte`
+   * betyder 404/410: abonnementet findes ikke mere, og raekken ryddes - saa
+   * er »slå til igen« den rigtige besked frem for en fejl.
+   */
+  'POST /api/v1/push/test': async (req, res) => {
+    const user = godkend(req, res, 'write');
+    if (!user) return;
+    await readJsonBody(req);
+    const abon = db.prepare('SELECT id, endpoint, created_at, last_ok, fails FROM push_subs').all();
+    if (!abon.length) {
+      sendJson(res, 200, { devices: [], hint: 'No device is subscribed yet.' });
+      return;
+    }
+    const t = now();
+    const svar = [];
+    for (const a of abon) {
+      const r = await push.sendTil(a.endpoint);
+      if (r.borte) {
+        fjernAbonnement(a.id);
+      } else if (r.ok) {
+        db.prepare('UPDATE push_subs SET last_ok = ?, fails = 0 WHERE id = ?').run(t, a.id);
+      } else {
+        db.prepare('UPDATE push_subs SET fails = fails + 1 WHERE id = ?').run(a.id);
+      }
+      svar.push({
+        // Kun vaertsnavnet: hele adressen ER hemmeligheden bag et abonnement,
+        // og den skal ikke staa paa en skaerm, nogen kigger med paa.
+        service: (() => { try { return new URL(a.endpoint).host; } catch { return 'ukendt'; } })(),
+        ok: !!r.ok,
+        gone: !!r.borte,
+        status: r.status || null,
+        // Push-tjenestens egen forklaring - dét, der skiller »forkert noegle«
+        // fra »serveren kan ikke naa ud«.
+        message: r.besked || null,
+        subscribedAt: a.created_at,
+        lastOk: r.ok ? t : a.last_ok,
+        fails: r.ok ? 0 : a.fails + 1,
+      });
+    }
+    log(`push-proeve: ${svar.filter((x) => x.ok).length}/${svar.length} kom igennem`);
+    sendJson(res, 200, { devices: svar });
+  },
+
   'DELETE /api/v1/push': async (req, res) => {
     const user = godkend(req, res, 'write');
     if (!user) return;

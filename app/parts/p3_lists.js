@@ -705,10 +705,23 @@ async function aabnElement(listeItem) {
 
   /* --- chips ---------------------------------------------------- */
 
-  const visDatoKort = (iso) => {
+  /*
+   * Datoen paa en chip - MED klokkeslaettet, naar der er et.
+   *
+   * Chippen viste kun dagen, mens listen udenfor viste »today 20:20«. De to
+   * skaerme sagde altsaa noget forskelligt om den samme opgave, og man kunne
+   * med rimelighed tro, at tidspunktet var gaaet tabt (Andreas, 02-09-2026,
+   * mens vi ledte efter en push, der ikke kom).
+   *
+   * `tid` gives med, fordi chippen for »skjult indtil« bruger samme funktion
+   * og IKKE har et klokkeslaet - den skal stadig vise dagen alene.
+   */
+  const visDatoKort = (iso, tid) => {
     if (!iso) return null;
     const [y, m, d] = iso.split('-').map(Number);
-    return new Date(y, m - 1, d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    const dag = new Date(y, m - 1, d)
+      .toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    return tid ? `${dag} ${tid}` : dag;
   };
 
   const tegnChipsRow = () => {
@@ -728,7 +741,8 @@ async function aabnElement(listeItem) {
       <button class="chip flat${u.area_id ? ' set' : ''}" data-edit="area">${
   esc(omraade || 'no area')}</button>
       <button class="chip flat" data-edit="status">${esc(statusNavn(u.status))}</button>
-      <button class="chip flat${u.due_date ? ' set' : ''}" data-edit="due">${esc(visDatoKort(u.due_date) || 'no date')}</button>
+      <button class="chip flat${u.due_date ? ' set' : ''}" data-edit="due">${
+  esc(visDatoKort(u.due_date, u.due_time) || 'no date')}</button>
       ${u.defer_date ? `<button class="chip flat set" data-edit="defer">hidden until ${esc(visDatoKort(u.defer_date))}</button>`
     : '<button class="chip flat" data-edit="defer">no hide-until</button>'}
       ${kontekster.map((c) => `<button class="chip" data-ctx="${esc(c.id)}">#${esc(c.name)}</button>`).join('')}${nye}

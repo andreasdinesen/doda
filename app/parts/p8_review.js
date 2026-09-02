@@ -1138,8 +1138,12 @@ async function bindPush() {
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px">
         <button class="btn ${tilmeldt ? '' : 'primary'}" id="pushBtn">
           ${tilmeldt ? 'Turn off on this device' : 'Turn on for this device'}</button>
+        ${/* Uden en proeve er push et sort hul: fejler den, sker der ingenting,
+             og der er intet at se paa (Andreas, 02-09-2026). */ ''}
+        ${d.devices ? '<button class="btn" id="pushTest">Send a test</button>' : ''}
         <span class="meta">${d.devices} device${d.devices === 1 ? '' : 's'} connected</span>
       </div>
+      <div id="pushSvar"></div>
       <label class="field" style="margin-top:14px"><span>Send it</span>
         <select class="input" id="pushLead" style="max-width:260px">
           ${[['0', 'At the time'], ['5', '5 minutes before'], ['15', '15 minutes before'],
@@ -1160,6 +1164,45 @@ async function bindPush() {
       await api('POST', '/api/v1/push', { lead: e.target.value });
       toast('Saved');
     });
+
+    /*
+     * Proeven svarer PR. ENHED og med push-tjenestens egen fejlkode.
+     *
+     * »Der kom ingen notifikation« kan vaere fem ting: enheden er ikke
+     * tilmeldt, serveren kan ikke naa ud, noeglen er afvist, abonnementet er
+     * doedt, eller opgaven havde intet klokkeslaet. Svaret her skiller de fire
+     * foerste fra hinanden - den femte staar i teksten under.
+     */
+    const test = boks.querySelector('#pushTest');
+    if (test) {
+      test.addEventListener('click', async () => {
+        const svar = boks.querySelector('#pushSvar');
+        test.disabled = true;
+        svar.innerHTML = '<p class="meta" style="margin-top:12px">Sender…</p>';
+        try {
+          const d2 = await api('POST', '/api/v1/push/test', {});
+          const raekker = (d2.devices || []).map((e2) => {
+            if (e2.ok) return `<li>${esc(e2.service)} — <strong>kom igennem</strong></li>`;
+            if (e2.gone) {
+              return `<li>${esc(e2.service)} — abonnementet findes ikke længere og er ryddet.
+                Slå til igen på den enhed.</li>`;
+            }
+            return `<li>${esc(e2.service)} — <strong>afvist${e2.status ? ` (${e2.status})` : ''}</strong>${
+  e2.message ? `: ${esc(e2.message)}` : ''}. Fejl i træk: ${e2.fails}.</li>`;
+          }).join('');
+          svar.innerHTML = raekker
+            ? `<ul class="meta" style="margin:12px 0 0;padding-left:20px">${raekker}</ul>
+               <p class="gate-note" style="text-align:left">Kom den igennem, men dukkede intet op
+               på telefonen: så er det iOS, der ikke viser den — tjek at doda er åbnet fra
+               <strong>hjemmeskærmen</strong>, og at Notifikationer er slået til for den under
+               Indstillinger.</p>`
+            : `<p class="meta" style="margin-top:12px">${esc(d2.hint || 'Ingen enheder tilmeldt.')}</p>`;
+        } catch (ex) {
+          svar.innerHTML = `<p class="meta" style="margin-top:12px">${esc(ex.message)}</p>`;
+        }
+        test.disabled = false;
+      });
+    }
   };
 
   try {
