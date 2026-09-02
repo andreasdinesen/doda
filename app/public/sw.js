@@ -6,7 +6,7 @@
  * browserens cache, og SW'en kan servere en gammel app.js i det uendelige
  * (RUNE-ERFARINGER §5). */
 
-const VERSION = 78;
+const VERSION = 79;
 const CACHE = `doda-v${VERSION}`;
 
 // Praecis de samme URL'er som index.html henter - ellers ligger der to
@@ -126,11 +126,28 @@ self.addEventListener('push', (e) => {
   e.waitUntil((async () => {
     let items = [];
     let review = false;
+    /*
+     * Kaldet til serveren maa IKKE kunne bruge hele tidsrummet op.
+     *
+     * iOS giver en push-handler meget kort tid. Gaar kaldet gennem en tunnel
+     * til en hjemmeserver, kan det tage sekunder - og bliver handleren dræbt,
+     * inden der er vist noget, ser brugeren INTET. Apple har allerede
+     * kvitteret med 201, saa hverken serveren eller proeven opdager det:
+     * pushen forsvinder mellem tjenesten og skaermen (Andreas, 02-09-2026 -
+     * »Vis en her« kom frem, pushen gjorde ikke).
+     *
+     * To sekunder og saa videre. Uden svar vises den generelle besked, og den
+     * er stadig bedre end ingenting: den fortaeller, at noget forfalder, og
+     * appen er ét tryk vaek.
+     */
     try {
       // fetch i en service worker sender selv cookies til samme oprindelse.
-      const r = await fetch('./api/v1/due-now', { credentials: 'same-origin' });
-      if (r.ok) {
-        const d = await r.json();
+      const d = await Promise.race([
+        fetch('./api/v1/due-now', { credentials: 'same-origin' })
+          .then((r) => (r.ok ? r.json() : null)).catch(() => null),
+        new Promise((ok) => setTimeout(() => ok(null), 2000)),
+      ]);
+      if (d) {
         items = d.items || [];
         review = !!d.review;
       }

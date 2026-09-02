@@ -1869,6 +1869,29 @@ og en `sha256`-hash, som også er det, sletningen bruger. Markeringen af »denne
 enhed« regnes derfor i **browseren**: den hasher sit eget endepunkt og
 sammenligner. De to udregninger blev efterprøvet mod hinanden.
 
+### Den, der forsvinder mellem tjenesten og skærmen
+
+Med ét friskt abonnement svarede Apple stadig `201`, »Vis en her« kom frem — og
+pushen gjorde ikke. Så var både serveren og visningen renset, og der var kun ét
+led tilbage: **service workeren**.
+
+Den hentede `due-now` **før** den viste noget. iOS giver en push-handler meget
+kort tid, og går kaldet gennem en tunnel til en hjemmeserver, kan handleren nå
+at dø først. Apple har allerede kvitteret, så hverken serveren eller prøven
+opdager det.
+
+Kaldet er nu et kapløb med **to sekunder**. Uden svar vises den generelle
+besked — den fortæller stadig, at noget forfalder, og appen er ét tryk væk.
+
+**En tom push, der skal hente sit indhold, sætter en tidsgrænse, man ikke selv
+bestemmer.** Det er stadig det rigtige valg her (push-tjenesten skal ikke kende
+opgavernes navne, §v43), men hentningen må aldrig kunne bruge hele tidsrummet.
+
+*Det er en hypotese.* Den passer på alt, vi har set — Apple kvitterer, iOS
+viser gerne, Mac'en henter over et hurtigere net — men den er ikke efterprøvet
+på selve telefonen. Hjælper den ikke, er næste spor, om push-hændelsen
+overhovedet når frem til service workeren.
+
 ### Det, prøven ikke kan
 
 `sendTil` taler kun https, så en attrap kræver et certifikat. Første udgave af

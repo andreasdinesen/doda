@@ -1328,6 +1328,12 @@ async function bindPush() {
           svar.innerHTML = `<p class="meta" style="margin-top:12px">${esc(ex.message)}</p>`;
         }
         test.disabled = false;
+        /* Listen viser »sidst set«, og proeven har lige opdateret den. Uden
+           det her stod der »aldrig set i live« ved siden af »kom igennem«. */
+        const nu = boks.querySelector('#pushSvar').innerHTML;
+        await bindPush();
+        const igen = boks.querySelector('#pushSvar');
+        if (igen) igen.innerHTML = nu;
       });
     }
   };

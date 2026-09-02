@@ -1032,7 +1032,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 78;
+const APP_VERSION = 79;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -8132,6 +8132,12 @@ async function bindPush() {
           svar.innerHTML = `<p class="meta" style="margin-top:12px">${esc(ex.message)}</p>`;
         }
         test.disabled = false;
+        /* Listen viser »sidst set«, og proeven har lige opdateret den. Uden
+           det her stod der »aldrig set i live« ved siden af »kom igennem«. */
+        const nu = boks.querySelector('#pushSvar').innerHTML;
+        await bindPush();
+        const igen = boks.querySelector('#pushSvar');
+        if (igen) igen.innerHTML = nu;
       });
     }
   };
