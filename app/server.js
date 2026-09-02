@@ -3064,6 +3064,12 @@ const ROUTES = {
       sendJson(res, 200, { devices: [], hint: 'No device is subscribed yet.' });
       return;
     }
+    /*
+     * Er `sub` den ubrugelige fald-tilbage, er DET svaret - og det er svaert
+     * at gaette sig til, for fejlen fra Apple er bare en 403. verdande brugte
+     * lang tid paa netop dén (rapport, 02-09-2026).
+     */
+    const kontakt = getSetting('push_host', '');
     const t = now();
     const svar = [];
     for (const a of abon) {
@@ -3091,7 +3097,11 @@ const ROUTES = {
       });
     }
     log(`push-proeve: ${svar.filter((x) => x.ok).length}/${svar.length} kom igennem`);
-    sendJson(res, 200, { devices: svar });
+    sendJson(res, 200, {
+      devices: svar,
+      // Kun naar den mangler: ellers er det stoej paa en skaerm, der virker.
+      subMissing: kontakt ? undefined : true,
+    });
   },
 
   'DELETE /api/v1/push': async (req, res) => {
@@ -3507,9 +3517,23 @@ const push = require('./push.js').opret({
     setSetting('vapid_public', offentlig);
     setSetting('vapid_private', privat);
   },
-  // Push-tjenesterne vil have en kontakt i JWT'ets `sub`. En mailadresse,
-  // doda ikke ejer, ville vaere en loegn - saa vi bruger appens egen adresse,
-  // gemt da brugeren tilmeldte sig. Tickeren har ingen request at spoerge.
+  /*
+   * Kontakten i JWT'ets `sub`.
+   *
+   * En mailadresse, doda ikke ejer, ville vaere en loegn - saa vi bruger
+   * appens egen adresse, gemt da brugeren tilmeldte sig. Tickeren har ingen
+   * request at spoerge. RFC 8292 tillader baade `mailto:` og en https-adresse.
+   *
+   * DET ER IKKE EN DETALJE. Apple er striks og svarer 403 paa en `sub`, den
+   * ikke godtager - fx en opdigtet mailadresse. verdande havde netop dén fejl
+   * og tabte hver eneste push i tavshed, indtil de laeste HTTP-statussen
+   * (rapport fra Andreas, 02-09-2026). doda slap, fordi den fra begyndelsen
+   * brugte instansens egen adresse.
+   *
+   * `https://localhost` som fald tilbage vil Apple efter alt at doemme ogsaa
+   * afvise - men den rammer kun, hvis der er abonnementer UDEN at
+   * `push_host` er sat, og saa siger proeven det hoejt (se /push/test).
+   */
   kontakt: () => getSetting('push_host') || 'https://localhost',
 });
 

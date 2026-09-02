@@ -1141,8 +1141,37 @@ async function bindPush() {
         ${/* Uden en proeve er push et sort hul: fejler den, sker der ingenting,
              og der er intet at se paa (Andreas, 02-09-2026). */ ''}
         ${d.devices ? '<button class="btn" id="pushTest">Send a test</button>' : ''}
-        <span class="meta">${d.devices} device${d.devices === 1 ? '' : 's'} connected</span>
+        ${/*
+          * En prøve UDEN om push-tjenesten.
+          *
+          * »Send a test« sagde »kom igennem« fire gange, og der kom stadig
+          * intet frem (Andreas, 02-09-2026). Så er spørgsmålet, om iOS
+          * overhovedet VISER en notifikation fra doda - og det kan man kun
+          * afgøre ved at vise en, der ikke har været omkring Apple.
+          *
+          * Virker den her, men ikke pushen, er det leveringen. Virker den
+          * heller ikke, er det tilladelsen eller Fokus - og så er der intet
+          * i doda at rette.
+          */ ''}
+        <button class="btn" id="pushLokal">Vis en her</button>
       </div>
+      ${/*
+        * »3 devices connected« ved siden af »Turn on for this device« saa ud,
+        * som om alt var i orden - men de tre var ANDRE registreringer, og
+        * telefonen, man stod med, var ikke iblandt dem. Proeven sagde »kom
+        * igennem« tre gange, og der kom stadig ingen notifikation (Andreas,
+        * 02-09-2026).
+        *
+        * Tallet alene kan ikke svare paa det spoergsmaal, man faktisk har:
+        * »faar DENNE telefon besked?«. Derfor staar svaret foerst, med tallet
+        * som en tilfoejelse.
+        */ ''}
+      <p class="meta" style="margin:10px 0 0">${tilmeldt
+    ? `This device is on${d.devices > 1 ? ` · ${d.devices} devices in all` : ''}`
+    : (d.devices
+      ? `<strong>This device is off.</strong> ${d.devices} other device${
+        d.devices === 1 ? '' : 's'} will be reminded — this one will not.`
+      : 'No device is subscribed yet.')}</p>
       <div id="pushSvar"></div>
       <label class="field" style="margin-top:14px"><span>Send it</span>
         <select class="input" id="pushLead" style="max-width:260px">
@@ -1173,6 +1202,32 @@ async function bindPush() {
      * doedt, eller opgaven havde intet klokkeslaet. Svaret her skiller de fire
      * foerste fra hinanden - den femte staar i teksten under.
      */
+    boks.querySelector('#pushLokal').addEventListener('click', async () => {
+      const svar = boks.querySelector('#pushSvar');
+      try {
+        const lov = Notification.permission;
+        if (lov !== 'granted') {
+          svar.innerHTML = `<p class="gate-note" style="text-align:left"><strong>iOS har ikke givet
+            doda lov til at vise notifikationer</strong> (tilstand: ${esc(lov)}). Slå til for denne
+            enhed ovenfor — og hjælper det ikke, så tjek Indstillinger → Notifikationer → doda på
+            telefonen.</p>`;
+          return;
+        }
+        const reg = await navigator.serviceWorker.ready;
+        await reg.showNotification('doda', {
+          body: 'Kom denne frem? Så virker visningen — og fejlen ligger i leveringen.',
+          tag: 'doda-lokal', icon: './icon-192.png', badge: './icon-192.png',
+        });
+        svar.innerHTML = `<p class="gate-note" style="text-align:left">Sendt uden om Apple.
+          <strong>Kom den frem?</strong> Så viser iOS gerne doda, og fejlen ligger i leveringen.
+          <strong>Kom den ikke?</strong> Så er det telefonen, der holder den tilbage — se efter et
+          måne-ikon (Fokus) og under Indstillinger → Notifikationer → doda. Notifikationer fra en
+          web-app lander i Beskedcenter, ikke nødvendigvis på låseskærmen.</p>`;
+      } catch (ex) {
+        svar.innerHTML = `<p class="meta" style="margin-top:12px">${esc(ex.message)}</p>`;
+      }
+    });
+
     const test = boks.querySelector('#pushTest');
     if (test) {
       test.addEventListener('click', async () => {
@@ -1190,8 +1245,14 @@ async function bindPush() {
             return `<li>${esc(e2.service)} — <strong>afvist${e2.status ? ` (${e2.status})` : ''}</strong>${
   e2.message ? `: ${esc(e2.message)}` : ''}. Fejl i træk: ${e2.fails}.</li>`;
           }).join('');
+          const advarsel = d2.subMissing
+            ? `<p class="gate-note" style="text-align:left"><strong>Serveren kender ikke sin egen
+                adresse</strong> (<code>push_host</code>), så VAPID-nøglens afsender bliver
+                <code>https://localhost</code> — den afviser Apple. Slå notifikationer fra og til
+                igen på denne enhed; adressen gemmes ved tilmeldingen.</p>`
+            : '';
           svar.innerHTML = raekker
-            ? `<ul class="meta" style="margin:12px 0 0;padding-left:20px">${raekker}</ul>
+            ? `<ul class="meta" style="margin:12px 0 0;padding-left:20px">${raekker}</ul>${advarsel}
                <p class="gate-note" style="text-align:left">Kom den igennem, men dukkede intet op
                på telefonen: så er det iOS, der ikke viser den — tjek at doda er åbnet fra
                <strong>hjemmeskærmen</strong>, og at Notifikationer er slået til for den under

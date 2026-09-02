@@ -1827,6 +1827,25 @@ uden den kan man ikke se, om det er nøglen, `sub` eller uret, der er galt.
 **Kun værtsnavnet i svaret, aldrig hele adressen.** Endepunktet *er*
 hemmeligheden bag et abonnement — den, der har den, kan sende til telefonen.
 
+### To prøver, fordi der er to led
+
+»Send a test« sagde **kom igennem** fire gange, og der kom stadig intet frem på
+telefonen — mens den samme server nåede Mac'en. Så er spørgsmålet ikke længere,
+om doda sender, men om **iOS viser**.
+
+**Vis en her** kalder `registration.showNotification()` direkte fra siden. Den
+skiller de sidste to muligheder:
+
+- kommer den frem, men pushen ikke → leveringen til den enhed
+- kommer den heller ikke → tilladelsen eller Fokus, og der er intet i doda at
+  rette
+
+Den læser `Notification.permission` først og siger det rent ud, hvis iOS aldrig
+har givet lov — det er en tilstand, brugeren ellers ikke kan se.
+
+**To led, to prøver.** En enkelt knap, der dækker hele kæden, kan kun sige
+»virker« eller »virker ikke«; den kan ikke sige hvor.
+
 ### Det, prøven ikke kan
 
 `sendTil` taler kun https, så en attrap kræver et certifikat. Første udgave af
