@@ -5,7 +5,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 80;
+const APP_VERSION = 81;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -1048,9 +1048,21 @@ function byggToc() {
   const rail = document.getElementById('tocRail');
   if (!rail) return;
   const host = document.getElementById('pageHost');
-  // Kun sidens egne afsnit. En modal har ogsa h2'er, men den ligger i body
-  // og bliver derfor ikke fanget her.
-  const fundne = host ? [...host.querySelectorAll('h2')] : [];
+  /*
+   * Kun sidens egne afsnit. En modal har ogsaa h2'er, men den ligger i body og
+   * bliver derfor ikke fanget her.
+   *
+   * Og kun dem, der faktisk SES: indstillingerne tegner alle faner og skjuler
+   * de andre med `hidden` (§9f). Uden filteret listede oversigten alle seksten
+   * afsnit, uanset hvilken fane man stod paa - og klikkede man paa et af dem,
+   * skete der ingenting, fordi maalet var skjult (Andreas, 02-09-2026).
+   *
+   * `closest('[hidden]')` og ikke `offsetParent`: sidst i en optegning kan
+   * elementer endnu ikke have en layout-kasse, og saa ville ALT se skjult ud.
+   */
+  const fundne = host
+    ? [...host.querySelectorAll('h2')].filter((h) => !h.closest('[hidden]'))
+    : [];
 
   // Under to afsnit er der ingen oversigt at lave, og pa en telefon ville
   // en fast stribe i hoejre side ligge oven i indholdet.

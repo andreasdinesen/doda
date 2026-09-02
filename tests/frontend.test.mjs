@@ -63,3 +63,39 @@ test('vagten kan faktisk se en fejl - ellers beviser den ingenting', () => {
   const ialt = (kode.match(/\bforsvundet\b/g) || []).length;
   assert.equal(ialt, 1, 'navnet staar kun i sin egen template - altsaa udefineret');
 });
+
+test('kun filnavne, et menneske ville skrive, foreslås som titel', () => {
+  /*
+   * »Når jeg dropper et billede og skriver en tekst, står filnavnet der
+   * stadig« (Andreas, 02-09-2026). Navnet indsættes markeret, så det man
+   * skriver erstatter det — men klikker man i feltet i stedet for bare at
+   * taste, ophæves markeringen, og id'et blev stående i titlen.
+   *
+   * En markering, ét klik kan ophæve, er ikke et værn. Det rigtige er ikke at
+   * foreslå et navn, ingen ville skrive: »352CCE7E-8578-4F56-…« er hvad en
+   * iPhone kalder et foto, og det er aldrig en titel.
+   *
+   * Funktionen er ren og bor i frontenden. Den hentes derfor UD af kilden og
+   * køres her — så reglerne kan låses fast uden en browser.
+   */
+  const kode = readFileSync(join(ROD, 'app/public/app.js'), 'utf8');
+  const start = kode.indexOf('function menneskeligtFilnavn');
+  assert.ok(start > 0, 'funktionen findes i den byggede app.js');
+  const slut = kode.indexOf('\nfunction ', start + 10);
+  // eslint-disable-next-line no-new-func
+  const menneskeligt = new Function(`${kode.slice(start, slut)}; return menneskeligtFilnavn;`)();
+
+  for (const n of [
+    '352CCE7E-8578-4F56-BDBB-CDC14373DA19_1_105_c.jpg',   // iPhone-foto
+    'E11FD04A-FD2E-45C0-99C4-6EC09CA3BAA2_4_5005_c.heic',
+    'IMG_4821.jpg', 'DSC00123.JPG', 'PXL_20260902_184512.jpg',
+    'Screenshot 2026-09-02 at 21.42.png', 'Skærmbillede 2026-09-02.png',
+    'a1.png',                                              // for kort til at sige noget
+    '20260902.pdf',                                        // rene tal
+  ]) assert.equal(menneskeligt(n), false, `${n} burde springes over`);
+
+  for (const n of [
+    'faktura-2026.pdf', 'Kontrakt med Toni.docx', 'noter fra mødet.md',
+    'Årsregnskab.xlsx', 'tilbud fra Aagaard.pdf',
+  ]) assert.equal(menneskeligt(n), true, `${n} er et brugbart forslag`);
+});

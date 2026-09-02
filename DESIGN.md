@@ -1936,6 +1936,42 @@ siger det samme, sender fejlsøgningen det forkerte sted hen.**
 Chippen for »hidden until« bruger samme funktion og har intet klokkeslæt —
 derfor er tiden en parameter, ikke noget funktionen selv finder.
 
+## 7a · En markering er ikke et værn (v81)
+
+Dropper man et foto i kommandobaren, blev filnavnet foreslået som titel —
+markeret, så første tastetryk erstattede det (§v53). Men **klikker man i feltet
+i stedet for bare at taste, ophæves markeringen**, og så stod
+`352CCE7E-8578-4F56-BDBB-CDC14373DA19_1_105_c` blandet ind i titlen: »352CCE7E-…
+test med hest«, »hej hej hej 352CCE7E-…« (Andreas, 02-09-2026).
+
+Mekanismen virkede som beskrevet — brugeren fandt selv ud af det. Men det tog
+tre forsøg, og det er sagens kerne: **et værn, ét klik kan ophæve, er ikke et
+værn.**
+
+Det rigtige var ikke at gøre markeringen stærkere, men at holde op med at
+foreslå et navn, ingen ville skrive. `menneskeligtFilnavn()` afviser UUID'er,
+`IMG_`/`DSC_`/`PXL_`+tal, skærmbilleder og navne, der er overvejende cifre —
+og lader `faktura-2026.pdf` og `Kontrakt med Toni.docx` passere.
+
+Funktionen er ren, så testen henter den **ud af den byggede `app.js`** og kører
+den. Frontend-kode uden DOM-afhængighed kan prøves; det kræver bare, at man
+gør det.
+
+## 7b · Sideoversigten så det, brugeren ikke kunne (v81)
+
+Fanerne i indstillingerne tegner alt og skjuler med `hidden` (§6y). Oversigten i
+højre kant tog derfor **alle seksten afsnit**, uanset hvilken fane man stod på
+— og klikkede man på et fra en anden fane, skete der ingenting, fordi målet var
+skjult.
+
+`closest('[hidden]')` filtrerer dem fra, og oversigten tegnes om ved hvert
+faneskift.
+
+**§9f advarede om præcis dette** med en henvisning til spolens lærdom om
+`querySelector` kontra synlighed. Valget om at tegne alt er rigtigt for
+bindingernes skyld — men fra det øjeblik gælder, at **alt andet, der leder i
+DOM'en, skal spørge om synlighed, ikke om eksistens.**
+
 ## 7 · Uden for scope
 
 Handover §10 gælder uændret: ingen flere brugere, ingen

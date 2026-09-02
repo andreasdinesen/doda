@@ -726,6 +726,32 @@ function opdaterOmni() {
  * dato eller en kontekst gor. Er feltet tomt, foreslaas filnavnet som titel,
  * saa ét Enter er nok. Esc fortryder det hele uden at efterlade noget.
  */
+/**
+ * Ligner filnavnet noget, et MENNESKE har givet det?
+ *
+ * »faktura-2026.pdf« er et godt forslag til en titel. »352CCE7E-8578-4F56-BDBB
+ * -CDC14373DA19_1_105_c« er det aldrig - og dét er, hvad en iPhone kalder et
+ * foto. Foer blev det indsat alligevel, markeret, saa det forsvandt ved
+ * foerste tastetryk; men klikkede man i feltet for at skrive, forsvandt
+ * markeringen, og saa stod id'et blandet ind i titlen (Andreas, 02-09-2026:
+ * »352CCE7E-… test med hest« og »hej hej hej 352CCE7E-…«).
+ *
+ * En markering, ét klik kan opphaeve, er ikke et vaern. Det rigtige er ikke at
+ * foreslaa et navn, ingen ville skrive.
+ */
+function menneskeligtFilnavn(navn) {
+  const rent = String(navn || '').replace(/\.[^.]+$/, '').trim();
+  if (rent.length < 3) return false;
+  // UUID og lignende: lange stykker hex adskilt af bindestreger.
+  if (/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}/i.test(rent)) return false;
+  // Kameraernes egne: IMG_1234, DSC00123, PXL_20260902_..., Screenshot 2026-...
+  if (/^(img|dsc|dscn|pxl|photo|image|screen ?shot|sk(æ|ae)rmbillede)[\s_-]*\d/i.test(rent)) return false;
+  // Overvejende tal og skilletegn: et id, ikke en titel.
+  const bogstaver = (rent.match(/\p{L}/gu) || []).length;
+  if (bogstaver < 3 || bogstaver / rent.length < 0.4) return false;
+  return true;
+}
+
 function bindOmniFiler() {
   const kort = omniKort();
   const el = omniEl();
@@ -746,19 +772,20 @@ function bindOmniFiler() {
     kort.classList.remove('draaber');
     omniState.filer = omniState.filer.concat(filer);
     /*
-     * Filnavnet UDEN endelse er et bedre forslag end intet - men det maa
-     * aldrig overskrive noget, brugeren allerede har skrevet.
+     * Filnavnet foreslaas KUN, naar det ligner noget, nogen har skrevet.
      *
-     * Og det MARKERES. Foer stod det som almindelig tekst, saa den, der ville
-     * skrive sin egen titel, fik »min titel C3FF4A37-F58E-4B70…« og skulle
-     * slette et navn, han aldrig havde skrevet. Et forslag, man skal rydde op
-     * efter, er ikke et forslag. Markeret forsvinder det ved foerste
-     * tastetryk - og vil man beholde det, er Enter eller en piletast nok.
+     * Det maa aldrig overskrive en titel, brugeren allerede har - og det
+     * markeres, saa det forsvinder ved foerste tastetryk. Men markeringen er
+     * ikke et vaern i sig selv: ét klik i feltet opphaever den, og saa stod
+     * et kamera-id blandet ind i titlen. Derfor foerst proeven ovenfor.
      */
     const tomt = !el.value.trim();
-    if (tomt) el.value = filer[0].name.replace(/\.[^.]+$/, '');
+    const forslag = tomt && menneskeligtFilnavn(filer[0].name)
+      ? filer[0].name.replace(/\.[^.]+$/, '')
+      : null;
+    if (forslag) el.value = forslag;
     el.focus();
-    if (tomt) el.select();
+    if (forslag) el.select();
     opdaterOmni();
   });
 }

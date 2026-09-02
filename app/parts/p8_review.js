@@ -644,6 +644,9 @@ async function bindData() {
     // En fane, man skifter til, skal begynde ved sin foerste overskrift - ikke
     // midt i, fordi den forrige var laengere.
     tilToppen();
+    /* Sideoversigten viser kun den aabne fanes afsnit - saa den skal tegnes om
+       ved hvert skift, ellers staar den forrige fanes punkter tilbage. */
+    byggToc();
   };
 
   let gemt = null;
