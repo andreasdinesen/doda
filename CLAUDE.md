@@ -21,6 +21,7 @@
 | `app/public/index.html` | HTML-skal + CSS. |
 | `app/public/app.js` | **Genereret — redigér aldrig.** |
 | `runes/doda.yaml` | **Genereret — redigér aldrig.** Ret kilderne, kør build. |
+| `app/kilde.js` | Henter app-koden fra GitHub ved opstart. Kører fra runens `startup`, før serveren. |
 | `build_rune.py` | `python3 build_rune.py` — samler parts, `node --check`, CSP-hash, brotli+base85-payload, YAML-validering, rundtur. |
 
 ## Faste regler
@@ -32,10 +33,19 @@
 - Repoet er **offentligt** (Andreas, 2026-08-21), som Sagus. **Hver eneste ændring skal
   auditeres, før den pushes:** ingen rigtige mailadresser, ingen rigtige værtsnavne, ingen
   tokens. `navn@eksempel.dk` og `doda.eksempel.dk` er de former, der bruges i tests og docs.
-- **Install-scriptet BÆRER ikke længere app-koden — det henter den** fra
-  `refs/tags/v<N>` (DESIGN.md, »Sagu-broen«). Tre følger:
+- **Serveren henter selv sin kode** (v82). `app/kilde.js` kører fra runens
+  `startup`, før serveren starter: den spørger GitHub efter nyeste `vN` — eller
+  henter præcis den, `KODE_VERSION` peger på — og bytter `app/` ud. Følger:
   - **En udgivelse er tre trin:** commit → `git tag v<N>` → `git push --tags`.
-    Uden taggen installerer runen ingenting — og siger det højt.
+    Uden taggen sker der ingenting; Andreas genstarter og får den gamle kode.
+  - **`runes/doda.yaml` skal IKKE genudgives ved hver app-udgave.** `RUNE_VERSION`
+    i `build_rune.py` er runens eget tal og bumpes kun, når YAML'en ændrer sig
+    (variabler, startup, porte, watchers). Bumper man den unødigt, er man tilbage
+    ved to trin i panelet for hver udgivelse — hele pointen tabt.
+  - **Alt i `kilde.js` ender med exit 0.** En fejl dér må aldrig kunne forhindre
+    serveren i at starte: kan GitHub ikke nås, kører den kode, der ligger.
+- **Install-scriptet BÆRER ikke app-koden — det henter den** fra
+  `refs/tags/v<RUNE_VERSION>` (DESIGN.md, »Sagu-broen«). To følger:
   - **De genererede filer skal være committet** (`app/public/app.js`, ikonerne).
     `tjek_git()` i build'et fælder ellers.
   - Installationen kræver **intet token** — repoet er offentligt. Feltet er fjernet fra
@@ -49,8 +59,9 @@
 - Kildefiler må ikke indeholde `{{STORE_BOGSTAVER}}` eller `YGG_PAYLOAD_EOF`
   (build'et fejler højt på begge).
 - Echo-linjer i install-scriptet: **ASCII** (æøå → ae/oe/aa).
-- Panelets opdaterings-flow er todelt: **Runes → Browse GitHub → Reload** henter kun
-  rune-definitionen; **Serveren → Settings → Update/Reinstall** installerer appen.
+- Panelets todelte opdaterings-flow (**Runes → Reload**, så **Settings → Update**)
+  gælder stadig for runen — men **ikke for app-koden**. Den følger med en genstart.
+  Fortæl Andreas »genstart doda«, ikke »hent runen ind igen«.
 
 ## Lokal kørsel
 

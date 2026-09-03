@@ -1972,6 +1972,79 @@ faneskift.
 bindingernes skyld — men fra det øjeblik gælder, at **alt andet, der leder i
 DOM'en, skal spørge om synlighed, ikke om eksistens.**
 
+## 7c · Serveren henter selv sin kode (v82)
+
+Siden 2026-08-21 bar install-scriptet ikke længere app-koden — det **hentede**
+den fra `refs/tags/v<N>`. Men taggen stod i runen, og runens versionsnummer var
+det samme tal som appens. Så hver eneste udgivelse krævede stadig, at Andreas
+gik gennem panelets to trin (**Reload rune**, så **Update**) for at flytte ét
+tal i en YAML, som ingen læser.
+
+Det er ceremoni, ikke sikkerhed. Andreas spurgte selv 03-09-2026, om det kunne
+falde væk.
+
+Nu kører `app/kilde.js` fra runens `startup`, **før** serveren starter: den
+spørger GitHub efter den nyeste tag, henter arkivet, tjekker det og bytter
+`app/` ud. **En genstart er opdateringen.**
+
+### De tre regler
+
+1. **En fejl må aldrig kunne forhindre serveren i at starte.** Alt i modulet
+   ender med `exit 0`. Kan GitHub ikke nås, kører den kode, der ligger. Det er
+   den vigtigste egenskab, ikke en høflighed: en netværksfejl på Hjorten må
+   ikke kunne slukke for opgavelisten.
+2. **Der byttes aldrig halvt.** Der pakkes ud i `.doda-ny/` **ved siden af**
+   `app/` — ikke i `/tmp`, for `mv` mellem to filsystemer er en kopi, og en
+   kopi kan afbrydes på midten. To omdøbninger inden for samme filsystem kan
+   ikke. Mellem dem ligger den gamle app under `.doda-gammel`, og
+   startup-kommandoen sætter den tilbage, hvis containeren dør præcis der.
+   Uden det trin ville et dårligt sekund efterlade en container uden `app/` —
+   og uden `app/` er der heller ingen `kilde.js` til at hente en ny.
+3. **`KODE_VERSION` er en lås, ikke et ønske.** Står der et tal, hentes præcis
+   den tag, også selv om der findes en nyere. Det er vejen tilbage fra en
+   dårlig udgivelse: sæt tallet, genstart.
+
+### Hvorfor tag-listen, og hvorfor det højeste tal
+
+`refs/heads/main` ville være ét kald mindre, men main er arbejdsbordet. Taggen
+`vN` er den eneste ref, der betyder *udgivet*.
+
+Og listen skal **regnes** igennem, ikke læses fra toppen: GitHub sorterer tags
+alfabetisk, og alfabetisk er `v9` nyere end `v80`. Tog vi `liste[0]`, ville
+hver server rulle 72 udgaver tilbage ved næste genstart. Det er en fejl, der
+ikke findes, før repoet har mere end ni tags — og så findes den overalt på én
+gang. Testen holder rækkefølgen fast med præcis det tilfælde.
+
+### To tal, med vilje
+
+`APP_VERSION` er koden. `RUNE_VERSION` i `build_rune.py` er runen, og bumpes
+kun, når YAML'en ændrer sig. Runen er blevet en **startsnor**: den installerer
+én udgave, som doda straks opdaterer fra.
+
+Det koster den invariant, `tests/version.test.mjs` hidtil holdt (*fem steder,
+samme tal*). Den er erstattet af to nye: appens tre steder skal stadig følges
+ad, og **runens tag-adresser skal følge runens egen version** — ellers kan
+runen ikke installeres første gang, og det ville først vise sig hos en, der
+installerer forfra.
+
+### Prisen, og hvor den blev betalt
+
+Serveren opdaterer sig selv fra internettet ved hver genstart. Det er en
+tillid, der ikke fandtes før, og den er indsnævret tre steder: kun
+`codeload.github.com` og `api.github.com`, kun repoets egne tags, og det
+udpakkede træ skal både være en **hel** doda (`server.js`, `public/index.html`,
+`public/app.js`, `shared/parse.js`) og bære **det versionsstempel, taggen
+lover**. Er en tag flyttet oven på en anden commit, byttes der ikke — hellere
+køre videre på det kendte end at starte noget, ingen kan navngive.
+
+### Den ene vej, der er énvejs
+
+Udgaver før v82 kan ikke hente sig selv. Låser man længere tilbage end 82,
+forsvinder `kilde.js` sammen med resten, og en genstart opdaterer ikke mere.
+Det er ikke spærret — v81 kan være præcis det, man vil tilbage til — men det
+**siges i loggen, før det sker**, og vejen frem er panelets »Opdater doda«, som
+falder tilbage til runens startsnor.
+
 ## 7 · Uden for scope
 
 Handover §10 gælder uændret: ingen flere brugere, ingen

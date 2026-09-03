@@ -62,17 +62,49 @@ after(() => {
   if (dataDir) rmSync(dataDir, { recursive: true, force: true });
 });
 
-test('APP_VERSION, runen, index.html og sw.js er det SAMME tal', () => {
+test('APP_VERSION, index.html og sw.js er det SAMME tal', () => {
   const kilde = tal(fil('app', 'parts', 'p1_core.js'), /const APP_VERSION = (\d+);/, 'p1_core.js');
 
-  // Runens version: staar under gameskill:, altsaa indrykket - og der er
-  // andre "version"-ord laengere nede i install-scriptet (node --version).
-  assert.equal(tal(fil('runes', 'doda.yaml'), /\n {2}version: ["']?(\d+)/, 'runes/doda.yaml'), kilde,
-    'runens version: er det, panelet viser - den skal foelge APP_VERSION');
   assert.equal(tal(fil('app', 'public', 'index.html'), /app\.js\?v=(\d+)/, 'index.html'), kilde,
     'cache-bust i index.html skal foelge APP_VERSION (RUNE-ERFARINGER §5)');
   assert.equal(tal(fil('app', 'public', 'sw.js'), /const VERSION = (\d+);/, 'sw.js'), kilde,
     'service workerens cache-navn skal bumpes, ellers serveres gammel kode');
+});
+
+/* Fra v82 er runen en STARTSNOR, ikke en udgave.
+ *
+ * `app/kilde.js` henter koden ved hver opstart, saa runens tal foelger ikke
+ * laengere appens - og maa ikke goere det: skulle runen udgives ved hver
+ * app-udgave, var hele oevelsen spildt. Men de to tal er stadig bundet
+ * sammen af én ting, og det er den, der kan gaa i stykker uset: install
+ * henter taggen `v<runens version>`, og findes den ikke, kan runen ikke
+ * installeres foerste gang. */
+test('runen er en startsnor - og peger paa en tag, der er udgivet', () => {
+  const app = tal(fil('app', 'parts', 'p1_core.js'), /const APP_VERSION = (\d+);/, 'p1_core.js');
+  const yamlTekst = fil('runes', 'doda.yaml');
+  const rune = tal(yamlTekst, /\n {2}version: ["']?(\d+)/, 'runes/doda.yaml');
+
+  assert.ok(rune <= app,
+    `runens version (${rune}) er nyere end app-koden (${app}) - `
+    + 'install ville hente en tag, der ikke findes');
+
+  // Alle tag-adresser i runen skal pege paa PRAECIS runens version. Stod der
+  // en anden, ville install og update hente hver sin udgave.
+  const tags = [...yamlTekst.matchAll(/refs\/tags\/v(\d+)/g)].map((m) => Number(m[1]));
+  assert.ok(tags.length > 0, 'runen henter ikke koden fra en tag');
+  for (const t of tags) {
+    assert.equal(t, rune, 'tag-adressen i runen skal foelge runens egen version');
+  }
+});
+
+/* Laasen skal kunne saettes i panelet - ellers findes vejen tilbage kun i en
+ * fil, ingen kan naa uden ssh. */
+test('runen har KODE_VERSION som variabel', () => {
+  const yamlTekst = fil('runes', 'doda.yaml');
+  assert.match(yamlTekst, /key: KODE_VERSION/, 'panelet skal kunne saette laasen');
+  assert.match(yamlTekst, /default: seneste/, 'standarden er at foelge nyeste udgivelse');
+  assert.match(yamlTekst, /node app\/kilde\.js/,
+    'startup skal hente koden, ellers opdaterer en genstart ingenting');
 });
 
 test('serveren melder samme version i /api/public-config', async () => {

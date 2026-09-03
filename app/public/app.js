@@ -1032,7 +1032,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 81;
+const APP_VERSION = 82;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -4309,7 +4309,21 @@ function sideSettings() {
 
     <div class="card"><h2>About</h2>
       <p class="lead" style="margin-top:6px">doda version ${APP_VERSION}.
-      ${state.config.secureContext ? 'Secure connection (https).' : 'Plain http — passkeys and notifications are unavailable here.'}</p></div>
+      ${state.config.secureContext ? 'Secure connection (https).' : 'Plain http — passkeys and notifications are unavailable here.'}</p>
+      ${/*
+        * Versionen i panelet er ikke laengere appens.
+        *
+        * Fra v82 henter serveren sin egen kode fra GitHub ved hver opstart,
+        * og runen er kun en startsnor. Panelets tal staar derfor stille,
+        * mens appen gaar videre - og saa skal appen selv kunne svare paa,
+        * hvad den koerer, og hvorfor.
+        */ ''}
+      <div id="kodeBoks" style="margin-top:12px">Loading…</div>
+      <p class="gate-note" style="text-align:left">doda fetches its own code from
+      GitHub when the server starts, so <strong>restarting doda in the panel is the
+      update</strong>. To stay on — or go back to — a particular release, set the
+      rune setting <code>KODE_VERSION</code> to its number instead of
+      <code>seneste</code>.</p></div>
     </div>
 
     <div class="fane" data-fane="account">
@@ -4607,6 +4621,7 @@ function bindSettings() {
   bindNoegler();
   bindData();
   bindPush();
+  bindKode();
   bindTotp();
   bindSagu();
   bindNotion();
@@ -6668,6 +6683,71 @@ function b64uTilBytes(s) {
   const b64 = s.replace(/-/g, '+').replace(/_/g, '/');
   const raw = atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4));
   return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+}
+
+/* ------------------------------------------------------ hvor koden kom fra */
+
+/**
+ * Kortet i indstillingerne: hvilken udgave koerer serveren, efter hvilken
+ * regel - og er der kommet en nyere?
+ *
+ * Kontrollen sidder paa en KNAP med vilje. Svaret kan alligevel foerst tages
+ * i brug ved naeste genstart, og en app uden udgaaende trafik skal ikke
+ * begynde at ringe til GitHub i baggrunden, fordi nogen har indstillinger
+ * aabne.
+ */
+async function bindKode() {
+  const boks = document.getElementById('kodeBoks');
+  if (!boks) return;
+
+  let d;
+  try {
+    d = await api('GET', '/api/v1/kode');
+  } catch (ex) {
+    boks.innerHTML = `<p class="meta" style="margin:0">Could not read the code
+      version: ${esc(ex.message)}</p>`;
+    return;
+  }
+
+  const hentet = d.hentet
+    ? new Date(d.hentet).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+    : null;
+
+  const tegn = (besked, slags) => {
+    boks.innerHTML = `
+      <p class="meta" style="margin:0">
+        Running <strong>v${esc(String(d.version))}</strong> ${d.laast
+    ? `— <strong>pinned</strong> to v${esc(d.oensket)}.`
+    : '— following the newest release.'}
+        ${hentet ? `Fetched from GitHub ${esc(hentet)}.` : 'Installed with the rune.'}
+      </p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">
+        <button class="btn" id="kodeTjek">Check for a new version</button>
+      </div>
+      ${besked ? `<p class="${slags === 'fejl' ? 'meta' : 'lead'}" style="margin:10px 0 0">${besked}</p>` : ''}`;
+    document.getElementById('kodeTjek').addEventListener('click', async (e) => {
+      const knap = e.currentTarget;
+      knap.disabled = true;
+      knap.textContent = 'Checking…';
+      try {
+        const svar = await api('POST', '/api/v1/kode/tjek', {});
+        if (svar.nyeste > svar.version) {
+          tegn(d.laast
+            ? `<strong>v${esc(String(svar.nyeste))} is out</strong>, but doda is pinned to
+               v${esc(d.oensket)}. Change <code>KODE_VERSION</code> in the panel to
+               <code>seneste</code>, then restart doda.`
+            : `<strong>v${esc(String(svar.nyeste))} is out.</strong> Restart doda in the
+               panel and it will be running it.`);
+        } else {
+          tegn(`This is the newest release (v${esc(String(svar.nyeste))}).`);
+        }
+      } catch (ex) {
+        tegn(`Could not reach GitHub: ${esc(ex.message)}`, 'fejl');
+      }
+    });
+  };
+
+  tegn('');
 }
 
 /* ---- p7_files.js ---- */

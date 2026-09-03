@@ -254,19 +254,57 @@ doda er en app til én bruger.
 |---|---|---|
 | `APP_NAME` | `doda` | Navnet i browserfanen |
 | `NODE_IMAGE` | `node:24-alpine` | Hvilket Node-image appen kører på — se nedenfor |
+| `KODE_VERSION` | `seneste` | Hvilken udgave af koden serveren henter ved opstart — se nedenfor |
 
 ---
 
 ## Sådan holder du den opdateret
 
-Panelets opdatering er **todelt**, og det forvirrer hver gang:
+**En genstart er opdateringen.** doda henter sin egen kode fra GitHub, hver gang
+serveren starter. Runen skal ikke røres.
 
-1. **Runes → Browse GitHub → Reload** henter kun rune-*definitionen*. Listen viser
-   nu det nye versionsnummer — men appen kører stadig den gamle kode.
-2. **Serveren → Settings → Opdater doda** skriver app-filerne igen.
-   Databasen i `/data` er urørt, og skemaet migreres automatisk ved næste start.
+1. **Serveren → Restart.** Ved opstart spørger doda GitHub, hvad den nyeste
+   udgivelse er, henter den og starter på den. Er der ikke kommet noget nyt,
+   hentes der ingenting.
+2. Der er ikke noget trin 2.
 
-Uden trin 2 sker der ingenting. Det er ikke en fejl.
+Kan GitHub ikke nås, starter doda på den kode, der allerede ligger. **En
+netværksfejl kan ikke slukke for opgavelisten** — den kan kun udsætte en
+opdatering. Det står i serverloggen, ikke som en fejl.
+
+Hvilken udgave der kører — og efter hvilken regel — står under **Settings →
+About**, sammen med en knap, der spørger GitHub, om der er kommet en nyere.
+
+### Bliv på — eller rul tilbage til — en bestemt udgave
+
+`KODE_VERSION` i serverens variabler er låsen:
+
+| Værdi | Hvad der sker ved hver genstart |
+|---|---|
+| `seneste` (standard) | Nyeste udgivelse hentes |
+| `81` | Præcis v81 hentes — også selv om der findes en nyere |
+
+Er en udgivelse dårlig: skriv tallet på den, der virkede, og genstart. Frem
+igen: skriv `seneste`, og genstart. Databasen i `/data` røres ikke af nogen af
+delene, og skemaet migreres ved næste start.
+
+Feltet tager kun `seneste` eller et rent tal. Skriver du `v81`, siger doda fra i
+loggen i stedet for at gætte.
+
+**Udgaver før v82 kan ikke hente sig selv.** Låser du længere tilbage end 82,
+forsvinder hentefunktionen sammen med resten af koden, og en genstart opdaterer
+ikke længere. Vejen frem derfra er **Serveren → Settings → Opdater doda**, som
+henter runens egen startsnor. doda skriver det i loggen, *før* den gør det.
+
+### Runen er en startsnor
+
+Runen bærer ikke koden og følger ikke appens versionsnummer. Den installerer én
+udgave, som doda straks opdaterer fra ved første start. Derfor skal
+**Runes → Browse GitHub → Reload** kun bruges, når *selve runen* ændrer sig —
+nye variabler, ny opstart, nye porte. Ikke ved en ny udgave af appen.
+
+Panelets version og appens version er altså **to forskellige tal**, med vilje.
+Det, der gælder, står i appen under **Settings → About**.
 
 ### Hvis der findes en sårbarhed i Node
 
@@ -401,6 +439,7 @@ Se `PLAN.md` for faseoversigt og status, `DESIGN.md` for de trufne beslutninger 
 
 | Version | Ændringer |
 |---|---|
+| 82 | **doda henter selv sin kode — en genstart er opdateringen.** Runen bar ikke længere koden, den hentede den fra GitHub — men taggen stod i runen, så hver eneste udgivelse krævede alligevel to trin i panelet for at flytte ét tal i en YAML. Nu spørger serveren selv GitHub ved hver opstart. **Og vejen tilbage er blevet kortere end vejen frem:** `KODE_VERSION` låser til præcis den udgave, du peger på, så en dårlig udgivelse rulles tilbage med et tal og en genstart. Kan GitHub ikke nås, starter doda på den kode, der ligger — og byttes koden ud, sker det med to omdøbninger, aldrig med en halv mappe. Under **Settings → About** står det nu, hvad der kører, hvorfra og hvornår. |
 | 81 | **Et kamera-id foreslås ikke længere som titel — og sideoversigten følger fanen.** Dropper du et foto, hed forslaget `352CCE7E-8578-4F56-…`, altså det en iPhone kalder et billede. Det stod markeret, så det du skrev erstattede det — men **klikkede du i feltet i stedet for bare at taste, ophævedes markeringen**, og id'et blev stående i titlen. Nu foreslås kun navne, et menneske ville skrive: `faktura-2026.pdf` ja, `IMG_4821.jpg` nej. **Og:** oversigten i højre kant listede alle seksten Settings-afsnit uanset fane — og klik på et af dem gjorde ingenting, fordi målet var skjult. |
 | 80 | **Notifikationen vises som allerførste handling — og appen siger til, hvis en ny udgave venter.** Timeout-rettelsen i v79 hjalp ikke, så spørgsmålet er ikke længere, hvor lang tid service workeren har, men **om den overhovedet vækkes**. Den viser nu noget, før den rører ved noget som helst andet, og erstatter det med det rigtige. Kommer *dét* ikke frem, når pushen aldrig service workeren. **Og:** venter der en ny udgave af doda på, at appen lukkes helt, hører din tilmelding til den gamle — push-tjenesten kvitterer stadig, men leveringen går til en worker på vej ud. Det står nu i prøvens svar; det er en tilstand, man ellers ikke kan se. |
 | 79 | **Notifikationen venter ikke længere på serveren.** Pushen er tom: telefonen spørger doda, hvad den skal vise. Men **iOS giver en push-handler meget kort tid**, og går kaldet gennem en tunnel til en hjemmeserver, kan handleren nå at dø, før noget er vist — så ser man **intet**, mens Apple allerede har kvitteret med `201`. Hverken serveren eller prøven opdager det: pushen forsvinder mellem tjenesten og skærmen. Nu venter den **højst to sekunder**; uden svar vises den generelle besked, som stadig fortæller, at noget forfalder. |

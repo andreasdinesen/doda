@@ -6,7 +6,7 @@ gameskill:
     naeste-handlings-liste efter kontekst, projekter og omraader, markdown-noter, gentagende opgaver med Todoist-syntaks,
     ugentlig gennemgang, kalenderfeed og et API til iOS Shortcuts og Siri. Egen SQLite-database, ingen eksterne afhaengigheder.
   author: andreas
-  version: 81
+  version: 82
   icon: app
   docker:
     image: '{{NODE_IMAGE}}'
@@ -21,28 +21,17 @@ gameskill:
     default: node:24-alpine
     pattern: ^node:[0-9][A-Za-z0-9._-]*$
     hint: Skal vaere et node:-image, fx node:24-alpine eller node:24.9.0-alpine
+  - key: KODE_VERSION
+    name: Kodeversion
+    type: string
+    default: seneste
+    pattern: ^(seneste|latest|[0-9]+)$
+    hint: seneste = hent nyeste udgivelse fra GitHub ved hver genstart. Et tal (fx 81) laaser til praecis den udgave.
   install:
     image: '{{NODE_IMAGE}}'
-    script: "set -eu\necho \"Installerer doda v81 ...\"\necho \"Node: $(node --version)\"\n\necho \"Henter app-koden fra GitHub\
-      \ ...\"\nrm -rf /tmp/doda-hent\nmkdir -p /tmp/doda-hent\nnode -e 'const https=require(\"https\"),zlib=require(\"zlib\"\
-      );const U=\"https://codeload.github.com/andreasdinesen/doda/tar.gz/refs/tags/v81\";function d(m){console.error(\"[fejl]\
-      \ \"+m);console.error(\"Adresse: \"+U);console.error(\"Repoet er offentligt, saa en 404 betyder, at adressen ikke findes\
-      \ - tjek at taggen er pushet.\");process.exit(1);}function hent(u,n){const h={\"user-agent\":\"doda-installer\"};https.get(u,{headers:h},(r)=>{if(r.statusCode>=300&&r.statusCode<400&&r.headers.location){if(n<=0)return\
-      \ d(\"for mange omdirigeringer\");r.resume();return hent(new URL(r.headers.location,u).toString(),n-1);}if(r.statusCode!==200)return\
-      \ d(\"GitHub svarede \"+r.statusCode);const g=zlib.createGunzip();g.on(\"error\",(e)=>d(\"arkivet kunne ikke pakkes\
-      \ ud: \"+e.message));r.pipe(g).pipe(process.stdout);}).on(\"error\",(e)=>d(\"kunne ikke naa GitHub: \"+e.message));}hent(U,3);'\
-      \ > /tmp/doda-hent/app.tar\ntar x -C /tmp/doda-hent -f /tmp/doda-hent/app.tar\n\n# Mappenavnet i et GitHub-arkiv er\
-      \ <repo>-<ref uden v>, og arkivet\n# begynder med en pax_global_header-post. Ingen af delene gaettes:\n# find den app-mappe,\
-      \ der FINDES.\nNY=$(find /tmp/doda-hent -maxdepth 2 -type d -name app | head -n 1)\nif [ -z \"$NY\" ] || [ ! -f \"$NY/server.js\"\
-      \ ]; then\n  echo \"[fejl] arkivet fra GitHub indeholder ingen app/server.js\"\n  exit 1\nfi\nrm -rf app\nmv \"$NY\"\
-      \ app\nrm -rf /tmp/doda-hent\n\necho \"Filer udpakket:\"\nls -1 app app/public\necho \"Klar. Start serveren i panelet.\"\
-      \n"
-  update:
-    image: '{{NODE_IMAGE}}'
-    label: Opdater doda
-    script: "set -eu\necho \"Opdaterer doda til v81 ...\"\necho \"Node: $(node --version)\"\n\necho \"Henter app-koden fra\
-      \ GitHub ...\"\nrm -rf /tmp/doda-hent\nmkdir -p /tmp/doda-hent\nnode -e 'const https=require(\"https\"),zlib=require(\"\
-      zlib\");const U=\"https://codeload.github.com/andreasdinesen/doda/tar.gz/refs/tags/v81\";function d(m){console.error(\"\
+    script: "set -eu\necho \"Installerer doda (startsnor v82) ...\"\necho \"Node: $(node --version)\"\n\necho \"Henter app-koden\
+      \ fra GitHub ...\"\nrm -rf /tmp/doda-hent\nmkdir -p /tmp/doda-hent\nnode -e 'const https=require(\"https\"),zlib=require(\"\
+      zlib\");const U=\"https://codeload.github.com/andreasdinesen/doda/tar.gz/refs/tags/v82\";function d(m){console.error(\"\
       [fejl] \"+m);console.error(\"Adresse: \"+U);console.error(\"Repoet er offentligt, saa en 404 betyder, at adressen ikke\
       \ findes - tjek at taggen er pushet.\");process.exit(1);}function hent(u,n){const h={\"user-agent\":\"doda-installer\"\
       };https.get(u,{headers:h},(r)=>{if(r.statusCode>=300&&r.statusCode<400&&r.headers.location){if(n<=0)return d(\"for mange\
@@ -53,11 +42,33 @@ gameskill:
       \ <repo>-<ref uden v>, og arkivet\n# begynder med en pax_global_header-post. Ingen af delene gaettes:\n# find den app-mappe,\
       \ der FINDES.\nNY=$(find /tmp/doda-hent -maxdepth 2 -type d -name app | head -n 1)\nif [ -z \"$NY\" ] || [ ! -f \"$NY/server.js\"\
       \ ]; then\n  echo \"[fejl] arkivet fra GitHub indeholder ingen app/server.js\"\n  exit 1\nfi\nrm -rf app\nmv \"$NY\"\
-      \ app\nrm -rf /tmp/doda-hent\n\necho \"App-filerne er skiftet ud. Databasen i /data er uroert.\"\necho \"Skemaet opdateres\
-      \ automatisk, naar serveren starter.\"\n"
+      \ app\nrm -rf /tmp/doda-hent\n\necho \"Filer udpakket:\"\nls -1 app app/public\necho \"Klar. Start serveren i panelet\
+      \ - den henter selv den\"\necho \"udgave, KODE_VERSION peger paa, foer den starter.\"\n"
+  update:
+    image: '{{NODE_IMAGE}}'
+    label: Opdater doda
+    script: "set -eu\necho \"Opdaterer doda ...\"\necho \"Node: $(node --version)\"\n\nif [ -f app/kilde.js ]; then\n  K=\"\
+      {{KODE_VERSION}}\"\n  case \"$K\" in\n    seneste|latest|[0-9]*) : ;;\n    *) K=\"${KODE_VERSION:-seneste}\" ;;\n  esac\n\
+      \  echo \"Oensket udgave: $K\"\n  KODE_VERSION=\"$K\" node app/kilde.js\nelse\n  echo \"Henter app-koden fra GitHub\
+      \ ...\"\n  rm -rf /tmp/doda-hent\n  mkdir -p /tmp/doda-hent\n  node -e 'const https=require(\"https\"),zlib=require(\"\
+      zlib\");const U=\"https://codeload.github.com/andreasdinesen/doda/tar.gz/refs/tags/v82\";function d(m){console.error(\"\
+      [fejl] \"+m);console.error(\"Adresse: \"+U);console.error(\"Repoet er offentligt, saa en 404 betyder, at adressen ikke\
+      \ findes - tjek at taggen er pushet.\");process.exit(1);}function hent(u,n){const h={\"user-agent\":\"doda-installer\"\
+      };https.get(u,{headers:h},(r)=>{if(r.statusCode>=300&&r.statusCode<400&&r.headers.location){if(n<=0)return d(\"for mange\
+      \ omdirigeringer\");r.resume();return hent(new URL(r.headers.location,u).toString(),n-1);}if(r.statusCode!==200)return\
+      \ d(\"GitHub svarede \"+r.statusCode);const g=zlib.createGunzip();g.on(\"error\",(e)=>d(\"arkivet kunne ikke pakkes\
+      \ ud: \"+e.message));r.pipe(g).pipe(process.stdout);}).on(\"error\",(e)=>d(\"kunne ikke naa GitHub: \"+e.message));}hent(U,3);'\
+      \ > /tmp/doda-hent/app.tar\n  tar x -C /tmp/doda-hent -f /tmp/doda-hent/app.tar\n\n  # Mappenavnet i et GitHub-arkiv\
+      \ er <repo>-<ref uden v>, og arkivet\n  # begynder med en pax_global_header-post. Ingen af delene gaettes:\n  # find\
+      \ den app-mappe, der FINDES.\n  NY=$(find /tmp/doda-hent -maxdepth 2 -type d -name app | head -n 1)\n  if [ -z \"$NY\"\
+      \ ] || [ ! -f \"$NY/server.js\" ]; then\n    echo \"[fejl] arkivet fra GitHub indeholder ingen app/server.js\"\n   \
+      \ exit 1\n  fi\n  rm -rf app\n  mv \"$NY\" app\n  rm -rf /tmp/doda-hent\nfi\n\necho \"App-filerne er skiftet ud. Databasen\
+      \ i /data er uroert.\"\necho \"Genstart doda, saa serveren koerer den nye kode.\"\n"
   startup:
-    command: "if node -e \"require('node:sqlite')\" >/dev/null 2>&1; then\n  exec node app/server.js\nelse\n  exec node --experimental-sqlite\
-      \ app/server.js\nfi\n"
+    command: "if [ ! -f app/server.js ] && [ -f .doda-gammel/server.js ]; then\n  rm -rf app\n  mv .doda-gammel app\n  echo\
+      \ \"[kode] app/ sat tilbage efter en afbrudt udskiftning\"\nfi\nnode app/kilde.js || echo \"[kode] advarsel: opdateringen\
+      \ kunne ikke koeres\"\nif node -e \"require('node:sqlite')\" >/dev/null 2>&1; then\n  exec node app/server.js\nelse\n\
+      \  exec node --experimental-sqlite app/server.js\nfi\n"
     done_regex: doda lytter
     stop_timeout: 30
   ports:

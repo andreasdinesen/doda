@@ -23,6 +23,9 @@ const { DatabaseSync } = require('node:sqlite');
 const parse = require('./shared/parse.js');
 const totp = require('./totp.js');
 const qr = require('./qr.js');
+// Hvor koden kom fra. Modulet henter appen ved opstart; serveren bruger det
+// kun til at LAESE (hvilken udgave ligger der, findes der en nyere).
+const kilde = require('./kilde.js');
 
 const DATA_DIR = process.env.DATA_DIR || process.cwd();
 // KUN BIND_PORT, aldrig PORT_web.
@@ -1554,6 +1557,25 @@ function gemNotesboeger(boeger) {
   }
 }
 
+/**
+ * Hvilken udgave af koden koerer vi - og efter hvilken regel?
+ *
+ * Fra v82 haenger app-koden ikke laengere sammen med runens versionsnummer:
+ * `startup` henter koden fra GitHub, og panelet viser derfor et tal, der
+ * hurtigt bliver forkert. Det tal, der betyder noget, er det her.
+ */
+function kodeStatus() {
+  const vil = kilde.oensket();
+  const har = kilde.installeret();
+  return {
+    version: har ? har.version : Number((friskVersion(), APP_VERSION_FIL)),
+    oensket: vil.tekst,
+    laast: !!vil.laast,
+    hentet: har ? har.hentet : null,
+    kilde: har ? har.kilde : 'ukendt',
+  };
+}
+
 const ROUTES = {
   'GET /api/public-config': (req, res) => {
     sendJson(res, 200, {
@@ -2997,6 +3019,32 @@ const ROUTES = {
     if (notionCache.size > 50) notionCache.clear();
     notionCache.set(sideId, { md: r.markdown, t: now() });
     sendJson(res, 200, { markdown: r.markdown, cached: false });
+  },
+
+  /* --- koden selv: hvad koerer vi, og findes der en nyere ------------ */
+
+  'GET /api/v1/kode': (req, res) => {
+    const user = godkend(req, res, 'read');
+    if (!user) return;
+    sendJson(res, 200, kodeStatus());
+  },
+
+  /*
+   * Spoerg GitHub, om der er kommet en nyere udgave.
+   *
+   * Med vilje kun paa knappen. En baggrundskontrol ville betyde ét udgaaende
+   * kald i timen fra en app, der ellers ikke ringer nogen steder hen - og
+   * svaret kan alligevel foerst bruges ved naeste genstart.
+   */
+  'POST /api/v1/kode/tjek': async (req, res) => {
+    const user = godkend(req, res, 'read');
+    if (!user) return;
+    try {
+      const nyeste = await kilde.nyesteTag();
+      sendJson(res, 200, Object.assign(kodeStatus(), { nyeste }));
+    } catch (err) {
+      apiFejl(res, 502, 'github_unreachable', `Kunne ikke spoerge GitHub: ${err.message}`);
+    }
   },
 
   /* --- push: abonnement, noegle og "hvad skulle jeg minde om" --------- */

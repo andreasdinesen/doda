@@ -511,3 +511,68 @@ function b64uTilBytes(s) {
   const raw = atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4));
   return Uint8Array.from(raw, (c) => c.charCodeAt(0));
 }
+
+/* ------------------------------------------------------ hvor koden kom fra */
+
+/**
+ * Kortet i indstillingerne: hvilken udgave koerer serveren, efter hvilken
+ * regel - og er der kommet en nyere?
+ *
+ * Kontrollen sidder paa en KNAP med vilje. Svaret kan alligevel foerst tages
+ * i brug ved naeste genstart, og en app uden udgaaende trafik skal ikke
+ * begynde at ringe til GitHub i baggrunden, fordi nogen har indstillinger
+ * aabne.
+ */
+async function bindKode() {
+  const boks = document.getElementById('kodeBoks');
+  if (!boks) return;
+
+  let d;
+  try {
+    d = await api('GET', '/api/v1/kode');
+  } catch (ex) {
+    boks.innerHTML = `<p class="meta" style="margin:0">Could not read the code
+      version: ${esc(ex.message)}</p>`;
+    return;
+  }
+
+  const hentet = d.hentet
+    ? new Date(d.hentet).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+    : null;
+
+  const tegn = (besked, slags) => {
+    boks.innerHTML = `
+      <p class="meta" style="margin:0">
+        Running <strong>v${esc(String(d.version))}</strong> ${d.laast
+    ? `— <strong>pinned</strong> to v${esc(d.oensket)}.`
+    : '— following the newest release.'}
+        ${hentet ? `Fetched from GitHub ${esc(hentet)}.` : 'Installed with the rune.'}
+      </p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">
+        <button class="btn" id="kodeTjek">Check for a new version</button>
+      </div>
+      ${besked ? `<p class="${slags === 'fejl' ? 'meta' : 'lead'}" style="margin:10px 0 0">${besked}</p>` : ''}`;
+    document.getElementById('kodeTjek').addEventListener('click', async (e) => {
+      const knap = e.currentTarget;
+      knap.disabled = true;
+      knap.textContent = 'Checking…';
+      try {
+        const svar = await api('POST', '/api/v1/kode/tjek', {});
+        if (svar.nyeste > svar.version) {
+          tegn(d.laast
+            ? `<strong>v${esc(String(svar.nyeste))} is out</strong>, but doda is pinned to
+               v${esc(d.oensket)}. Change <code>KODE_VERSION</code> in the panel to
+               <code>seneste</code>, then restart doda.`
+            : `<strong>v${esc(String(svar.nyeste))} is out.</strong> Restart doda in the
+               panel and it will be running it.`);
+        } else {
+          tegn(`This is the newest release (v${esc(String(svar.nyeste))}).`);
+        }
+      } catch (ex) {
+        tegn(`Could not reach GitHub: ${esc(ex.message)}`, 'fejl');
+      }
+    });
+  };
+
+  tegn('');
+}

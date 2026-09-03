@@ -1179,7 +1179,21 @@ function sideSettings() {
 
     <div class="card"><h2>About</h2>
       <p class="lead" style="margin-top:6px">doda version ${APP_VERSION}.
-      ${state.config.secureContext ? 'Secure connection (https).' : 'Plain http — passkeys and notifications are unavailable here.'}</p></div>
+      ${state.config.secureContext ? 'Secure connection (https).' : 'Plain http — passkeys and notifications are unavailable here.'}</p>
+      ${/*
+        * Versionen i panelet er ikke laengere appens.
+        *
+        * Fra v82 henter serveren sin egen kode fra GitHub ved hver opstart,
+        * og runen er kun en startsnor. Panelets tal staar derfor stille,
+        * mens appen gaar videre - og saa skal appen selv kunne svare paa,
+        * hvad den koerer, og hvorfor.
+        */ ''}
+      <div id="kodeBoks" style="margin-top:12px">Loading…</div>
+      <p class="gate-note" style="text-align:left">doda fetches its own code from
+      GitHub when the server starts, so <strong>restarting doda in the panel is the
+      update</strong>. To stay on — or go back to — a particular release, set the
+      rune setting <code>KODE_VERSION</code> to its number instead of
+      <code>seneste</code>.</p></div>
     </div>
 
     <div class="fane" data-fane="account">
@@ -1477,6 +1491,7 @@ function bindSettings() {
   bindNoegler();
   bindData();
   bindPush();
+  bindKode();
   bindTotp();
   bindSagu();
   bindNotion();

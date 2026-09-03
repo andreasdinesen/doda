@@ -73,6 +73,27 @@ HENT_FRA_GITHUB = True
 GITHUB_EJER = 'andreasdinesen'
 GITHUB_REPO = 'doda'
 
+# ------------------------------------------------ runens version vs. appens
+#
+# Indtil v81 var de ét tal. Runen bar ikke koden - den hentede den fra en tag
+# - men taggen stod i install-scriptet, saa en ny app-udgave KRAEVEDE en ny
+# rune. Andreas skulle derfor gennem panelets to trin (Reload rune, saa
+# Update) ved hver eneste udgivelse, for at flytte ét tal i en YAML.
+#
+# Fra v82 henter `app/kilde.js` koden ved hver opstart, og **en genstart ER
+# opdateringen**. Runen er blevet en startsnor: den skal kun udgives, naar
+# selve runen aendrer sig (variabler, startup, porte, watchers).
+#
+# Derfor to tal:
+#   APP_VERSION (i app/parts/p1_core.js) - koden. Bumpes ved hver udgivelse.
+#   RUNE_VERSION (her)                   - runen. Bumpes KUN naar YAML'en
+#                                          herunder aendrer sig.
+#
+# RUNE_VERSION er ogsaa den tag, install-scriptet henter foerste gang. Den
+# behoever ikke vaere den nyeste: foerste opstart henter alligevel det, der
+# staar i KODE_VERSION. Den skal bare vaere en udgave, der KAN starte.
+RUNE_VERSION = 82
+
 
 def tarball_url(version):
     """Runens version N hoerer sammen med taggen vN - ikke med en gren.
@@ -432,14 +453,15 @@ def install_script(version, payload):
     if HENT_FRA_GITHUB:
         return (
             'set -eu\n'
-            f'echo "Installerer doda v{version} ..."\n'
+            f'echo "Installerer doda (startsnor v{version}) ..."\n'
             'echo "Node: $(node --version)"\n'
             '\n'
             + hent_krop(version)
             + '\n'
             'echo "Filer udpakket:"\n'
             'ls -1 app app/public\n'
-            'echo "Klar. Start serveren i panelet."\n'
+            'echo "Klar. Start serveren i panelet - den henter selv den"\n'
+            'echo "udgave, KODE_VERSION peger paa, foer den starter."\n'
         )
     linjer = textwrap.wrap(payload, 100)
     return (
@@ -462,15 +484,34 @@ def opdater_script(version, payload):
     """update:-blokken (ny panelfunktion): skriver app-filerne igen og lader
     /data staa. Bruges til at lukke en CVE uden at geninstallere."""
     if HENT_FRA_GITHUB:
+        # Knappen maa ALDRIG hente startsnorens tag, naar appen allerede er
+        # laengere fremme: v82 oven i v95 er en nedgradering, som ingen bad
+        # om. Findes app/kilde.js, er den facit - den kender KODE_VERSION og
+        # henter praecis den udgave, serveren ville hente ved en genstart.
+        # Startsnoren er kun redningen, hvis app/ er vaek eller foer v82.
         return (
             'set -eu\n'
-            f'echo "Opdaterer doda til v{version} ..."\n'
+            'echo "Opdaterer doda ..."\n'
             'echo "Node: $(node --version)"\n'
             '\n'
-            + hent_krop(version)
-            + '\n'
+            'if [ -f app/kilde.js ]; then\n'
+            # Panelet templater {{...}} ind i scriptet, og variablerne findes
+            # ogsaa som env i containeren. Vi PROEVER skabelonen og falder
+            # tilbage til env, hvis den staar utemplateret - saa kan en
+            # laasning ikke tabes paa en antagelse om, hvad panelet goer.
+            '  K="{{KODE_VERSION}}"\n'
+            '  case "$K" in\n'
+            '    seneste|latest|[0-9]*) : ;;\n'
+            '    *) K="${KODE_VERSION:-seneste}" ;;\n'
+            '  esac\n'
+            '  echo "Oensket udgave: $K"\n'
+            '  KODE_VERSION="$K" node app/kilde.js\n'
+            'else\n'
+            + textwrap.indent(hent_krop(version), '  ')
+            + 'fi\n'
+            '\n'
             'echo "App-filerne er skiftet ud. Databasen i /data er uroert."\n'
-            'echo "Skemaet opdateres automatisk, naar serveren starter."\n'
+            'echo "Genstart doda, saa serveren koerer den nye kode."\n'
         )
     linjer = textwrap.wrap(payload, 100)
     return (
@@ -487,7 +528,7 @@ def opdater_script(version, payload):
     )
 
 
-def byg_yaml(version, payload):
+def byg_yaml(version, rune_version, payload):
     rune = {'gameskill': {
         'id': 'doda',
         'name': 'doda',
@@ -500,7 +541,7 @@ def byg_yaml(version, payload):
             'Egen SQLite-database, ingen eksterne afhaengigheder.'
         ),
         'author': 'andreas',
-        'version': version,
+        'version': rune_version,
         'icon': 'app',
 
         # Node-versionen er et FELT i panelet, ikke en konstant i koden: findes
@@ -514,17 +555,47 @@ def byg_yaml(version, payload):
              'default': 'node:24-alpine',
              'pattern': r'^node:[0-9][A-Za-z0-9._-]*$',
              'hint': 'Skal vaere et node:-image, fx node:24-alpine eller node:24.9.0-alpine'},
+
+            # Laasen. »seneste« er standarden, fordi det er den, der goer
+            # runen overfloedig i hverdagen - men et tal her er hele vejen
+            # tilbage: saet 81, genstart, og serveren koerer v81 igen.
+            # Moensteret afviser »v81« og »81.2« i panelet frem for at lade
+            # kilde.js tolke noget, brugeren ikke skrev.
+            {'key': 'KODE_VERSION', 'name': 'Kodeversion', 'type': 'string',
+             'default': 'seneste',
+             'pattern': r'^(seneste|latest|[0-9]+)$',
+             'hint': 'seneste = hent nyeste udgivelse fra GitHub ved hver genstart. '
+                     'Et tal (fx 81) laaser til praecis den udgave.'},
         ],
         # Der staar ikke et GITHUB_TOKEN her. Repoet er offentligt, saa
         # hentningen kraever ingen godkendelse - og et felt, der ikke goer
         # noget, er et sted at lede efter en fejl, der ikke er der.
 
-        'install': {'image': '{{NODE_IMAGE}}', 'script': install_script(version, payload)},
+        # Begge scripts henter STARTSNOREN, ikke den nyeste app-udgave:
+        # runen kender kun sin egen version. Resten klarer kilde.js.
+        'install': {'image': '{{NODE_IMAGE}}', 'script': install_script(rune_version, payload)},
         'update': {'image': '{{NODE_IMAGE}}', 'label': 'Opdater doda',
-                   'script': opdater_script(version, payload)},
+                   'script': opdater_script(rune_version, payload)},
 
         'startup': {
-            'command': ('if node -e "require(\'node:sqlite\')" >/dev/null 2>&1; then\n'
+            # Opstarten er opdateringen (F26). Tre trin, i den raekkefoelge:
+            #
+            #  1. Redningen. kilde.js bytter app/ ud med to omdoebninger, og
+            #     doer containeren imellem dem, ligger den gamle app under
+            #     .doda-gammel. Uden det her trin ville et daarligt sekund
+            #     efterlade en container helt uden app/ - og saa er der heller
+            #     ingen kilde.js til at hente en ny. Det er den eneste rigtige
+            #     brik: alt andet herinde kan fejle uden konsekvens.
+            #  2. Hentningen. Fejler den, siger den det og gaar videre - den
+            #     kode, der ligger, er stadig en koerende doda.
+            #  3. Serveren, som foer.
+            'command': ('if [ ! -f app/server.js ] && [ -f .doda-gammel/server.js ]; then\n'
+                        '  rm -rf app\n'
+                        '  mv .doda-gammel app\n'
+                        '  echo "[kode] app/ sat tilbage efter en afbrudt udskiftning"\n'
+                        'fi\n'
+                        'node app/kilde.js || echo "[kode] advarsel: opdateringen kunne ikke koeres"\n'
+                        'if node -e "require(\'node:sqlite\')" >/dev/null 2>&1; then\n'
                         '  exec node app/server.js\n'
                         'else\n'
                         '  exec node --experimental-sqlite app/server.js\n'
@@ -581,12 +652,12 @@ def main():
     payload = b85(komprimeret)
     verificer(payload, raw)
 
-    install = install_script(version, payload)
+    install = install_script(RUNE_VERSION, payload)
     if len(install) > MAX_INSTALL:
         fejl(f'install-scriptet er {len(install):,} tegn - loftet er {MAX_INSTALL:,} '
              '(Linux MAX_ARG_STRLEN er 131072). Frontenden er vokset for meget.')
 
-    tekst = byg_yaml(version, payload)
+    tekst = byg_yaml(version, RUNE_VERSION, payload)
     if len(tekst.encode('utf8')) > MAX_YAML:
         fejl(f'YAML er {len(tekst.encode("utf8")):,} b - panelets loft er {MAX_YAML:,}')
 
@@ -596,7 +667,11 @@ def main():
 
     print(f'  install-script: {len(install):,} / {MAX_INSTALL:,} tegn '
           f'({len(install) * 100 // MAX_INSTALL} %)')
-    print(f'\nOK  runes/doda.yaml  (v{version}, {len(tekst.encode("utf8")):,} b)')
+    print(f'\nOK  runes/doda.yaml  (rune v{RUNE_VERSION}, {len(tekst.encode("utf8")):,} b)')
+    print(f'    App-koden er v{version} - serveren henter den selv ved opstart.')
+    if RUNE_VERSION != version:
+        print('    Runen er UAENDRET og behoever ikke udgives: '
+              'commit + `git tag v%d` + `git push --tags` er nok.' % version)
 
 
 if __name__ == '__main__':
