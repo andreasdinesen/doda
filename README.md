@@ -254,7 +254,7 @@ doda er en app til én bruger.
 |---|---|---|
 | `APP_NAME` | `doda` | Navnet i browserfanen |
 | `NODE_IMAGE` | `node:24-alpine` | Hvilket Node-image appen kører på — se nedenfor |
-| `KODE_VERSION` | `seneste` | Hvilken udgave af koden serveren henter ved opstart — se nedenfor |
+| `KODE_VERSION` | *(tom)* | Lås til en bestemt udgave af koden. Tom = nyeste — se nedenfor |
 
 ---
 
@@ -275,21 +275,26 @@ opdatering. Det står i serverloggen, ikke som en fejl.
 Hvilken udgave der kører — og efter hvilken regel — står under **Settings →
 About**, sammen med en knap, der spørger GitHub, om der er kommet en nyere.
 
+Hentningen skriver også i **Console**-fanen ved hver genstart — `[kode] henter
+v83 …` eller grunden til, at den ikke gjorde. Ikke i *Install log*: den viser
+kun install- og opdaterings-kørsler.
+
 ### Bliv på — eller rul tilbage til — en bestemt udgave
 
 `KODE_VERSION` i serverens variabler er låsen:
 
 | Værdi | Hvad der sker ved hver genstart |
 |---|---|
-| `seneste` (standard) | Nyeste udgivelse hentes |
+| *(tom — standard)* | Nyeste udgivelse hentes |
 | `81` | Præcis v81 hentes — også selv om der findes en nyere |
 
 Er en udgivelse dårlig: skriv tallet på den, der virkede, og genstart. Frem
-igen: skriv `seneste`, og genstart. Databasen i `/data` røres ikke af nogen af
+igen: **tøm feltet**, og genstart. Databasen i `/data` røres ikke af nogen af
 delene, og skemaet migreres ved næste start.
 
-Feltet tager kun `seneste` eller et rent tal. Skriver du `v81`, siger doda fra i
-loggen i stedet for at gætte.
+Feltet tager kun et rent tal — eller ingenting. Skriver du `v81`, siger doda fra
+i loggen i stedet for at gætte. (`seneste` og `latest` godtages stadig og
+betyder det samme som tomt; det var standarden i v82.)
 
 **Udgaver før v82 kan ikke hente sig selv.** Låser du længere tilbage end 82,
 forsvinder hentefunktionen sammen med resten af koden, og en genstart opdaterer
@@ -439,6 +444,7 @@ Se `PLAN.md` for faseoversigt og status, `DESIGN.md` for de trufne beslutninger 
 
 | Version | Ændringer |
 |---|---|
+| 83 | **Feltet er tomt, når doda bare skal følge med.** `KODE_VERSION` stod til `seneste`, og et felt, der *skal* udfyldes for at opføre sig normalt, læser man som en indstilling, nogen har taget — så begynder man at spekulere på, hvad ordet dækker over. Nu betyder tomt nyeste, og feltet bruges kun, når du vil noget andet. `seneste` virker stadig. |
 | 82 | **doda henter selv sin kode — en genstart er opdateringen.** Runen bar ikke længere koden, den hentede den fra GitHub — men taggen stod i runen, så hver eneste udgivelse krævede alligevel to trin i panelet for at flytte ét tal i en YAML. Nu spørger serveren selv GitHub ved hver opstart. **Og vejen tilbage er blevet kortere end vejen frem:** `KODE_VERSION` låser til præcis den udgave, du peger på, så en dårlig udgivelse rulles tilbage med et tal og en genstart. Kan GitHub ikke nås, starter doda på den kode, der ligger — og byttes koden ud, sker det med to omdøbninger, aldrig med en halv mappe. Under **Settings → About** står det nu, hvad der kører, hvorfra og hvornår. |
 | 81 | **Et kamera-id foreslås ikke længere som titel — og sideoversigten følger fanen.** Dropper du et foto, hed forslaget `352CCE7E-8578-4F56-…`, altså det en iPhone kalder et billede. Det stod markeret, så det du skrev erstattede det — men **klikkede du i feltet i stedet for bare at taste, ophævedes markeringen**, og id'et blev stående i titlen. Nu foreslås kun navne, et menneske ville skrive: `faktura-2026.pdf` ja, `IMG_4821.jpg` nej. **Og:** oversigten i højre kant listede alle seksten Settings-afsnit uanset fane — og klik på et af dem gjorde ingenting, fordi målet var skjult. |
 | 80 | **Notifikationen vises som allerførste handling — og appen siger til, hvis en ny udgave venter.** Timeout-rettelsen i v79 hjalp ikke, så spørgsmålet er ikke længere, hvor lang tid service workeren har, men **om den overhovedet vækkes**. Den viser nu noget, før den rører ved noget som helst andet, og erstatter det med det rigtige. Kommer *dét* ikke frem, når pushen aldrig service workeren. **Og:** venter der en ny udgave af doda på, at appen lukkes helt, hører din tilmelding til den gamle — push-tjenesten kvitterer stadig, men leveringen går til en worker på vej ud. Det står nu i prøvens svar; det er en tilstand, man ellers ikke kan se. |

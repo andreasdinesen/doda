@@ -29,6 +29,9 @@ const ROD = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 /* --------------------------------------------------------- KODE_VERSION */
 
+/* Tom er STANDARDEN fra v83 - ikke bare en tilladt vaerdi. Kunne den tomme
+   streng ikke laeses som »nyeste«, ville et nyinstalleret panel-felt betyde
+   »ingen udgave«, og hver genstart ville enten fejle eller staa stille. */
 test('tom, seneste og latest betyder alle det samme', () => {
   for (const v of ['', '   ', 'seneste', 'latest', 'Seneste', 'LATEST']) {
     const o = K.oensket(v);

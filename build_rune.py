@@ -92,7 +92,7 @@ GITHUB_REPO = 'doda'
 # RUNE_VERSION er ogsaa den tag, install-scriptet henter foerste gang. Den
 # behoever ikke vaere den nyeste: foerste opstart henter alligevel det, der
 # staar i KODE_VERSION. Den skal bare vaere en udgave, der KAN starte.
-RUNE_VERSION = 82
+RUNE_VERSION = 83
 
 
 def tarball_url(version):
@@ -460,8 +460,8 @@ def install_script(version, payload):
             + '\n'
             'echo "Filer udpakket:"\n'
             'ls -1 app app/public\n'
-            'echo "Klar. Start serveren i panelet - den henter selv den"\n'
-            'echo "udgave, KODE_VERSION peger paa, foer den starter."\n'
+            'echo "Klar. Start serveren i panelet - den henter selv nyeste"\n'
+            'echo "udgave (eller den, KODE_VERSION laaser til), foer den starter."\n'
         )
     linjer = textwrap.wrap(payload, 100)
     return (
@@ -501,10 +501,11 @@ def opdater_script(version, payload):
             # laasning ikke tabes paa en antagelse om, hvad panelet goer.
             '  K="{{KODE_VERSION}}"\n'
             '  case "$K" in\n'
+            "    '') : ;;\n"
             '    seneste|latest|[0-9]*) : ;;\n'
-            '    *) K="${KODE_VERSION:-seneste}" ;;\n'
+            '    *) K="${KODE_VERSION:-}" ;;\n'
             '  esac\n'
-            '  echo "Oensket udgave: $K"\n'
+            '  echo "Oensket udgave: ${K:-nyeste}"\n'
             '  KODE_VERSION="$K" node app/kilde.js\n'
             'else\n'
             + textwrap.indent(hent_krop(version), '  ')
@@ -561,10 +562,15 @@ def byg_yaml(version, rune_version, payload):
             # tilbage: saet 81, genstart, og serveren koerer v81 igen.
             # Moensteret afviser »v81« og »81.2« i panelet frem for at lade
             # kilde.js tolke noget, brugeren ikke skrev.
+            # TOM = nyeste. Standarden for »goer det normale« skal vaere
+            # ingenting: et felt, der SKAL udfyldes for at opfoere sig
+            # almindeligt, laeser man som en indstilling, der er taget - og
+            # saa spekulerer man paa, hvad »seneste« mon daekker over.
+            # Ordene godtages stadig; gamle servere har dem staaende.
             {'key': 'KODE_VERSION', 'name': 'Kodeversion', 'type': 'string',
-             'default': 'seneste',
-             'pattern': r'^(seneste|latest|[0-9]+)$',
-             'hint': 'seneste = hent nyeste udgivelse fra GitHub ved hver genstart. '
+             'default': '',
+             'pattern': r'^([0-9]+|seneste|latest)?$',
+             'hint': 'Tom = hent nyeste udgivelse fra GitHub ved hver genstart. '
                      'Et tal (fx 81) laaser til praecis den udgave.'},
         ],
         # Der staar ikke et GITHUB_TOKEN her. Repoet er offentligt, saa

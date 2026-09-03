@@ -1032,7 +1032,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 82;
+const APP_VERSION = 83;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -4321,9 +4321,9 @@ function sideSettings() {
       <div id="kodeBoks" style="margin-top:12px">Loading…</div>
       <p class="gate-note" style="text-align:left">doda fetches its own code from
       GitHub when the server starts, so <strong>restarting doda in the panel is the
-      update</strong>. To stay on — or go back to — a particular release, set the
-      rune setting <code>KODE_VERSION</code> to its number instead of
-      <code>seneste</code>.</p></div>
+      update</strong>. To stay on — or go back to — a particular release, put its
+      number in the rune setting <code>KODE_VERSION</code>. Empty means the newest
+      one.</p></div>
     </div>
 
     <div class="fane" data-fane="account">
@@ -6734,8 +6734,8 @@ async function bindKode() {
         if (svar.nyeste > svar.version) {
           tegn(d.laast
             ? `<strong>v${esc(String(svar.nyeste))} is out</strong>, but doda is pinned to
-               v${esc(d.oensket)}. Change <code>KODE_VERSION</code> in the panel to
-               <code>seneste</code>, then restart doda.`
+               v${esc(d.oensket)}. Clear <code>KODE_VERSION</code> in the panel, then
+               restart doda.`
             : `<strong>v${esc(String(svar.nyeste))} is out.</strong> Restart doda in the
                panel and it will be running it.`);
         } else {

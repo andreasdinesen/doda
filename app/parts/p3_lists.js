@@ -1191,9 +1191,9 @@ function sideSettings() {
       <div id="kodeBoks" style="margin-top:12px">Loading…</div>
       <p class="gate-note" style="text-align:left">doda fetches its own code from
       GitHub when the server starts, so <strong>restarting doda in the panel is the
-      update</strong>. To stay on — or go back to — a particular release, set the
-      rune setting <code>KODE_VERSION</code> to its number instead of
-      <code>seneste</code>.</p></div>
+      update</strong>. To stay on — or go back to — a particular release, put its
+      number in the rune setting <code>KODE_VERSION</code>. Empty means the newest
+      one.</p></div>
     </div>
 
     <div class="fane" data-fane="account">

@@ -561,8 +561,8 @@ async function bindKode() {
         if (svar.nyeste > svar.version) {
           tegn(d.laast
             ? `<strong>v${esc(String(svar.nyeste))} is out</strong>, but doda is pinned to
-               v${esc(d.oensket)}. Change <code>KODE_VERSION</code> in the panel to
-               <code>seneste</code>, then restart doda.`
+               v${esc(d.oensket)}. Clear <code>KODE_VERSION</code> in the panel, then
+               restart doda.`
             : `<strong>v${esc(String(svar.nyeste))} is out.</strong> Restart doda in the
                panel and it will be running it.`);
         } else {

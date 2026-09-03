@@ -102,7 +102,11 @@ test('runen er en startsnor - og peger paa en tag, der er udgivet', () => {
 test('runen har KODE_VERSION som variabel', () => {
   const yamlTekst = fil('runes', 'doda.yaml');
   assert.match(yamlTekst, /key: KODE_VERSION/, 'panelet skal kunne saette laasen');
-  assert.match(yamlTekst, /default: seneste/, 'standarden er at foelge nyeste udgivelse');
+  // Tom er standarden: »goer det normale« maa ikke kraeve, at der staar noget.
+  assert.match(yamlTekst, /key: KODE_VERSION\n(?: .*\n)*? {4}default: ''\n/,
+    'standarden skal vaere TOM - saa foelger doda nyeste udgivelse uden at nogen skriver noget');
+  assert.match(yamlTekst, /pattern: \^\(\[0-9\]\+\|seneste\|latest\)\?\$/,
+    'moensteret skal tillade tomt - ellers kan standarden ikke gemmes i panelet');
   assert.match(yamlTekst, /node app\/kilde\.js/,
     'startup skal hente koden, ellers opdaterer en genstart ingenting');
 });
