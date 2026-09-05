@@ -92,7 +92,7 @@ GITHUB_REPO = 'doda'
 # RUNE_VERSION er ogsaa den tag, install-scriptet henter foerste gang. Den
 # behoever ikke vaere den nyeste: foerste opstart henter alligevel det, der
 # staar i KODE_VERSION. Den skal bare vaere en udgave, der KAN starte.
-RUNE_VERSION = 83
+RUNE_VERSION = 84
 
 
 def tarball_url(version):
@@ -421,31 +421,44 @@ def henter(version):
 def hent_krop(version):
     """De linjer, install og update har tilfaelles, naar koden hentes.
 
-    `rm -rf app` staar begge steder: tar overskriver, men fjerner ikke filer,
-    der er slettet i en ny version. Og der pakkes ALTID ud i en frisk mappe,
-    som byttes ind - saa en halv hentning aldrig kan efterlade et halvt app/.
-    Alt midlertidigt ligger i /tmp; datamappen roeres ikke.
+    Det her er den ENESTE vej, der bruges ved opgraderingen fra en doda uden
+    `app/kilde.js` - altsaa praecis den ene gang, hele mekanikken handler om.
+    Den skal derfor holde de samme tre regler som kilde.js, og gjorde det ikke
+    (fundet af Sagu v48, 05-09-2026, efter ti timers nedetid hos dem):
 
-    Der er ikke laengere et token i spil: repoet er offentligt (2026-08-21).
+    1. **Ikke /tmp.** En fast sti deles af to samtidige koersler - og `mv` fra
+       /tmp er en KOPI over to filsystemer, som kan afbrydes paa midten. Der
+       pakkes derfor ud ved siden af `app/`, hvor et `rename` er atomisk.
+    2. **Den gamle app FLYTTES, den slettes ikke.** `rm -rf app` foer `mv`
+       aabnede et vindue helt uden app/ - og dermed uden `kilde.js` til at
+       redde sig selv. Startup-redningen leder efter `.doda-gammel`, og den
+       fandtes ikke ad denne vej, saa netop her hjalp den ikke.
+    3. Der byttes foerst, naar arkivet ER en app.
+
+    At flytte hele den gamle mappe vaek loeser samtidig det, `rm -rf app` var
+    der for: filer, der er slettet i en ny udgave, bliver ikke liggende.
+
+    Der er ikke et token i spil: repoet er offentligt (2026-08-21).
     """
     return (
         'echo "Henter app-koden fra GitHub ..."\n'
-        'rm -rf /tmp/doda-hent\n'
-        'mkdir -p /tmp/doda-hent\n'
-        f"node -e '{henter(version)}' > /tmp/doda-hent/app.tar\n"
-        'tar x -C /tmp/doda-hent -f /tmp/doda-hent/app.tar\n'
+        'rm -rf .doda-ny .doda-gammel\n'
+        'mkdir -p .doda-ny\n'
+        f"node -e '{henter(version)}' > .doda-ny/app.tar\n"
+        'tar x -C .doda-ny -f .doda-ny/app.tar\n'
+        'rm -f .doda-ny/app.tar\n'
         '\n'
         '# Mappenavnet i et GitHub-arkiv er <repo>-<ref uden v>, og arkivet\n'
         '# begynder med en pax_global_header-post. Ingen af delene gaettes:\n'
         '# find den app-mappe, der FINDES.\n'
-        'NY=$(find /tmp/doda-hent -maxdepth 2 -type d -name app | head -n 1)\n'
+        'NY=$(find .doda-ny -maxdepth 2 -type d -name app | head -n 1)\n'
         'if [ -z "$NY" ] || [ ! -f "$NY/server.js" ]; then\n'
         '  echo "[fejl] arkivet fra GitHub indeholder ingen app/server.js"\n'
         '  exit 1\n'
         'fi\n'
-        'rm -rf app\n'
+        'if [ -d app ]; then mv app .doda-gammel; fi\n'
         'mv "$NY" app\n'
-        'rm -rf /tmp/doda-hent\n'
+        'rm -rf .doda-ny .doda-gammel\n'
     )
 
 
@@ -494,6 +507,28 @@ def opdater_script(version, payload):
             'echo "Opdaterer doda ..."\n'
             'echo "Node: $(node --version)"\n'
             '\n'
+            # Laasen. Andreas trykkede paa Sagus »Opdater«-knap to gange med
+            # otte sekunders mellemrum, og de to koersler byttede app/ ud
+            # under hinanden (Sagu v48, 05-09-2026).
+            #
+            # `mkdir` og ikke `[ -d ] && mkdir`: mkdir er atomisk paa alle
+            # filsystemer, det tochecks-moenster har et hul imellem sig.
+            #
+            # Om HELE scriptet, ikke om else-grenen. Fra v82 er kilde.js-vejen
+            # den ALMINDELIGE, og to samtidige kilde.js kan lige saa godt
+            # bytte app/ ud under hinanden. En laas, der kun daekker den gren,
+            # der snart aldrig bruges, er ingen laas.
+            'if ! mkdir .doda-laas 2>/dev/null; then\n'
+            '  echo "[fejl] en anden opdatering er allerede i gang."\n'
+            '  echo "Vent til den er faerdig, eller genstart doda og proev igen."\n'
+            '  exit 1\n'
+            'fi\n'
+            # trap'en frigiver den. En fejlet hentning er den ALMINDELIGE fejl
+            # - nettet blinker, taggen mangler - og en laas, der overlever
+            # den, goer knappen doed for altid. .doda-gammel roeres IKKE:
+            # doer vi mellem de to omdoebninger, er den redningen.
+            "trap 'rm -rf .doda-laas .doda-ny' EXIT INT TERM\n"
+            '\n'
             'if [ -f app/kilde.js ]; then\n'
             # Panelet templater {{...}} ind i scriptet, og variablerne findes
             # ogsaa som env i containeren. Vi PROEVER skabelonen og falder
@@ -511,8 +546,15 @@ def opdater_script(version, payload):
             + textwrap.indent(hent_krop(version), '  ')
             + 'fi\n'
             '\n'
+            # Sagu v48 foreslog en indrammet »GENSTART NU«-besked, fordi
+            # deres maaling sagde, at knappen ikke genstarter. Andreas'
+            # install-log for doda 03-09-2026 (Yggdrasil v0.3.8) siger noget
+            # andet: efter »=== Update complete ===« staar »Restarting the
+            # app ...«. Beskeden er derfor skrevet, saa den er sand i begge
+            # tilfaelde frem for at raabe om noget, panelet allerede goer.
             'echo "App-filerne er skiftet ud. Databasen i /data er uroert."\n'
-            'echo "Genstart doda, saa serveren koerer den nye kode."\n'
+            'echo "Panelet genstarter doda bagefter. Sker det ikke, saa genstart"\n'
+            'echo "selv - serveren koerer den gamle kode, indtil den er genstartet."\n'
         )
     linjer = textwrap.wrap(payload, 100)
     return (
@@ -599,6 +641,17 @@ def byg_yaml(version, rune_version, payload):
                         '  rm -rf app\n'
                         '  mv .doda-gammel app\n'
                         '  echo "[kode] app/ sat tilbage efter en afbrudt udskiftning"\n'
+                        'fi\n'
+                        # trap'en naar ikke at koere ved et haardt drab, og en
+                        # efterladt laas goer opdaterings-knappen doed for
+                        # altid. Prisen er, at en opdatering, der koerer i sin
+                        # egen container praecis mens appen starter, mister
+                        # sin laas - mindre end en knap, der aldrig virker
+                        # igen. Panelet stopper i oevrigt appen foer en
+                        # opdatering, saa de to skulle ikke kunne overlappe.
+                        'if [ -d .doda-laas ]; then\n'
+                        '  rm -rf .doda-laas .doda-ny\n'
+                        '  echo "[kode] en strandet opdateringslaas er ryddet"\n'
                         'fi\n'
                         'node app/kilde.js || echo "[kode] advarsel: opdateringen kunne ikke koeres"\n'
                         'if node -e "require(\'node:sqlite\')" >/dev/null 2>&1; then\n'

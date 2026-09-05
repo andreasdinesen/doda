@@ -42,6 +42,10 @@
     i `build_rune.py` er runens eget tal og bumpes kun, når YAML'en ændrer sig
     (variabler, startup, porte, watchers). Bumper man den unødigt, er man tilbage
     ved to trin i panelet for hver udgivelse — hele pointen tabt.
+  - **Runens `update:`-else-gren skal holde SAMME regler som `kilde.js`** (ikke
+    `/tmp`, flyt den gamle app væk frem for at slette den, byt aldrig halvt). Den
+    bruges kun ved opgraderingen fra en doda uden `kilde.js` — altså den ene gang,
+    der ikke kan fortrydes. Den blev glemt én gang (v84, fundet af Sagu).
   - **Alt i `kilde.js` ender med exit 0.** En fejl dér må aldrig kunne forhindre
     serveren i at starte: kan GitHub ikke nås, kører den kode, der ligger.
 - **Install-scriptet BÆRER ikke app-koden — det henter den** fra

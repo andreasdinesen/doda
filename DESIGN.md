@@ -2045,6 +2045,68 @@ Det er ikke spærret — v81 kan være præcis det, man vil tilbage til — men 
 **siges i loggen, før det sker**, og vejen frem er panelets »Opdater doda«, som
 falder tilbage til runens startsnor.
 
+## 7d · Redningsvejen fik ikke de regler, hovedvejen fik (v84)
+
+`kilde.js` blev bygget efter tre regler (§7c): ikke `/tmp`, flyt den gamle app
+væk frem for at slette den, byt aldrig halvt. Runens `update:`-script har en
+**else-gren**, der kun bruges, når `app/kilde.js` endnu ikke findes — altså
+**præcis den ene opgradering, hele mekanikken handler om** — og den gren fik
+ingen af de tre. Den stod, som den havde stået siden Sagu-broen:
+
+```sh
+rm -rf /tmp/doda-hent     # fast sti, delt mellem samtidige kørsler
+rm -rf app                # et vindue helt uden app/ …
+mv "$NY" app              # … og mv fra /tmp er en KOPI over to filsystemer
+```
+
+Startup-redningen leder efter `.doda-gammel`, og den mappe opstår aldrig ad
+denne vej. Netop dér, hvor redningen skulle bruges, fandtes den ikke.
+
+Fundet af Sagu v48 (05-09-2026) efter ti timers nedetid hos dem. **Det er
+samme fejl som §7b, en gang til:** vi skrev reglerne ned, byggede hovedvejen
+efter dem — og lod dem stå i den vej, der bruges én gang og er umulig at
+fortryde.
+
+### Låsen
+
+Andreas trykkede på Sagus knap to gange med otte sekunders mellemrum, og de to
+kørsler delte arbejdsmappe. doda fik samme lås — men **om hele scriptet**, ikke
+om else-grenen. Fra v82 er `kilde.js`-vejen den almindelige, og to samtidige
+`kilde.js` kan lige så godt bytte `app/` ud under hinanden. En lås, der kun
+dækker den gren, der snart aldrig bruges, er ingen lås.
+
+`mkdir` og ikke `[ -d ] + mkdir`: `mkdir` er atomisk på alle filsystemer, det
+tochecks-mønster har et hul imellem sig. `trap … EXIT INT TERM` frigiver den,
+fordi en fejlet hentning er den *almindelige* fejl — og en lås, der overlever
+den, gør knappen død for altid. `startup` rydder en strandet lås, fordi
+`trap` ikke når at køre ved et hårdt drab.
+
+### Hvad sabotagen viste
+
+Prøven kører **det udgivne script** fra YAML'en (kun transporten skiftes ud) og
+starter to kørsler mod en *forsinket* server. Uden forsinkelsen består den ved
+et tilfælde.
+
+Den første sabotage-påstand var forkert: jeg skrev, at begge kørsler ville
+komme igennem uden låsen. Målt gjorde de ikke — den ene faldt på
+`mv: rename app to .doda-gammel: No such file or directory`, og `app/` endte
+tilfældigvis hel.
+
+**Og det er hele pointen.** Uden lås er skaden et spørgsmål om timing, ikke om
+held: den ene kørsel fejlede, fordi den kunne se den andens filer. Havde
+rækkefølgen været en anden, havde den flyttet den *nye* app væk og derefter
+fejlet. Prøven måler derfor det, der er deterministisk — at taberen falder på
+**låsen** og ikke på en fil, den anden lige har flyttet — og sabotagen kræver
+det modsatte.
+
+### Beskeden til sidst
+
+Sagu foreslog en indrammet »GENSTART NU«, fordi deres måling sagde, at
+`app-update` ikke genstarter serveren. Andreas' egen install-log for doda
+(Yggdrasil v0.3.8, 03-09-2026) siger noget andet: efter `=== Update complete
+===` står `Restarting the app ...`. Beskeden er derfor skrevet, så den er sand
+i begge tilfælde, i stedet for at råbe om noget, panelet allerede gør.
+
 ## 7 · Uden for scope
 
 Handover §10 gælder uændret: ingen flere brugere, ingen
