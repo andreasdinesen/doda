@@ -949,12 +949,97 @@ async function aabnElement(listeItem) {
   voks();
   tegnPreview();
 
+  /**
+   * Har man rettet noget i ruden, som ikke er gemt endnu?
+   *
+   * Bruges KUN af ringen. Alt andet herinde er stadig et udkast, der venter
+   * paa Save - det er ringen, der er blevet en handling, ikke ruden.
+   */
+  const harRettelser = () => {
+    const foer = it.contexts.map((c) => c.id).slice().sort().join(',');
+    const nu = u.contexts.slice().sort().join(',');
+    return u.title !== it.title
+      || u.note !== it.note
+      || u.project_id !== it.project_id
+      || (u.area_id || null) !== (it.area_id || null)
+      || u.starred !== (it.starred ? 1 : 0)
+      || u.due_date !== it.due_date
+      || u.due_time !== it.due_time
+      || u.defer_date !== it.defer_date
+      || (u.link_url || null) !== (it.link_url || null)
+      || !!u.nytProjekt
+      || u.nyeKontekster.length > 0
+      || foer !== nu;
+  };
+
   const tick = host.querySelector('#dTick');
   if (tick) {
-    tick.addEventListener('click', () => {
-      u.status = u.status === 'done' ? 'next' : 'done';
-      tick.classList.toggle('on', u.status === 'done');
-      tegnChipsRow();
+    /*
+     * Ringen afslutter opgaven og lukker ruden. Ingen Save (Andreas,
+     * 05-09-2026).
+     *
+     * Foer var den en chip som de andre: den farvede sig selv og ventede paa
+     * Save. Men en afkrydsningsring er ikke en indstilling, man overvejer -
+     * det er den ene handling, hele listen handler om, og i listen afslutter
+     * den samme ring med det samme. At den ene gang, man har opgaven AABEN,
+     * kraevede to tryk mere, var forskellen svaer at forsvare.
+     *
+     * Det er kun RINGEN, der har faaet den her opfoersel. Chips aendrer
+     * stadig kun udkastet - et fejlklik paa en dato maa ikke gemme noget bag
+     * om nogen.
+     *
+     * Rettelser, man har lavet i ruden, gemmes FOERST. Ellers ville teksten,
+     * man lige har skrevet, forsvinde i det oejeblik man kvitterer for, at
+     * opgaven er klaret - og det er stik imod, hvad man ser paa skaermen.
+     * Er intet aendret, springes gemningen over: saa er der ét kald, og
+     * ringen foeles som i listen.
+     *
+     * `/complete` og ikke `status: 'done'`: kun det endepunkt laegger den
+     * naeste forekomst af en gentagelse ind. Gentagelser spoerges der med
+     * vilje IKKE om her (»denne ene eller hele serien?«) - en rettelse
+     * gemmes for denne ene, som er den, der ikke skriver noget om i serien.
+     */
+    let iGang = false;
+    tick.addEventListener('click', async () => {
+      if (iGang) return;
+      iGang = true;
+      const afslut = u.status !== 'done';
+      tick.classList.toggle('on', afslut);
+
+      // Som ved Save: klikker man paa ringen uden at forlade titelfeltet
+      // foerst, naar blur ikke at koere, og "/doda" ville blive gemt som tekst.
+      const nyTitel = anvendSyntaks(u, titelEl.value);
+      if (nyTitel !== null) { u.title = nyTitel; titelEl.value = nyTitel; }
+
+      try {
+        if (harRettelser()) {
+          await opretNyeNavne();
+          await gem();
+          // Kvitteringen (»Done: …«) laeses af fuldfoer() ud af state, og
+          // den kender endnu den GAMLE titel. Uden det her ville en opgave,
+          // man lige har omdoebt, blive kvitteret under sit forrige navn.
+          const kendt = state.items.find((x) => x.id === it.id);
+          if (kendt) kendt.title = u.title;
+        }
+      } catch (ex) {
+        // Kunne rettelserne ikke gemmes, afsluttes der ikke: saa ville man
+        // staa med en lukket opgave og en tekst, der aldrig kom nogen steder.
+        iGang = false;
+        tick.classList.toggle('on', !afslut);
+        toast(ex.message);
+        return;
+      }
+
+      luk();
+      if (afslut) {
+        await fuldfoer(it.id);
+      } else {
+        try {
+          await api('POST', `/api/v1/items/${it.id}/uncomplete`, {});
+          await genindlaes();
+          toast(`Reopened: ${u.title}`);
+        } catch (ex) { toast(ex.message); }
+      }
     });
   }
 

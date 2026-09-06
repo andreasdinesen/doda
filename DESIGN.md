@@ -2107,6 +2107,49 @@ Sagu foreslog en indrammet »GENSTART NU«, fordi deres måling sagde, at
 ===` står `Restarting the app ...`. Beskeden er derfor skrevet, så den er sand
 i begge tilfælde, i stedet for at råbe om noget, panelet allerede gør.
 
+## 7e · Ringen er en handling, ikke en indstilling (v85)
+
+Detaljeruden er bygget som et **udkast**: alt redigeres i `u` og gemmes først
+ved Save, så et fejlklik på en chip ikke ændrer noget bag om brugeren (§6y).
+Afkrydsningsringen sad i den regel sammen med chipsene — den farvede sig selv
+og ventede.
+
+Men ringen er ikke en indstilling, man overvejer. Det er **den ene handling,
+hele listen handler om**, og i listen afslutter den samme ring med det samme.
+At netop den ene gang, man har opgaven åben, krævede to tryk mere, var
+forskellen svær at forsvare (Andreas, 05-09-2026).
+
+Ringen går gennem `/complete`, ikke `status: 'done'`. Kun det endepunkt lægger
+næste forekomst af en gentagelse ind — og det er samme vej som listens ring, så
+Undo, offline-køen og kvitteringen er dem, der allerede fandtes.
+
+### Reglen gælder stadig for alt andet
+
+Kun ringen har fået den her opførsel. En dato eller et projekt, man rammer ved
+en fejl, må stadig kunne fortrydes ved at lukke ruden. **En undtagelse fra en
+regel er kun en undtagelse, hvis den er navngivet** — ellers er det bare en
+regel, der er begyndt at smuldre.
+
+### Rettelser kommer med
+
+Har man skrevet i detaljefeltet og derefter trykker på ringen, gemmes teksten
+først. Alternativet — at smide den væk — er stik imod, hvad der står på
+skærmen i det øjeblik man kvitterer for, at opgaven er klaret. Er intet
+ændret, springes gemningen over, så det almindelige tilfælde stadig er ét
+kald.
+
+For en gentagelse med rettelser spørges der **ikke** »denne ene eller hele
+serien?«. Der gemmes for denne ene — den mulighed, der ikke skriver noget om i
+serien — fordi et ekstra spørgsmål ville ligge præcis i det tryk, ændringen
+handlede om at fjerne.
+
+### Hvad der ikke er efterprøvet
+
+Serveren blev startet, og siden loader uden fejl i konsollen. **Selve klikket
+er ikke prøvet i en browser:** det kræver en konto på instansen, og der
+oprettes ikke konti herfra. Ændringen står altså på koden og på de 320 prøver,
+ikke på en måling af selve trykket.
+
 ## 7 · Uden for scope
 
 Handover §10 gælder uændret: ingen flere brugere, ingen
