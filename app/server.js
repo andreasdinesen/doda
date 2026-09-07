@@ -3170,12 +3170,25 @@ const ROUTES = {
         // Push-tjenestens egen forklaring - dét, der skiller »forkert noegle«
         // fra »serveren kan ikke naa ud«.
         message: r.besked || null,
+        /*
+         * Apples eget kvitteringsnummer for netop denne push.
+         *
+         * Det er det ENESTE haandtag, der findes paa en enkelt levering:
+         * uden det er »kom igennem« et udsagn om, at Apple svarede - ikke om
+         * hvad Apple gjorde bagefter. Kommer notifikationen ikke frem, er
+         * det her nummeret, der skal med, hvis nogen skal kunne slaa den op.
+         * Det er ikke en hemmelighed; abonnementet er, og det staar der ikke.
+         */
+        apnsId: r.apnsId || null,
         subscribedAt: a.created_at,
         lastOk: r.ok ? t : a.last_ok,
         fails: r.ok ? 0 : a.fails + 1,
       });
     }
-    log(`push-proeve: ${svar.filter((x) => x.ok).length}/${svar.length} kom igennem`);
+    // apns-id med i loggen: uden det kan to proever ikke skelnes fra hinanden
+    // bagefter, og det er praecis dét, en fejlsoegning bestaar i.
+    log(`push-proeve: ${svar.filter((x) => x.ok).length}/${svar.length} kom igennem`
+      + `${svar.map((x) => (x.apnsId ? ` apns-id=${x.apnsId}` : '')).join('')}`);
     sendJson(res, 200, {
       devices: svar,
       // Kun naar den mangler: ellers er det stoej paa en skaerm, der virker.
@@ -3203,7 +3216,28 @@ const ROUTES = {
     else if (endpoint) fjernAbonnement(hashToken(endpoint));
     else if (behold) {
       db.prepare('DELETE FROM push_subs WHERE id != ?').run(hashToken(behold));
-    } else db.prepare('DELETE FROM push_subs').run();
+    } else if (body.all === true) {
+      db.prepare('DELETE FROM push_subs').run();
+    } else {
+      /*
+       * Et tomt DELETE slettede FOER alle abonnementer - ogsaa de andre
+       * enheders.
+       *
+       * »Slaa fra paa denne enhed« i appen sendte praecis den form, naar
+       * telefonen ikke selv kunne finde sit abonnement (ryddet websted, ny
+       * service worker, iOS der har smidt det vaek). Man trykkede paa en
+       * knap, hvis tekst lovede ÉN enhed, og afmeldte dem alle - og fordi
+       * Apple kvitterer 201 paa et abonnement, der ikke findes mere, kunne
+       * det ikke ses bagefter.
+       *
+       * »Slet alt« findes stadig, men skal siges HOEJT. En manglende
+       * oplysning maa aldrig kunne betyde »det hele«.
+       */
+      apiFejl(res, 400, 'missing_target',
+        'Sig hvilket abonnement der skal fjernes (endpoint eller id), '
+        + 'eller send all: true for at rydde dem alle.');
+      return;
+    }
     sendJson(res, 200, { devices: db.prepare('SELECT COUNT(*) AS n FROM push_subs').get().n });
   },
 

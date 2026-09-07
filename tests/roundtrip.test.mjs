@@ -325,7 +325,10 @@ test('push: nøglen er stabil, abonnementer tælles, og due-now viser kun det å
   assert.ok(!nu.items.some((x) => x.id === r.item.id),
     'lukkes opgaven inden pushen naar frem, skal der ikke vises noget');
 
-  assert.equal((await J('/api/v1/push', {}, 'DELETE')).devices, 0);
+  // `all: true` skal siges HOEJT. Et tomt DELETE ryddede foer alle
+  // abonnementer, og det var dét, appen sendte, naar en enhed ikke kunne
+  // finde sit eget (se tests/push.test.mjs).
+  assert.equal((await J('/api/v1/push', { all: true }, 'DELETE')).devices, 0);
 });
 
 test('hemmeligheder forlader ALDRIG serveren — heller ikke med en read-nøgle', async () => {

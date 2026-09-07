@@ -66,6 +66,30 @@ function opret(srv) {
   }
 
   /**
+   * Headerne paa en push. Egen funktion, saa de kan proeves.
+   *
+   * `Urgency` er den, der manglede. Uden headeren er hastegraden »normal«
+   * (RFC 8030 §5.3), og saa MAA push-tjenesten udsaette leveringen af hensyn
+   * til modtagerens stroem - Apple skriver det selv. En tom push, hvis eneste
+   * formaal er at vaekke service workeren, saa den kan vise en paamindelse,
+   * der forfalder NU, taaler ikke at blive udsat: kommer den en time senere,
+   * er den ikke laengere en paamindelse.
+   *
+   * Det er ikke bevist, at det var DEN, der holdt notifikationerne vaek fra
+   * iPhonen - Apple kvitterede med 201 hele vejen, og 201 betyder »modtaget«,
+   * ikke »leveret«. Men det er en header, specifikationen siger skal vaere
+   * der, naar leveringen ikke kan vente, og den var her ikke.
+   */
+  function headere(endpoint) {
+    return {
+      Authorization: autorisation(endpoint),
+      TTL: '3600',
+      Urgency: 'high',
+      'Content-Length': 0,
+    };
+  }
+
+  /**
    * Sender en tom push.
    *
    * @returns {Promise<{ok: boolean, borte: boolean}>} borte = abonnementet
@@ -83,11 +107,7 @@ function opret(srv) {
         hostname: u.hostname,
         port: u.port || 443,
         path: u.pathname + u.search,
-        headers: {
-          Authorization: autorisation(endpoint),
-          TTL: '3600',
-          'Content-Length': 0,
-        },
+        headers: headere(endpoint),
         timeout: 10000,
       }, (res) => {
         /*
@@ -96,10 +116,18 @@ function opret(srv) {
          * 400 bare en 400 - man kan ikke se, om det er noeglen, `sub` eller
          * uret, der er galt.
          */
+        /*
+         * Apples kvittering. `apns-id` er det eneste haandtag, der findes paa
+         * en enkelt push - uden det kan man ikke skelne »den blev modtaget«
+         * fra »den blev leveret«, og hele fejlsoegningen bestaar i netop den
+         * forskel. Det er ikke en hemmelighed: det er Apples eget kvitterings-
+         * nummer, ikke abonnementet.
+         */
+        const apnsId = res.headers['apns-id'] || null;
         const godt = res.statusCode >= 200 && res.statusCode < 300;
         if (godt) {
           res.resume();
-          ok({ ok: true, borte: false, status: res.statusCode });
+          ok({ ok: true, borte: false, status: res.statusCode, apnsId });
           return;
         }
         let tekst = '';
@@ -108,6 +136,7 @@ function opret(srv) {
           ok: false,
           borte: res.statusCode === 404 || res.statusCode === 410,
           status: res.statusCode,
+          apnsId,
           besked: String(tekst).trim().slice(0, 200) || null,
         }));
       });
@@ -117,7 +146,7 @@ function opret(srv) {
     });
   }
 
-  return { offentligNoegle, sendTil };
+  return { offentligNoegle, sendTil, headere };
 }
 
 module.exports = { opret };

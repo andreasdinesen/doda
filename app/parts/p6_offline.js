@@ -500,9 +500,20 @@ async function slaaPushFra() {
   if (abon) {
     await api('DELETE', '/api/v1/push', { endpoint: abon.endpoint });
     await abon.unsubscribe();
-  } else {
-    await api('DELETE', '/api/v1/push', {});
+    return;
   }
+  /*
+   * Ingen lokal tilmelding - saa er der intet paa DENNE enhed at melde fra.
+   *
+   * Foer sendte den et tomt DELETE, og serveren laeste det som »slet dem
+   * alle«: en knap, der lovede én enhed, afmeldte MacBooken med. Den
+   * tilstand er ikke saerlig sjaelden - den opstaar, hver gang browseren har
+   * ryddet webstedet, eller iOS har smidt abonnementet vaek.
+   *
+   * Serveren afviser nu ogsaa den form, men fejlen skal ikke sendes: det er
+   * ikke en fejl at slaa noget fra, der allerede er slaaet fra. Skal en
+   * gammel registrering vaek, staar den paa listen med en Fjern-knap.
+   */
 }
 
 /** applicationServerKey vil have raa bytes, ikke base64url. */

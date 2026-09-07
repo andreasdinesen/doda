@@ -947,6 +947,54 @@ test('push-prøven siger, HVAD der gik galt - ikke bare at intet skete', async (
   assert.deepEqual(tilbage, [], 'begge er ryddet');
 });
 
+test('»slå fra« kan ALDRIG slette andre enheders tilmeldinger', async () => {
+  /*
+   * Fejlen: `DELETE /api/v1/push` uden endpoint slettede ALLE abonnementer -
+   * og det var præcis den form, appen sendte, når telefonen ikke selv kunne
+   * finde sit eget abonnement (ryddet websted, ny service worker, iOS der har
+   * smidt det væk). Man trykkede på en knap, hvis tekst lovede ÉN enhed, og
+   * afmeldte dem alle.
+   *
+   * Det kunne ikke ses bagefter: Apple kvitterer 201 på et abonnement, der
+   * ikke findes mere, så en prøve bagefter siger stadig »kom igennem«.
+   *
+   * En manglende oplysning må aldrig kunne betyde »det hele«.
+   */
+  const hash = (x) => createHash('sha256').update(x, 'utf8').digest('hex');
+  const mac = 'https://web.push.apple.com/den-der-virker';
+  const tlf = 'https://web.push.apple.com/den-paa-telefonen';
+  medDb((db) => {
+    db.prepare('DELETE FROM push_subs').run();
+    const ind = db.prepare(`INSERT INTO push_subs (id, endpoint, p256dh, auth, created_at, fails)
+      VALUES (?,?,?,?,?,0)`);
+    ind.run(hash(mac), mac, 'x', 'y', 1000);
+    ind.run(hash(tlf), tlf, 'x', 'y', 2000);
+  });
+
+  const slet = (krop) => fetch(`${BASE}/api/v1/push`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', cookie },
+    body: JSON.stringify(krop),
+  });
+
+  const r = await slet({});
+  assert.equal(r.status, 400, 'et tomt DELETE må ikke betyde »slet alle«');
+  const svar = await r.json();
+  assert.equal(svar.error, 'missing_target');
+  assert.match(svar.message, /all: true/, 'sig HVORDAN man rydder dem alle');
+  assert.equal((await J('/api/v1/push')).devices, 2, 'ingen af dem må være væk');
+
+  // Og den rigtige vej virker stadig: kun den ene, man peger på.
+  assert.equal((await slet({ endpoint: tlf })).status, 200);
+  const efter = await J('/api/v1/push');
+  assert.equal(efter.devices, 1);
+  assert.equal(efter.subscriptions[0].id, hash(mac), 'MacBooken skal stå tilbage');
+
+  // »Slet alle« findes stadig - den skal bare siges højt.
+  assert.equal((await slet({ all: true })).status, 200);
+  assert.equal((await J('/api/v1/push')).devices, 0);
+});
+
 test('push-tilmeldinger kan LISTES og fjernes enkeltvis', async () => {
   /*
    * »Kan du liste dem, der er oprettet, så man også kan slette dem?«

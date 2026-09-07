@@ -2150,6 +2150,81 @@ er ikke prøvet i en browser:** det kræver en konto på instansen, og der
 oprettes ikke konti herfra. Ændringen står altså på koden og på de 320 prøver,
 ikke på en måling af selve trykket.
 
+## 7f · Push: en manglende header og to fejl, der gjorde fejlsøgningen umulig (v86)
+
+Efter en gennemgang 06-09-2026 er fejlen afgrænset: iPhonen **er** tilmeldt
+(`web.push.apple.com · denne enhed`), iOS' tilladelse virker (»Vis en her«
+viser en lokal notifikation), service workeren er aktiv, og Apple svarer
+`201`. Alligevel vises den fjernleverede push aldrig. Det ligger altså i
+**leveringen fra APNs til service workerens `push`-event** — ikke i
+abonnementet, tilladelsen eller visningen.
+
+### Headeren, der manglede
+
+`sendTil()` sendte `Authorization`, `TTL` og `Content-Length` — men ikke
+`Urgency`. Uden headeren er hastegraden **»normal«** (RFC 8030 §5.3), og så
+*må* push-tjenesten udsætte leveringen af hensyn til modtagerens strøm. Apple
+skriver det selv.
+
+En tom push, hvis eneste formål er at vække service workeren, så den kan vise
+en påmindelse, der forfalder **nu**, tåler ikke at blive udsat: kommer den en
+time senere, er den ikke længere en påmindelse.
+
+**Det er ikke bevist, at det var den, der holdt notifikationerne væk.** Apple
+kvitterede med `201` hele vejen, og `201` betyder »modtaget«, ikke »leveret«.
+Men det er en header, specifikationen siger skal være der, når leveringen ikke
+kan vente — og den var her ikke.
+
+### To fejl, der gjorde det svært at måle
+
+Begge er værre end den manglende header, fordi de fik prøverne til at lyve:
+
+**»Send a test« sendte til ALLE, hvis denne enhed ikke var tilmeldt.** Så
+svarede den »kom igennem« — om andre enheder. Det er det stik modsatte af
+spørgsmålet, man står med (»får telefonen her besked?«), og præcis den
+forveksling, §6æ og v78 blev lavet for at rydde af vejen. Knappen er nu slået
+fra, indtil enheden selv er tilmeldt.
+
+**»Slå fra på denne enhed« kunne afmelde alle enheder.** Kunne telefonen ikke
+finde sit eget abonnement — ryddet websted, ny service worker, iOS der har
+smidt det væk — sendte `slaaPushFra()` et tomt `DELETE /api/v1/push`, og
+serveren læste det som »slet alle«. En knap, hvis tekst lovede **én** enhed,
+afmeldte MacBooken med. Og det kunne ikke ses bagefter: Apple kvitterer `201`
+på et abonnement, der ikke findes mere.
+
+Serveren kræver nu, at målet siges: `endpoint`, `id`, `keep` — eller
+`all: true`. **En manglende oplysning må aldrig kunne betyde »det hele«.**
+Appen sender slet ikke længere det tomme kald: det er ikke en fejl at slå
+noget fra, der allerede er slået fra.
+
+### apns-id
+
+`sendTil()` læser nu Apples `apns-id` fra svaret, og det står i prøvens svar
+og i serverloggen. Det er det eneste håndtag, der findes på **én** levering:
+uden det er »kom igennem« et udsagn om, at Apple svarede — ikke om hvad Apple
+gjorde bagefter, og to prøver kan ikke skelnes fra hinanden.
+
+### Declarative Web Push — overvejet, ikke bygget
+
+Den nuværende arkitektur afhænger af, at iOS vækker service workeren og lader
+den køre JavaScript, før noget kan vises. Declarative Web Push (nyere iOS)
+lader systemet vise notifikationen **direkte** fra en krypteret payload, uden
+at service workeren skal starte. Det ville fjerne hele det led, fejlen ser ud
+til at ligge i.
+
+Prisen skal siges højt: **en payload betyder, at der står noget i pushen.**
+doda's push er tom med vilje — »telefonen spørger doda, hvad den skal vise, så
+push-tjenesten aldrig lærer, hvad dine opgaver hedder« (README). En krypteret,
+declarative payload med den **generiske** tekst (»Noget forfalder nu.«) ville
+beholde begge dele: Apple ser stadig ingen opgavetitler, og notifikationen
+kommer frem uden en service worker.
+
+Det kræver ægte payload-kryptering (ECDH + HKDF, `aes128gcm`) — muligt med
+`node:crypto` og uden afhængigheder, men det er ikke en header, det er et
+stykke arbejde. Service-worker-vejen skal blive stående som fallback for
+ældre iOS. **Først når v86 er prøvet af:** virker `Urgency` ikke, er det her
+næste skridt, og så ved vi også, at det ikke bare var headeren.
+
 ## 7 · Uden for scope
 
 Handover §10 gælder uændret: ingen flere brugere, ingen

@@ -1032,7 +1032,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 85;
+const APP_VERSION = 86;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -6758,9 +6758,20 @@ async function slaaPushFra() {
   if (abon) {
     await api('DELETE', '/api/v1/push', { endpoint: abon.endpoint });
     await abon.unsubscribe();
-  } else {
-    await api('DELETE', '/api/v1/push', {});
+    return;
   }
+  /*
+   * Ingen lokal tilmelding - saa er der intet paa DENNE enhed at melde fra.
+   *
+   * Foer sendte den et tomt DELETE, og serveren laeste det som »slet dem
+   * alle«: en knap, der lovede én enhed, afmeldte MacBooken med. Den
+   * tilstand er ikke saerlig sjaelden - den opstaar, hver gang browseren har
+   * ryddet webstedet, eller iOS har smidt abonnementet vaek.
+   *
+   * Serveren afviser nu ogsaa den form, men fejlen skal ikke sendes: det er
+   * ikke en fejl at slaa noget fra, der allerede er slaaet fra. Skal en
+   * gammel registrering vaek, staar den paa listen med en Fjern-knap.
+   */
 }
 
 /** applicationServerKey vil have raa bytes, ikke base64url. */
@@ -8181,7 +8192,19 @@ async function bindPush() {
           ${tilmeldt ? 'Turn off on this device' : 'Turn on for this device'}</button>
         ${/* Uden en proeve er push et sort hul: fejler den, sker der ingenting,
              og der er intet at se paa (Andreas, 02-09-2026). */ ''}
-        ${d.devices ? '<button class="btn" id="pushTest">Send a test</button>' : ''}
+        ${/*
+          * Proeven kraever, at DENNE enhed er tilmeldt.
+          *
+          * Var den ikke, sendte knappen til ALLE gemte abonnementer, og saa
+          * svarede den »kom igennem« - om andre enheder. Det er det stik
+          * modsatte af det spoergsmaal, man staar med (»faar telefonen her
+          * besked?«), og det var praecis den forveksling, v78 blev lavet for
+          * at faa ryddet af vejen. En knap, der svarer paa et andet
+          * spoergsmaal end det stillede, er vaerre end ingen knap.
+          */ ''}
+        ${d.devices ? `<button class="btn" id="pushTest"${tilmeldt ? '' : ' disabled'}
+          title="${tilmeldt ? 'Send one to this device' : 'Turn this device on first'}"
+          >Send a test</button>` : ''}
         ${/*
           * En prøve UDEN om push-tjenesten.
           *
@@ -8328,7 +8351,12 @@ async function bindPush() {
           const mit = await mitAbonnement();
           const d2 = await api('POST', '/api/v1/push/test', mit ? { only: mit } : {});
           const raekker = (d2.devices || []).map((e2) => {
-            if (e2.ok) return `<li>${esc(e2.service)} — <strong>kom igennem</strong></li>`;
+            // apns-id er Apples kvittering for netop denne push. »Kom
+            // igennem« uden et nummer er et udsagn, man ikke kan slaa op.
+            if (e2.ok) {
+              return `<li>${esc(e2.service)} — <strong>kom igennem</strong>${
+                e2.apnsId ? ` <span class="meta">· apns-id ${esc(e2.apnsId)}</span>` : ''}</li>`;
+            }
             if (e2.gone) {
               return `<li>${esc(e2.service)} — abonnementet findes ikke længere og er ryddet.
                 Slå til igen på den enhed.</li>`;
