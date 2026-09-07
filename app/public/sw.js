@@ -6,8 +6,35 @@
  * browserens cache, og SW'en kan servere en gammel app.js i det uendelige
  * (RUNE-ERFARINGER §5). */
 
-const VERSION = 86;
+const VERSION = 87;
 const CACHE = `doda-v${VERSION}`;
+
+/*
+ * Vaekningsloggen. Egen cache, saa den OVERLEVER en ny udgave - oprydningen
+ * nedenfor sletter alt andet, der hedder doda-*.
+ *
+ * Fem plausible forklaringer paa den manglende push er nu proevet af, og hver
+ * gang manglede det samme svar: BLEV service workeren overhovedet vaekket?
+ * Apple kvitterer 201 for »modtaget«, »Vis en her« beviser kun, at iOS kan
+ * VISE - ingen af delene siger noget om leddet imellem.
+ *
+ * Derfor skriver workeren det ned selv, lokalt og uden net. Er der en
+ * optegnelse, men ingen notifikation, er det visningen. Er der ingen
+ * optegnelse, naaede pushen aldrig herind - og saa er der intet i doda at
+ * rette ved at vise noget hurtigere.
+ */
+const LOG = 'doda-pushlog';
+
+async function noter(post) {
+  try {
+    const c = await caches.open(LOG);
+    const gammel = await c.match('./log');
+    const liste = gammel ? await gammel.json() : [];
+    liste.unshift(Object.assign({ t: Date.now() }, post));
+    await c.put('./log', new Response(JSON.stringify(liste.slice(0, 20)),
+      { headers: { 'Content-Type': 'application/json' } }));
+  } catch { /* en log maa aldrig kunne vaelte det, den logger */ }
+}
 
 // Praecis de samme URL'er som index.html henter - ellers ligger der to
 // kopier, og den precachede bliver aldrig brugt.
@@ -33,7 +60,8 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil((async () => {
     for (const navn of await caches.keys()) {
-      if (navn.startsWith('doda-') && navn !== CACHE) await caches.delete(navn);
+      // LOG skal blive: den er hele pointen med at kunne se bagud.
+      if (navn.startsWith('doda-') && navn !== CACHE && navn !== LOG) await caches.delete(navn);
     }
     await self.clients.claim();
   })());
@@ -137,13 +165,56 @@ self.addEventListener('push', (e) => {
      * intet i doda at rette.
      */
     const TAG = 'doda-nu';
+
+    /*
+     * Kvitteringen sendes af sted FOER notifikationen, men ventes der ikke
+     * paa: den maa ikke kunne bruge af det tidsrum, visningen skal have.
+     * Den lokale optegnelse er den, der taeller - beskeden til serveren er en
+     * bekvemmelighed, saa det ogsaa kan ses fra en anden skaerm.
+     */
+    const tilServeren = fetch('./api/v1/push/kvittering', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fase: 'vaekket' }),
+    }).catch(() => null);
+    await noter({ fase: 'vaekket' });
+
     try {
       await self.registration.showNotification('doda', {
         body: 'Noget forfalder nu.',
         tag: TAG, icon: './icon-192.png', badge: './icon-192.png',
         data: { url: './' },
       });
-    } catch { /* saa proever vi alligevel nedenfor */ }
+      await noter({ fase: 'vist' });
+    } catch (err) {
+      // Kunne workeren ikke vise noget, er DET svaret - og det er en helt
+      // anden fejl end en push, der aldrig kom.
+      await noter({ fase: 'visning-fejlede', fejl: String(err && err.message).slice(0, 120) });
+    }
+
+    /*
+     * Er der en nyttelast, ER svaret allerede kommet med pushen (v87).
+     *
+     * Saa skal der ikke hentes noget: hentningen var den langsomme del, og
+     * paa iOS er tid netop det, en push-handler ikke har. Browsere, der kan
+     * Declarative Web Push, naar slet ikke herind - der viser systemet
+     * notifikationen selv. Det her er vejen for alle de andre.
+     */
+    let fraPush = null;
+    try { fraPush = e.data ? e.data.json() : null; } catch { fraPush = null; }
+    if (fraPush && fraPush.notification && fraPush.notification.title) {
+      await noter({ fase: 'nyttelast' });
+      await self.registration.showNotification(fraPush.notification.title, {
+        body: fraPush.notification.body || '',
+        tag: TAG,
+        icon: './icon-192.png',
+        badge: './icon-192.png',
+        data: { url: './' },
+      });
+      await Promise.race([tilServeren, new Promise((ok) => setTimeout(ok, 1000))]);
+      return;
+    }
 
     let items = [];
     let review = false;
@@ -199,10 +270,13 @@ self.addEventListener('push', (e) => {
         data: { url: './' },
       });
     }
-    return self.registration.showNotification('doda', {
+    await self.registration.showNotification('doda', {
       body: 'Something is due — open doda to see it.',
       tag: TAG, icon: './icon-192.png', data: { url: './' },
     });
+    // Til sidst: lad kvitteringen naa frem, hvis den kan. Hoejst et sekund -
+    // den er en bekvemmelighed, ikke noget visningen skal vente paa.
+    await Promise.race([tilServeren, new Promise((ok) => setTimeout(ok, 1000))]);
   })());
 });
 

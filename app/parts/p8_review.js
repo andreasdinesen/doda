@@ -1240,6 +1240,19 @@ async function bindPush() {
         </div>`;
   }).join('')}
       </div>` : ''}
+      ${/*
+        * Blev service workeren overhovedet vaekket?
+        *
+        * Seks forklaringer paa den manglende push er proevet af, og hver gang
+        * manglede netop dét svar. Apples 201 betyder »modtaget«, og »Vis en
+        * her« beviser kun, at iOS kan VISE - leddet imellem har aldrig kunnet
+        * ses. Nu skriver workeren det ned selv, hver gang den vaekkes.
+        *
+        * Er der optegnelser, men ingen notifikation: det er visningen. Er der
+        * ingen, naaede pushen aldrig ind - og saa nytter det ikke at vise
+        * noget hurtigere.
+        */ ''}
+      <div id="pushVaek" class="meta" style="margin-top:14px">…</div>
       <div id="pushSvar"></div>
       <label class="field" style="margin-top:14px"><span>Send it</span>
         <select class="input" id="pushLead" style="max-width:260px">
@@ -1247,6 +1260,8 @@ async function bindPush() {
     ['30', '30 minutes before'], ['60', '1 hour before']]
     .map(([v, n]) => `<option value="${v}"${Number(v) === d.lead ? ' selected' : ''}>${n}</option>`).join('')}
         </select></label>`;
+
+    tegnVaekninger(boks, d);
 
     boks.querySelector('#pushBtn').addEventListener('click', async () => {
       const knap = boks.querySelector('#pushBtn');

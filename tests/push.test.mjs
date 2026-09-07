@@ -16,6 +16,7 @@
  */
 
 import { createRequire } from 'node:module';
+import { createECDH, randomBytes, createHmac, createDecipheriv } from 'node:crypto';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
@@ -76,4 +77,143 @@ test('hver push-tjeneste faar sit eget aud', () => {
     'base64url').toString('utf8')).aud;
   assert.equal(aud(APPLE), 'https://web.push.apple.com');
   assert.equal(aud('https://fcm.googleapis.com/fcm/send/abc'), 'https://fcm.googleapis.com');
+});
+
+
+/* ==================== nyttelasten (RFC 8291) ==================== */
+
+/**
+ * MODTAGERSIDEN, skrevet forfra.
+ *
+ * Det er hele pointen med den her prøve. En kryptering, der kun er enig med
+ * sig selv, er ikke bevist - og der er ingen Apple at spoerge. Dekrypteringen
+ * her deler ingen kode med `krypter()`: den foelger RFC 8188 og 8291, som en
+ * browser ville goere det, og hvis de to er uenige, fejler den.
+ */
+function dekrypter(krop, uaPrivat, uaOffentlig, hemmelighed) {
+  const salt = krop.subarray(0, 16);
+  const idlen = krop[20];
+  const asOffentlig = krop.subarray(21, 21 + idlen);
+  const lukket = krop.subarray(21 + idlen);
+
+  const delt = uaPrivat.computeSecret(asOffentlig);
+  const hmac = (n, d) => createHmac('sha256', n).update(d).digest();
+  const nul = Buffer.from([0]);
+  const en = Buffer.from([1]);
+
+  const prkNoegle = hmac(hemmelighed, delt);
+  const ikm = hmac(prkNoegle, Buffer.concat([
+    Buffer.from('WebPush: info', 'utf8'), nul, uaOffentlig, asOffentlig, en]));
+  const prk = hmac(salt, ikm);
+  const cek = hmac(prk, Buffer.concat([
+    Buffer.from('Content-Encoding: aes128gcm', 'utf8'), nul, en])).subarray(0, 16);
+  const nonce = hmac(prk, Buffer.concat([
+    Buffer.from('Content-Encoding: nonce', 'utf8'), nul, en])).subarray(0, 12);
+
+  const tag = lukket.subarray(lukket.length - 16);
+  const d = createDecipheriv('aes-128-gcm', cek, nonce);
+  d.setAuthTag(tag);
+  const klar = Buffer.concat([d.update(lukket.subarray(0, lukket.length - 16)), d.final()]);
+  assert.equal(klar[klar.length - 1], 2, 'sidste record skal vaere markeret 0x02');
+  return JSON.parse(klar.subarray(0, klar.length - 1).toString('utf8'));
+}
+
+/** Et abonnement, som en browser ville lave det. */
+function nyEnhed() {
+  const ecdh = createECDH('prime256v1');
+  ecdh.generateKeys();
+  return {
+    privat: ecdh,
+    offentlig: ecdh.getPublicKey(),
+    hemmelighed: randomBytes(16),
+    p256dh: ecdh.getPublicKey().toString('base64url'),
+    auth: randomBytes(16),
+  };
+}
+
+test('en krypteret nyttelast kan pakkes ud igen af modtageren', () => {
+  const e = nyEnhed();
+  const p = nyPush();
+  const besked = { web_push: 8030, notification: { title: 'Ring til Nora', body: 'Due at 20:20' } };
+  const krop = p.krypter(besked, e.p256dh, e.hemmelighed.toString('base64url'));
+  assert.deepEqual(dekrypter(krop, e.privat, e.offentlig, e.hemmelighed), besked);
+});
+
+test('hovedet har den form, RFC 8188 kraever', () => {
+  const e = nyEnhed();
+  const krop = nyPush().krypter({ a: 1 }, e.p256dh, e.hemmelighed.toString('base64url'));
+  assert.equal(krop.readUInt32BE(16), 4096, 'record size');
+  assert.equal(krop[20], 65, 'noeglen er det UKOMPRIMEREDE punkt, 65 bytes');
+  assert.equal(krop[21], 4, 'og den begynder med 0x04');
+});
+
+test('to pushes til samme enhed deler ALDRIG salt eller noegle', () => {
+  // Genbrugt salt+noegle med samme nonce braekker AES-GCM helt. Hver push
+  // laver derfor sit eget efemere noeglepar - ikke ét pr. abonnement.
+  const e = nyEnhed();
+  const p = nyPush();
+  const a = p.krypter({ n: 1 }, e.p256dh, e.hemmelighed.toString('base64url'));
+  const b = p.krypter({ n: 1 }, e.p256dh, e.hemmelighed.toString('base64url'));
+  assert.notEqual(a.subarray(0, 16).toString('hex'), b.subarray(0, 16).toString('hex'), 'salt');
+  assert.notEqual(a.subarray(21, 86).toString('hex'), b.subarray(21, 86).toString('hex'), 'noegle');
+});
+
+test('en forkert auth-hemmelighed kan ikke pakke den ud', () => {
+  const e = nyEnhed();
+  const krop = nyPush().krypter({ x: 1 }, e.p256dh, randomBytes(16).toString('base64url'));
+  assert.throws(() => dekrypter(krop, e.privat, e.offentlig, e.hemmelighed));
+});
+
+test('noegler i forkert laengde afvises frem for at give noget ubrugeligt', () => {
+  const p = nyPush();
+  assert.throws(() => p.krypter({ x: 1 }, 'kort', randomBytes(16).toString('base64url')),
+    /forkert laengde/);
+});
+
+test('med nyttelast: aes128gcm-headerne og en KORT TTL', () => {
+  const krop = Buffer.alloc(120);
+  const h = nyPush().headere(APPLE, krop);
+  assert.equal(h['Content-Encoding'], 'aes128gcm');
+  assert.equal(h['Content-Type'], 'application/octet-stream');
+  assert.equal(h['Content-Length'], 120);
+  assert.equal(h.Urgency, 'high');
+  // Teksten er laagt fast ved afsendelsen: en paamindelse, der ligger i koe i
+  // en time, kan naa at handle om noget, der er klaret.
+  assert.equal(h.TTL, '600');
+});
+
+test('uden nyttelast er headerne som foer', () => {
+  const h = nyPush().headere(APPLE);
+  assert.equal(h['Content-Length'], 0);
+  assert.equal(h['Content-Encoding'], undefined, 'en tom push maa ikke paastaa en kodning');
+  assert.equal(h.TTL, '3600');
+});
+
+/* ==================== den deklarative form ==================== */
+
+test('nyttelasten er deklarativ - saa systemet kan vise den uden en worker', () => {
+  const n = nyPush('https://doda.eksempel.dk').nyttelast({
+    titel: 'Ring til Nora', tekst: 'Due at 20:20',
+  });
+  // 8030 er RFC-nummeret for Web Push og markoeren, Safari kigger efter.
+  // Uden den er det bare en almindelig push, og saa skal workeren vaekkes -
+  // hvilket er hele det led, vi forsoeger at komme uden om.
+  assert.equal(n.web_push, 8030);
+  assert.equal(n.notification.title, 'Ring til Nora');
+  assert.equal(n.notification.body, 'Due at 20:20');
+  // navigate er paakraevet i formatet.
+  assert.equal(n.notification.navigate, 'https://doda.eksempel.dk');
+});
+
+test('nyttelasten kan krypteres og laeses som deklarativ hos modtageren', () => {
+  // Hele vejen: form -> kryptering -> modtager. Det er den kaede, en rigtig
+  // push gaar igennem, og den eneste del, der ikke kan proeves her, er turen
+  // til Apple.
+  const e = nyEnhed();
+  const p = nyPush('https://doda.eksempel.dk');
+  const n = p.nyttelast({ titel: '2 tasks are due', tekst: 'Nora \u00b7 Kur' });
+  const ud = dekrypter(p.krypter(n, e.p256dh, e.hemmelighed.toString('base64url')),
+    e.privat, e.offentlig, e.hemmelighed);
+  assert.equal(ud.web_push, 8030);
+  assert.equal(ud.notification.title, '2 tasks are due');
 });

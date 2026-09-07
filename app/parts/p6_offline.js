@@ -587,3 +587,47 @@ async function bindKode() {
 
   tegn('');
 }
+
+/**
+ * »Er service workeren blevet vaekket af en push?«
+ *
+ * To kilder, og de svarer paa hver sit:
+ *
+ *  - **Lokalt** (cachen `doda-pushlog`, skrevet af sw.js). Den gaelder DENNE
+ *    enhed og kraever ikke net. Det er den, der betyder noget: staar der
+ *    optegnelser, men kom der ingen notifikation, er det VISNINGEN. Staar
+ *    der ingen, naaede pushen aldrig ind i workeren.
+ *  - **Fra serveren** (`receipts`). Den daekker alle enheder og kan derfor
+ *    laeses fra MacBooken, naar man staar med en telefon, der intet viser.
+ */
+async function tegnVaekninger(boks, d) {
+  const el = boks.querySelector('#pushVaek');
+  if (!el) return;
+
+  let lokale = [];
+  try {
+    const c = await caches.open('doda-pushlog');
+    const svar = await c.match('./log');
+    if (svar) lokale = await svar.json();
+  } catch { /* ingen cache-adgang - saa staar der bare det, serveren ved */ }
+
+  const fjerne = d.receipts || [];
+  const tid = (ms) => new Date(ms).toLocaleString('en-GB',
+    { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+  if (!lokale.length && !fjerne.length) {
+    el.innerHTML = 'The service worker has <strong>never</strong> been woken by a push '
+      + 'on any device. If a test says it got through but nothing shows up, that is the '
+      + 'line that matters — the push is not reaching doda at all.';
+    return;
+  }
+
+  el.innerHTML = `${lokale.length
+    ? `Woken <strong>${lokale.length}</strong> time${lokale.length === 1 ? '' : 's'} on this
+       device — last ${esc(tid(lokale[0].t))} (${esc(lokale[0].fase)}).`
+    : '<strong>Never woken on this device.</strong>'}
+    ${fjerne.length
+    ? ` Any device: last ${esc(new Date(fjerne[0].t * 1000).toLocaleString('en-GB',
+      { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))}.`
+    : ''}`;
+}

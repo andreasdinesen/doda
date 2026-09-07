@@ -2204,26 +2204,82 @@ og i serverloggen. Det er det eneste håndtag, der findes på **én** levering:
 uden det er »kom igennem« et udsagn om, at Apple svarede — ikke om hvad Apple
 gjorde bagefter, og to prøver kan ikke skelnes fra hinanden.
 
-### Declarative Web Push — overvejet, ikke bygget
+### Declarative Web Push — bygget i v87
 
-Den nuværende arkitektur afhænger af, at iOS vækker service workeren og lader
-den køre JavaScript, før noget kan vises. Declarative Web Push (nyere iOS)
-lader systemet vise notifikationen **direkte** fra en krypteret payload, uden
-at service workeren skal starte. Det ville fjerne hele det led, fejlen ser ud
-til at ligge i.
+`Urgency` hjalp ikke (Andreas, 07-09-2026). Se §7g.
 
-Prisen skal siges højt: **en payload betyder, at der står noget i pushen.**
-doda's push er tom med vilje — »telefonen spørger doda, hvad den skal vise, så
-push-tjenesten aldrig lærer, hvad dine opgaver hedder« (README). En krypteret,
-declarative payload med den **generiske** tekst (»Noget forfalder nu.«) ville
-beholde begge dele: Apple ser stadig ingen opgavetitler, og notifikationen
-kommer frem uden en service worker.
+## 7g · Nyttelasten, der ikke koster hemmeligheden (v87)
 
-Det kræver ægte payload-kryptering (ECDH + HKDF, `aes128gcm`) — muligt med
-`node:crypto` og uden afhængigheder, men det er ikke en header, det er et
-stykke arbejde. Service-worker-vejen skal blive stående som fallback for
-ældre iOS. **Først når v86 er prøvet af:** virker `Urgency` ikke, er det her
-næste skridt, og så ved vi også, at det ikke bare var headeren.
+Seks forklaringer på den manglende push på iPhone er nu prøvet af og faldet:
+`sub`-claimet, timeout i workeren, vis-først, abonnementernes ophobning,
+`Urgency: high` — og de to måle-fejl i §7f. Tilbage står ét led: **iOS skal
+vække en service worker og lade den køre JavaScript, før noget kan vises.**
+
+Declarative Web Push går uden om det. Bærer pushen en nyttelast med
+`web_push: 8030`, viser **systemet** notifikationen selv — ingen worker.
+
+### Jeg tog fejl om prisen
+
+I §7f skrev jeg, at »en payload betyder, at der står noget i pushen«, og at
+det ville koste løftet i README om, at push-tjenesten aldrig lærer, hvad
+opgaverne hedder.
+
+**Det er forkert.** Nyttelasten krypteres efter RFC 8291 med abonnementets
+*egne* nøgler (`p256dh`/`auth`), som kun findes på enheden. Apple videresender
+en byteklump, den ikke kan læse; Safari dekrypterer den lokalt. Løftet holder
+uændret.
+
+Det var aldrig **tomheden**, der beskyttede titlerne — det var fraværet af en
+kanal, Apple kunne læse. Kryptering giver den samme egenskab, og den er nu
+skrevet i stedet for undgået. Den oprindelige begrundelse i `push.js` (»~70
+linjer fedtet kryptokode, man selv skal holde rigtig«) var ærlig om prisen i
+arbejde, men den blev med tiden læst som en privatlivs-begrundelse, og det var
+den ikke.
+
+### Ét kald dækker begge veje
+
+Nyttelasten er en **tilføjelse**, ikke et skifte:
+
+- Kan browseren læse den deklarative form, viser systemet notifikationen uden
+  en worker.
+- Kan den ikke, vækkes workeren som før — men nu med `event.data`, så den
+  **slipper for at hente noget**. Det var den langsomme del, og på iOS er tid
+  netop dét, en push-handler ikke har.
+- Mangler et abonnement nøgler (de ældste rækker), sendes den tomme push som
+  før. En enhed må ikke holde op med at få besked, fordi den blev tilmeldt for
+  længe siden.
+
+### Det, der faktisk bliver anderledes
+
+Teksten lægges fast ved **afsendelsen**, ikke ved visningen. Lukkes opgaven,
+inden pushen når frem, kan notifikationen nå at vise noget, der allerede er
+klaret — den garanti gav den tomme push (`due-now` svarede altid friskt).
+Derfor er `TTL` sat til **600** i stedet for 3600, når der er en nyttelast.
+
+### Hvordan krypteringen er bevist
+
+Der er ingen Apple at spørge, og en kryptering, der kun er enig med sig selv,
+er ikke bevist. `tests/push.test.mjs` implementerer derfor **modtagersiden
+forfra** — RFC 8188 og 8291, som en browser ville gøre det, uden en linje delt
+med `krypter()` — og pakker nyttelasten ud igen.
+
+Prøvet af med en sabotage: ændres record-markøren fra `0x02` til `0x01`,
+bliver den rød. Uden det ville jeg kun vide, at koden er enig med sig selv.
+
+Prøverne dækker også, at to pushes til samme enhed **aldrig** deler salt eller
+efemert nøglepar (genbrug med samme nonce brækker AES-GCM helt), og at en
+forkert `auth`-hemmelighed ikke kan pakke den ud.
+
+### Og en måling ved siden af
+
+Rettelsen kan stadig vise sig ikke at være rettelsen. Derfor skriver service
+workeren nu **selv ned**, hver gang den vækkes — lokalt i en cache, der
+overlever en ny udgave, og som en besked hjem til serveren. Det står under
+Settings → Notifications.
+
+Det er det svar, der har manglet hele vejen: er der optegnelser, men ingen
+notifikation, er det **visningen**. Er der ingen, nåede pushen aldrig ind i
+workeren — og så nytter det ikke at vise noget hurtigere.
 
 ## 7 · Uden for scope
 

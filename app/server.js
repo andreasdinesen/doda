@@ -3072,10 +3072,15 @@ const ROUTES = {
       lastOk: a.last_ok,
       fails: a.fails,
     }));
+    let kvitteringer = [];
+    try { kvitteringer = JSON.parse(getSetting('push_kvitteringer', '[]')); } catch { /* tom */ }
     sendJson(res, 200, {
       publicKey: push.offentligNoegle(),
       devices: liste.length,
       subscriptions: liste,
+      // Hvornaar en service worker sidst blev vaekket af en push - paa en
+      // hvilken som helst enhed. Se POST /api/v1/push/kvittering.
+      receipts: Array.isArray(kvitteringer) ? kvitteringer.slice(0, 5) : [],
       lead: Number(getSetting('push_lead', '0')),
     });
   },
@@ -3137,7 +3142,8 @@ const ROUTES = {
      * »modtaget«, ikke »leveret« (Andreas, 02-09-2026).
      */
     const kun = body && typeof body.only === 'string' ? body.only : null;
-    let abon = db.prepare('SELECT id, endpoint, created_at, last_ok, fails FROM push_subs').all();
+    let abon = db.prepare(`SELECT id, endpoint, p256dh, auth, created_at, last_ok, fails
+       FROM push_subs`).all();
     if (kun) abon = abon.filter((a) => a.endpoint === kun);
     if (!abon.length) {
       sendJson(res, 200, { devices: [], hint: 'No device is subscribed yet.' });
@@ -3152,7 +3158,13 @@ const ROUTES = {
     const t = now();
     const svar = [];
     for (const a of abon) {
-      const r = await push.sendTil(a.endpoint);
+      /* Proeven skal sende PRAECIS det, en rigtig paamindelse sender - ellers
+         proever den noget andet end det, der er i stykker. */
+      const r = await push.sendTil(a.endpoint, Object.assign({
+        payload: push.nyttelast({
+          titel: 'doda', tekst: 'This is a test from your own server.',
+        }),
+      }, a));
       if (r.borte) {
         fjernAbonnement(a.id);
       } else if (r.ok) {
@@ -3194,6 +3206,31 @@ const ROUTES = {
       // Kun naar den mangler: ellers er det stoej paa en skaerm, der virker.
       subMissing: kontakt ? undefined : true,
     });
+  },
+
+  /**
+   * Service workeren siger, at den blev vaekket.
+   *
+   * Fem forklaringer paa den manglende push paa iPhone er proevet af, og hver
+   * gang manglede det samme svar: naaede pushen overhovedet ind i workeren?
+   * Apples 201 betyder »modtaget«, og »Vis en her« beviser kun, at iOS kan
+   * VISE. Leddet imellem har aldrig kunnet ses.
+   *
+   * Workeren skriver det ogsaa ned lokalt (uden net) - det her er den samme
+   * besked sendt hjem, saa den kan laeses fra en anden skaerm end telefonens.
+   */
+  'POST /api/v1/push/kvittering': async (req, res) => {
+    const user = godkend(req, res, 'write');
+    if (!user) return;
+    const body = await readJsonBody(req);
+    const fase = str(body.fase, 40) || 'vaekket';
+    let liste = [];
+    try { liste = JSON.parse(getSetting('push_kvitteringer', '[]')); } catch { liste = []; }
+    if (!Array.isArray(liste)) liste = [];
+    liste.unshift({ t: now(), fase });
+    setSetting('push_kvitteringer', JSON.stringify(liste.slice(0, 20)));
+    log(`push-kvittering: service workeren blev vaekket (${fase})`);
+    sendJson(res, 200, { ok: true });
   },
 
   'DELETE /api/v1/push': async (req, res) => {
@@ -3665,8 +3702,11 @@ const push = require('./push.js').opret({
 });
 
 function hentAbonnementer() {
-  return db.prepare('SELECT id, endpoint FROM push_subs').all();
+  // p256dh/auth er abonnementets egne noegler. Uden dem kan nyttelasten ikke
+  // krypteres, og saa sendes den tomme push som foer (se push.js).
+  return db.prepare('SELECT id, endpoint, p256dh, auth FROM push_subs').all();
 }
+
 
 function fjernAbonnement(id) {
   db.prepare('DELETE FROM push_subs WHERE id = ?').run(id);
@@ -3723,8 +3763,12 @@ async function tjekPaamindelser() {
       // Stemples FOER afsendelsen - samme regel som opgaverne.
       setSetting('review_notified', String(now()));
       log(`paaminder om ugentlig gennemgang til ${abon.length} enhed(er)`);
+      const nyttelast = push.nyttelast({
+        titel: 'Weekly review',
+        tekst: 'It is the day you set aside for it. Open doda to start.',
+      });
       for (const a of abon) {
-        const svar = await push.sendTil(a.endpoint);
+        const svar = await push.sendTil(a.endpoint, Object.assign({ payload: nyttelast }, a));
         if (svar.borte) fjernAbonnement(a.id);
       }
     }
@@ -3755,8 +3799,22 @@ async function tjekPaamindelser() {
     }
     log(`paaminder om ${skalMindes.length} opgave(r) til ${abon.length} enhed(er)`);
 
+    /*
+     * Teksten er den samme, som service workeren selv ville have hentet -
+     * den laegges bare fast her, hvor der er en database at spoerge.
+     */
+    const nyttelast = push.nyttelast(skalMindes.length === 1
+      ? {
+        titel: skalMindes[0].title,
+        tekst: skalMindes[0].due_time ? `Due at ${skalMindes[0].due_time}` : 'Due now',
+      }
+      : {
+        titel: `${skalMindes.length} tasks are due`,
+        tekst: skalMindes.map((r) => r.title).join(' \u00b7 ').slice(0, 120),
+      });
+
     for (const a of abon) {
-      const svar = await push.sendTil(a.endpoint);
+      const svar = await push.sendTil(a.endpoint, Object.assign({ payload: nyttelast }, a));
       if (svar.borte) {
         fjernAbonnement(a.id);
         log('push-abonnement er borte - fjernet');

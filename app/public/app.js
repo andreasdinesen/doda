@@ -1032,7 +1032,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 86;
+const APP_VERSION = 87;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -6846,6 +6846,50 @@ async function bindKode() {
   tegn('');
 }
 
+/**
+ * »Er service workeren blevet vaekket af en push?«
+ *
+ * To kilder, og de svarer paa hver sit:
+ *
+ *  - **Lokalt** (cachen `doda-pushlog`, skrevet af sw.js). Den gaelder DENNE
+ *    enhed og kraever ikke net. Det er den, der betyder noget: staar der
+ *    optegnelser, men kom der ingen notifikation, er det VISNINGEN. Staar
+ *    der ingen, naaede pushen aldrig ind i workeren.
+ *  - **Fra serveren** (`receipts`). Den daekker alle enheder og kan derfor
+ *    laeses fra MacBooken, naar man staar med en telefon, der intet viser.
+ */
+async function tegnVaekninger(boks, d) {
+  const el = boks.querySelector('#pushVaek');
+  if (!el) return;
+
+  let lokale = [];
+  try {
+    const c = await caches.open('doda-pushlog');
+    const svar = await c.match('./log');
+    if (svar) lokale = await svar.json();
+  } catch { /* ingen cache-adgang - saa staar der bare det, serveren ved */ }
+
+  const fjerne = d.receipts || [];
+  const tid = (ms) => new Date(ms).toLocaleString('en-GB',
+    { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+  if (!lokale.length && !fjerne.length) {
+    el.innerHTML = 'The service worker has <strong>never</strong> been woken by a push '
+      + 'on any device. If a test says it got through but nothing shows up, that is the '
+      + 'line that matters — the push is not reaching doda at all.';
+    return;
+  }
+
+  el.innerHTML = `${lokale.length
+    ? `Woken <strong>${lokale.length}</strong> time${lokale.length === 1 ? '' : 's'} on this
+       device — last ${esc(tid(lokale[0].t))} (${esc(lokale[0].fase)}).`
+    : '<strong>Never woken on this device.</strong>'}
+    ${fjerne.length
+    ? ` Any device: last ${esc(new Date(fjerne[0].t * 1000).toLocaleString('en-GB',
+      { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))}.`
+    : ''}`;
+}
+
 /* ---- p7_files.js ---- */
 'use strict';
 /* doda - vedhaeftninger: billeder og filer pa opgaver og noter.
@@ -8259,6 +8303,19 @@ async function bindPush() {
         </div>`;
   }).join('')}
       </div>` : ''}
+      ${/*
+        * Blev service workeren overhovedet vaekket?
+        *
+        * Seks forklaringer paa den manglende push er proevet af, og hver gang
+        * manglede netop dét svar. Apples 201 betyder »modtaget«, og »Vis en
+        * her« beviser kun, at iOS kan VISE - leddet imellem har aldrig kunnet
+        * ses. Nu skriver workeren det ned selv, hver gang den vaekkes.
+        *
+        * Er der optegnelser, men ingen notifikation: det er visningen. Er der
+        * ingen, naaede pushen aldrig ind - og saa nytter det ikke at vise
+        * noget hurtigere.
+        */ ''}
+      <div id="pushVaek" class="meta" style="margin-top:14px">…</div>
       <div id="pushSvar"></div>
       <label class="field" style="margin-top:14px"><span>Send it</span>
         <select class="input" id="pushLead" style="max-width:260px">
@@ -8266,6 +8323,8 @@ async function bindPush() {
     ['30', '30 minutes before'], ['60', '1 hour before']]
     .map(([v, n]) => `<option value="${v}"${Number(v) === d.lead ? ' selected' : ''}>${n}</option>`).join('')}
         </select></label>`;
+
+    tegnVaekninger(boks, d);
 
     boks.querySelector('#pushBtn').addEventListener('click', async () => {
       const knap = boks.querySelector('#pushBtn');
