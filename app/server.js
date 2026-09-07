@@ -3064,13 +3064,16 @@ const ROUTES = {
      * hemmeligheden bag et abonnement og maa ikke paa en skaerm. Hashen kan
      * bruges til at slette med, og det er alt, klienten skal bruge.
      */
-    const liste = db.prepare(`SELECT id, endpoint, created_at, last_ok, fails
+    const liste = db.prepare(`SELECT id, endpoint, p256dh, auth, created_at, last_ok, fails
        FROM push_subs ORDER BY created_at`).all().map((a) => ({
       id: a.id,
       service: (() => { try { return new URL(a.endpoint).host; } catch { return 'ukendt'; } })(),
       createdAt: a.created_at,
       lastOk: a.last_ok,
       fails: a.fails,
+      // Har raekken noegler? Uden dem kan nyttelasten ikke krypteres, og saa
+      // sendes den tomme push - som paa iOS aldrig naar frem.
+      keys: !!(a.p256dh && a.auth),
     }));
     let kvitteringer = [];
     try { kvitteringer = JSON.parse(getSetting('push_kvitteringer', '[]')); } catch { /* tom */ }

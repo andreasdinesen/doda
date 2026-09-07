@@ -1032,7 +1032,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 88;
+const APP_VERSION = 89;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -4383,10 +4383,17 @@ function sideSettings() {
     </div>
 
     <div class="card"><h2>Notifications</h2>
+      ${/*
+        * Teksten sagde »the push itself is empty« indtil v89 - og det var
+        * sandt, til v87 lagde teksten med i pushen. Det stod paa skaermen i
+        * to udgaver og lovede noget om Andreas' data, der ikke laengere
+        * passede. En forklaring, der er blevet forkert, er vaerre end ingen.
+        */ ''}
       <p class="lead" style="margin:6px 0 0">A push notification when a task with a
-      <strong>time</strong> comes due — also when doda is closed. The push itself is
-      empty: your phone asks doda what to show, so the push service never learns what
-      your tasks are called.</p>
+      <strong>time</strong> comes due — also when doda is closed. The text travels
+      <strong>inside the push, encrypted</strong> with keys that exist only on your
+      device — so the push service still never learns what your tasks are called, and
+      your phone can show the reminder without waking doda first.</p>
       <div id="pushBox">Loading…</div>
       <p class="gate-note" style="text-align:left">If you already subscribe with your
       calendar, you do not need this — that reminder works without any permission at all.</p>
@@ -6873,21 +6880,38 @@ async function tegnVaekninger(boks, d) {
   const tid = (ms) => new Date(ms).toLocaleString('en-GB',
     { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
+  /*
+   * »Aldrig vaekket« er IKKE laengere et alarmsignal.
+   *
+   * Da linjen blev skrevet, var det svaret, vi manglede: kom pushen
+   * overhovedet ind i doda? Nu ved vi det - paa iOS vaekkes service workeren
+   * ALDRIG, og notifikationen kommer alligevel frem, fordi systemet viser
+   * nyttelasten selv. Den gamle tekst (»the push is not reaching doda at
+   * all«) ville derfor staa og paastaa en fejl paa en telefon, hvor alt
+   * virker.
+   *
+   * Linjen bliver staaende, men kun som en OPLYSNING, og kun naar der
+   * faktisk er noget at fortaelle.
+   */
   if (!lokale.length && !fjerne.length) {
-    el.innerHTML = 'The service worker has <strong>never</strong> been woken by a push '
-      + 'on any device. If a test says it got through but nothing shows up, that is the '
-      + 'line that matters — the push is not reaching doda at all.';
+    // Baade tom OG hidden: en .meta-klasse kan have en display-regel, og saa
+    // ville hidden alene efterlade en tom stribe luft.
+    el.innerHTML = '';
+    el.hidden = true;
     return;
   }
+  el.hidden = false;
 
   el.innerHTML = `${lokale.length
-    ? `Woken <strong>${lokale.length}</strong> time${lokale.length === 1 ? '' : 's'} on this
-       device — last ${esc(tid(lokale[0].t))} (${esc(lokale[0].fase)}).`
-    : '<strong>Never woken on this device.</strong>'}
+    ? `doda has been woken by a push <strong>${lokale.length}</strong> time${
+      lokale.length === 1 ? '' : 's'} on this device — last ${esc(tid(lokale[0].t))}.`
+    : ''}
     ${fjerne.length
     ? ` Any device: last ${esc(new Date(fjerne[0].t * 1000).toLocaleString('en-GB',
       { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))}.`
-    : ''}`;
+    : ''}
+    <span class="meta">On iPhone this normally stays empty: the system shows the
+    notification itself, without waking doda.</span>`;
 }
 
 /* ---- p7_files.js ---- */
@@ -8250,17 +8274,16 @@ async function bindPush() {
           title="${tilmeldt ? 'Send one to this device' : 'Turn this device on first'}"
           >Send a test</button>` : ''}
         ${/*
-          * Den TOMME proeve er et maaleredskab, ikke en funktion.
+          * »Send a test (empty)« stod her i v88 og har svaret paa sit
+          * spoergsmaal: den tomme push kom ALDRIG frem paa iPhone, mens den
+          * med nyttelast gjorde (Andreas, 07-09-2026). iOS vaekker ikke
+          * dodas service worker - det var derfor syv rettelser slog fejl.
           *
-          * Den sender den gamle form uden nyttelast. Vaekker DEN service
-          * workeren, mens den almindelige proeve ikke goer, ligger fejlen i
-          * nyttelasten - og saa er der noget i doda at rette. Vaekker ingen
-          * af dem noget, naar pushen slet ikke frem, og saa er det hverken
-          * formatet eller hastigheden, men noget uden for appen.
+          * Knappen er vaek igen, fordi den fra nu af ville fejle HVER gang
+          * paa den enhed, den betyder mest for - og en knap, hvis fiasko er
+          * forventet, laeses som en fejl i appen hver gang man ser den.
+          * Maaleredskabet findes stadig: POST /api/v1/push/test {mode:"tom"}.
           */ ''}
-        ${d.devices ? `<button class="btn" id="pushTom"${tilmeldt ? '' : ' disabled'}
-          title="${tilmeldt ? 'The old form, without text in the push' : 'Turn this device on first'}"
-          >Send a test (empty)</button>` : ''}
         ${/*
           * En prøve UDEN om push-tjenesten.
           *
@@ -8305,11 +8328,16 @@ async function bindPush() {
         ${d.subscriptions.map((a) => {
     const mit = mitEndpoint && a.id === mitEndpoint;
     const set = a.lastOk ? `sidst set ${esc(visTid(a.lastOk))}` : 'aldrig set i live';
+    /* Uden noegler kan nyttelasten ikke krypteres, og saa sendes den tomme
+       push - som paa iOS ALDRIG naar frem. En saadan raekke er doed paa en
+       iPhone, og det kan man ikke se paa andet end det her. */
+    const udenNoegler = a.keys === false;
     return `<div class="keyrow">
           <div style="flex:1;min-width:0">
             <div>${esc(a.service)}${mit ? ' <strong>· denne enhed</strong>' : ''}</div>
             <div class="meta">tilmeldt ${esc(visTid(a.createdAt))} · ${set}${
-  a.fails ? ` · ${a.fails} fejl i træk` : ''}</div>
+  a.fails ? ` · ${a.fails} fejl i træk` : ''}${
+  udenNoegler ? ' · <strong>uden nøgler — kan ikke nå en iPhone</strong>' : ''}</div>
           </div>
           <button class="btn ghost" data-pushdel="${esc(a.id)}">Fjern</button>
         </div>`;
@@ -8409,31 +8437,6 @@ async function bindPush() {
         } catch (ex) { toast(ex.message); }
       });
     });
-
-    const tom = boks.querySelector('#pushTom');
-    if (tom) {
-      tom.addEventListener('click', async () => {
-        const svar = boks.querySelector('#pushSvar');
-        tom.disabled = true;
-        svar.innerHTML = '<p class="meta" style="margin-top:12px">Sender…</p>';
-        try {
-          const mit = await mitAbonnement();
-          const d2 = await api('POST', '/api/v1/push/test',
-            Object.assign({ mode: 'tom' }, mit ? { only: mit } : {}));
-          const e2 = (d2.devices || [])[0] || {};
-          svar.innerHTML = `<p class="lead" style="margin-top:12px">
-            Sendte den <strong>gamle form</strong> uden tekst i pushen —
-            ${e2.ok ? 'Apple kvitterede' : `afvist${e2.status ? ` (${e2.status})` : ''}`}${
-  e2.apnsId ? ` · apns-id ${esc(e2.apnsId)}` : ''}.</p>
-            <p class="gate-note" style="text-align:left">Vent et øjeblik, og
-            <strong>åbn så doda igen</strong>. Står der ovenfor, at service workeren er
-            blevet vækket, kan doda modtage pushes — og så er det nyttelasten, der er
-            galt. Står der stadig »never been woken«, når pushen slet ikke frem, og
-            det er hverken formatet eller hastigheden.</p>`;
-        } catch (ex) { svar.innerHTML = `<p class="meta" style="margin-top:12px">${esc(ex.message)}</p>`; }
-        tom.disabled = false;
-      });
-    }
 
     const test = boks.querySelector('#pushTest');
     if (test) {

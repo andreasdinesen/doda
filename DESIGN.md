@@ -2321,6 +2321,54 @@ spørgsmål, den skiller ad:
 Det er et måleredskab, ikke en funktion, og det står der, indtil spørgsmålet
 er besvaret.
 
+## 7i · Svaret, og de tre ting der så løj (v89)
+
+v88 virkede. Og den **tomme** prøve gjorde ikke — hvilket er selve beviset:
+
+| | Kræver at workeren vækkes | Kom frem |
+|---|---|---|
+| med nyttelast | nej, systemet viser den selv | **ja** |
+| tom | ja | nej |
+
+**iOS vækker aldrig dodas service worker.** Det er derfor syv rettelser slog
+fejl: `sub`-claimet, timeout, vis-først, oprydning i abonnementer, `Urgency`,
+og de to målefejl. De forsøgte alle sammen at gøre det led hurtigere eller mere
+robust — og det led findes ikke på telefonen.
+
+### Tre ting, der blev usande undervejs
+
+Alle tre stod på skærmen og påstod noget forkert. Det er samme mønster som
+§7b og §7d: en regel eller en forklaring, der blev rigtig ét sted og glemt et
+andet.
+
+1. **»The push itself is empty«** stod under Notifications i to udgaver efter
+   at v87 lagde teksten med i pushen. Den lovede noget om Andreas' data, der
+   ikke længere passede. Løftet holder — titlerne krypteres med nøgler, der
+   kun findes på enheden — men *begrundelsen* var en anden, og en forklaring,
+   der er blevet forkert, er værre end ingen.
+2. **»The push is not reaching doda at all«** var det rigtige svar, da linjen
+   blev skrevet. Nu er »aldrig vækket« den *normale* tilstand på iPhone, og
+   linjen ville stå og melde fejl på en telefon, hvor alt virker. Den siger nu
+   kun noget, når der er noget at sige.
+3. **»Send a test (empty)«** var et måleredskab, ikke en funktion. Den har
+   svaret på sit spørgsmål og ville fra nu af fejle *hver* gang på den enhed,
+   den betød mest for. En knap, hvis fiasko er forventet, læses som en fejl i
+   appen hver gang man ser den. Den er væk; målingen findes stadig som
+   `POST /api/v1/push/test {"mode":"tom"}`.
+
+### Og en konsekvens, der ikke var synlig
+
+Et abonnement **uden nøgler** kan ikke få en krypteret nyttelast, og så sendes
+den tomme push — som på iOS aldrig når frem. Sådan en række er død på en
+iPhone, og det kunne ikke ses på noget. Den er nu mærket i listen.
+
+### Det, der er værd at tage med
+
+Målingen fandt både svaret og min egen fejl i v87. Efter to-tre fejlslagne
+rettelser er den næste ting, man bygger, ikke en rettelse mere — **det er et
+instrument.** Og når instrumentet har svaret, skal det ud igen, før dets
+formuleringer begynder at lyve.
+
 ## 7 · Uden for scope
 
 Handover §10 gælder uændret: ingen flere brugere, ingen

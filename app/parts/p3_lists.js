@@ -1253,10 +1253,17 @@ function sideSettings() {
     </div>
 
     <div class="card"><h2>Notifications</h2>
+      ${/*
+        * Teksten sagde »the push itself is empty« indtil v89 - og det var
+        * sandt, til v87 lagde teksten med i pushen. Det stod paa skaermen i
+        * to udgaver og lovede noget om Andreas' data, der ikke laengere
+        * passede. En forklaring, der er blevet forkert, er vaerre end ingen.
+        */ ''}
       <p class="lead" style="margin:6px 0 0">A push notification when a task with a
-      <strong>time</strong> comes due — also when doda is closed. The push itself is
-      empty: your phone asks doda what to show, so the push service never learns what
-      your tasks are called.</p>
+      <strong>time</strong> comes due — also when doda is closed. The text travels
+      <strong>inside the push, encrypted</strong> with keys that exist only on your
+      device — so the push service still never learns what your tasks are called, and
+      your phone can show the reminder without waking doda first.</p>
       <div id="pushBox">Loading…</div>
       <p class="gate-note" style="text-align:left">If you already subscribe with your
       calendar, you do not need this — that reminder works without any permission at all.</p>

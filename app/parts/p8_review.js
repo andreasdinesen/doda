@@ -1187,17 +1187,16 @@ async function bindPush() {
           title="${tilmeldt ? 'Send one to this device' : 'Turn this device on first'}"
           >Send a test</button>` : ''}
         ${/*
-          * Den TOMME proeve er et maaleredskab, ikke en funktion.
+          * »Send a test (empty)« stod her i v88 og har svaret paa sit
+          * spoergsmaal: den tomme push kom ALDRIG frem paa iPhone, mens den
+          * med nyttelast gjorde (Andreas, 07-09-2026). iOS vaekker ikke
+          * dodas service worker - det var derfor syv rettelser slog fejl.
           *
-          * Den sender den gamle form uden nyttelast. Vaekker DEN service
-          * workeren, mens den almindelige proeve ikke goer, ligger fejlen i
-          * nyttelasten - og saa er der noget i doda at rette. Vaekker ingen
-          * af dem noget, naar pushen slet ikke frem, og saa er det hverken
-          * formatet eller hastigheden, men noget uden for appen.
+          * Knappen er vaek igen, fordi den fra nu af ville fejle HVER gang
+          * paa den enhed, den betyder mest for - og en knap, hvis fiasko er
+          * forventet, laeses som en fejl i appen hver gang man ser den.
+          * Maaleredskabet findes stadig: POST /api/v1/push/test {mode:"tom"}.
           */ ''}
-        ${d.devices ? `<button class="btn" id="pushTom"${tilmeldt ? '' : ' disabled'}
-          title="${tilmeldt ? 'The old form, without text in the push' : 'Turn this device on first'}"
-          >Send a test (empty)</button>` : ''}
         ${/*
           * En prøve UDEN om push-tjenesten.
           *
@@ -1242,11 +1241,16 @@ async function bindPush() {
         ${d.subscriptions.map((a) => {
     const mit = mitEndpoint && a.id === mitEndpoint;
     const set = a.lastOk ? `sidst set ${esc(visTid(a.lastOk))}` : 'aldrig set i live';
+    /* Uden noegler kan nyttelasten ikke krypteres, og saa sendes den tomme
+       push - som paa iOS ALDRIG naar frem. En saadan raekke er doed paa en
+       iPhone, og det kan man ikke se paa andet end det her. */
+    const udenNoegler = a.keys === false;
     return `<div class="keyrow">
           <div style="flex:1;min-width:0">
             <div>${esc(a.service)}${mit ? ' <strong>· denne enhed</strong>' : ''}</div>
             <div class="meta">tilmeldt ${esc(visTid(a.createdAt))} · ${set}${
-  a.fails ? ` · ${a.fails} fejl i træk` : ''}</div>
+  a.fails ? ` · ${a.fails} fejl i træk` : ''}${
+  udenNoegler ? ' · <strong>uden nøgler — kan ikke nå en iPhone</strong>' : ''}</div>
           </div>
           <button class="btn ghost" data-pushdel="${esc(a.id)}">Fjern</button>
         </div>`;
@@ -1346,31 +1350,6 @@ async function bindPush() {
         } catch (ex) { toast(ex.message); }
       });
     });
-
-    const tom = boks.querySelector('#pushTom');
-    if (tom) {
-      tom.addEventListener('click', async () => {
-        const svar = boks.querySelector('#pushSvar');
-        tom.disabled = true;
-        svar.innerHTML = '<p class="meta" style="margin-top:12px">Sender…</p>';
-        try {
-          const mit = await mitAbonnement();
-          const d2 = await api('POST', '/api/v1/push/test',
-            Object.assign({ mode: 'tom' }, mit ? { only: mit } : {}));
-          const e2 = (d2.devices || [])[0] || {};
-          svar.innerHTML = `<p class="lead" style="margin-top:12px">
-            Sendte den <strong>gamle form</strong> uden tekst i pushen —
-            ${e2.ok ? 'Apple kvitterede' : `afvist${e2.status ? ` (${e2.status})` : ''}`}${
-  e2.apnsId ? ` · apns-id ${esc(e2.apnsId)}` : ''}.</p>
-            <p class="gate-note" style="text-align:left">Vent et øjeblik, og
-            <strong>åbn så doda igen</strong>. Står der ovenfor, at service workeren er
-            blevet vækket, kan doda modtage pushes — og så er det nyttelasten, der er
-            galt. Står der stadig »never been woken«, når pushen slet ikke frem, og
-            det er hverken formatet eller hastigheden.</p>`;
-        } catch (ex) { svar.innerHTML = `<p class="meta" style="margin-top:12px">${esc(ex.message)}</p>`; }
-        tom.disabled = false;
-      });
-    }
 
     const test = boks.querySelector('#pushTest');
     if (test) {

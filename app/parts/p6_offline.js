@@ -615,19 +615,36 @@ async function tegnVaekninger(boks, d) {
   const tid = (ms) => new Date(ms).toLocaleString('en-GB',
     { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
+  /*
+   * »Aldrig vaekket« er IKKE laengere et alarmsignal.
+   *
+   * Da linjen blev skrevet, var det svaret, vi manglede: kom pushen
+   * overhovedet ind i doda? Nu ved vi det - paa iOS vaekkes service workeren
+   * ALDRIG, og notifikationen kommer alligevel frem, fordi systemet viser
+   * nyttelasten selv. Den gamle tekst (»the push is not reaching doda at
+   * all«) ville derfor staa og paastaa en fejl paa en telefon, hvor alt
+   * virker.
+   *
+   * Linjen bliver staaende, men kun som en OPLYSNING, og kun naar der
+   * faktisk er noget at fortaelle.
+   */
   if (!lokale.length && !fjerne.length) {
-    el.innerHTML = 'The service worker has <strong>never</strong> been woken by a push '
-      + 'on any device. If a test says it got through but nothing shows up, that is the '
-      + 'line that matters — the push is not reaching doda at all.';
+    // Baade tom OG hidden: en .meta-klasse kan have en display-regel, og saa
+    // ville hidden alene efterlade en tom stribe luft.
+    el.innerHTML = '';
+    el.hidden = true;
     return;
   }
+  el.hidden = false;
 
   el.innerHTML = `${lokale.length
-    ? `Woken <strong>${lokale.length}</strong> time${lokale.length === 1 ? '' : 's'} on this
-       device — last ${esc(tid(lokale[0].t))} (${esc(lokale[0].fase)}).`
-    : '<strong>Never woken on this device.</strong>'}
+    ? `doda has been woken by a push <strong>${lokale.length}</strong> time${
+      lokale.length === 1 ? '' : 's'} on this device — last ${esc(tid(lokale[0].t))}.`
+    : ''}
     ${fjerne.length
     ? ` Any device: last ${esc(new Date(fjerne[0].t * 1000).toLocaleString('en-GB',
       { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))}.`
-    : ''}`;
+    : ''}
+    <span class="meta">On iPhone this normally stays empty: the system shows the
+    notification itself, without waking doda.</span>`;
 }
