@@ -2281,6 +2281,46 @@ Det er det svar, der har manglet hele vejen: er der optegnelser, men ingen
 notifikation, er det **visningen**. Er der ingen, nåede pushen aldrig ind i
 workeren — og så nytter det ikke at vise noget hurtigere.
 
+## 7h · En relativ adresse i en payload, systemet læser (v88)
+
+v87 virkede ikke, og skærmbilledet var det klareste, vi har haft:
+
+> THE SERVICE WORKER HAS **NEVER** BEEN WOKEN BY A PUSH ON ANY DEVICE.
+> WEB.PUSH.APPLE.COM — KOM IGENNEM · APNS-ID FCF3A700-…
+
+Apple kvitterer med et apns-id. Intet vises. Workeren vækkes aldrig.
+
+Fejlen var min egen, i v87: nyttelasten sendte `icon: './icon-192.png'`.
+**Nyttelasten læses af systemet, ikke af en side** — der er ingen base at
+opløse en relativ adresse imod. En streng parser kasserer så hele
+`notification`-objektet, og resultatet er præcis det billede: pushen er
+accepteret af APNs, den deklarative vej har slugt den, og der er ingenting
+tilbage at vise eller vække.
+
+Alle adresser er nu absolutte, og `icon` udelades helt, hvis den ikke kan
+gøres absolut — **et ikon er ikke værd at miste en notifikation for.**
+
+### Målingen gjorde forskellen
+
+Uden vækningsloggen fra v87 ville det her have været endnu en runde »prøv
+igen, det virkede ikke«. Med den kunne fejlen indkredses til det led, der
+hverken viser eller vækker — altså til nyttelastens format, ikke til
+leveringen. Det er første gang i syv forsøg, at et negativt svar pegede et
+sted hen.
+
+### Og en prøve, der kan svare, hvis det stadig ikke virker
+
+»Send a test (empty)« sender den **gamle** form uden nyttelast. De to
+spørgsmål, den skiller ad:
+
+- Vækker den tomme workeren, mens den fulde ikke gør → det er nyttelasten,
+  og der er noget i doda at rette.
+- Vækker ingen af dem noget → pushen når slet ikke frem, og så er det hverken
+  formatet eller hastigheden, men noget uden for appen.
+
+Det er et måleredskab, ikke en funktion, og det står der, indtil spørgsmålet
+er besvaret.
+
 ## 7 · Uden for scope
 
 Handover §10 gælder uændret: ingen flere brugere, ingen

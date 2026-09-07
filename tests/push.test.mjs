@@ -217,3 +217,25 @@ test('nyttelasten kan krypteres og laeses som deklarativ hos modtageren', () => 
   assert.equal(ud.web_push, 8030);
   assert.equal(ud.notification.title, '2 tasks are due');
 });
+
+test('alle adresser i nyttelasten er ABSOLUTTE', () => {
+  /* Nyttelasten laeses af SYSTEMET, ikke af en side - der er ingen base at
+     oploese en relativ adresse imod. v87 sendte `./icon-192.png`, og en
+     streng parser kasserer saa hele notifikationen: Apple kvitterer med et
+     apns-id, intet vises, og service workeren vaekkes heller ikke, fordi den
+     deklarative vej allerede har slugt pushen (Andreas, 07-09-2026). */
+  const n = nyPush('https://doda.eksempel.dk').nyttelast({ titel: 'x', tekst: 'y' });
+  for (const [felt, vaerdi] of Object.entries(n.notification)) {
+    if (felt === 'title' || felt === 'body') continue;
+    assert.match(String(vaerdi), /^https:\/\//,
+      `${felt} skal vaere en absolut adresse, ikke »${vaerdi}«`);
+  }
+});
+
+test('et ikon er ikke vaerd at miste en notifikation for', () => {
+  // Kan adressen ikke goeres absolut, udelades ikonet - notifikationen skal
+  // stadig kunne vises.
+  const n = nyPush('ikke-en-adresse').nyttelast({ titel: 'x', tekst: 'y' });
+  assert.equal(n.notification.icon, undefined);
+  assert.equal(n.web_push, 8030, 'resten af formen skal stadig vaere hel');
+});

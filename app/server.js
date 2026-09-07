@@ -3142,6 +3142,7 @@ const ROUTES = {
      * »modtaget«, ikke »leveret« (Andreas, 02-09-2026).
      */
     const kun = body && typeof body.only === 'string' ? body.only : null;
+    const tom = !!(body && body.mode === 'tom');
     let abon = db.prepare(`SELECT id, endpoint, p256dh, auth, created_at, last_ok, fails
        FROM push_subs`).all();
     if (kun) abon = abon.filter((a) => a.endpoint === kun);
@@ -3160,7 +3161,18 @@ const ROUTES = {
     for (const a of abon) {
       /* Proeven skal sende PRAECIS det, en rigtig paamindelse sender - ellers
          proever den noget andet end det, der er i stykker. */
-      const r = await push.sendTil(a.endpoint, Object.assign({
+      /*
+       * To slags proeve, fordi de svarer paa hver sit spoergsmaal.
+       *
+       * `nyttelast` (standard) er dét, en rigtig paamindelse sender: teksten
+       * med i pushen, saa systemet kan vise den uden en worker.
+       *
+       * `tom` er den gamle form UDEN nyttelast. Vaekker DEN service workeren,
+       * mens den anden ikke goer, ligger fejlen i nyttelasten - og saa er der
+       * noget i doda at rette. Vaekker ingen af dem noget, naar pushen slet
+       * ikke frem, og saa er det hverken formatet eller hastigheden.
+       */
+      const r = await push.sendTil(a.endpoint, tom ? null : Object.assign({
         payload: push.nyttelast({
           titel: 'doda', tekst: 'This is a test from your own server.',
         }),
@@ -3199,10 +3211,12 @@ const ROUTES = {
     }
     // apns-id med i loggen: uden det kan to proever ikke skelnes fra hinanden
     // bagefter, og det er praecis dét, en fejlsoegning bestaar i.
-    log(`push-proeve: ${svar.filter((x) => x.ok).length}/${svar.length} kom igennem`
+    log(`push-proeve (${tom ? 'tom' : 'nyttelast'}): `
+      + `${svar.filter((x) => x.ok).length}/${svar.length} kom igennem`
       + `${svar.map((x) => (x.apnsId ? ` apns-id=${x.apnsId}` : '')).join('')}`);
     sendJson(res, 200, {
       devices: svar,
+      mode: tom ? 'tom' : 'nyttelast',
       // Kun naar den mangler: ellers er det stoej paa en skaerm, der virker.
       subMissing: kontakt ? undefined : true,
     });

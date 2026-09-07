@@ -1032,7 +1032,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 87;
+const APP_VERSION = 88;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -8250,6 +8250,18 @@ async function bindPush() {
           title="${tilmeldt ? 'Send one to this device' : 'Turn this device on first'}"
           >Send a test</button>` : ''}
         ${/*
+          * Den TOMME proeve er et maaleredskab, ikke en funktion.
+          *
+          * Den sender den gamle form uden nyttelast. Vaekker DEN service
+          * workeren, mens den almindelige proeve ikke goer, ligger fejlen i
+          * nyttelasten - og saa er der noget i doda at rette. Vaekker ingen
+          * af dem noget, naar pushen slet ikke frem, og saa er det hverken
+          * formatet eller hastigheden, men noget uden for appen.
+          */ ''}
+        ${d.devices ? `<button class="btn" id="pushTom"${tilmeldt ? '' : ' disabled'}
+          title="${tilmeldt ? 'The old form, without text in the push' : 'Turn this device on first'}"
+          >Send a test (empty)</button>` : ''}
+        ${/*
           * En prøve UDEN om push-tjenesten.
           *
           * »Send a test« sagde »kom igennem« fire gange, og der kom stadig
@@ -8397,6 +8409,31 @@ async function bindPush() {
         } catch (ex) { toast(ex.message); }
       });
     });
+
+    const tom = boks.querySelector('#pushTom');
+    if (tom) {
+      tom.addEventListener('click', async () => {
+        const svar = boks.querySelector('#pushSvar');
+        tom.disabled = true;
+        svar.innerHTML = '<p class="meta" style="margin-top:12px">Sender…</p>';
+        try {
+          const mit = await mitAbonnement();
+          const d2 = await api('POST', '/api/v1/push/test',
+            Object.assign({ mode: 'tom' }, mit ? { only: mit } : {}));
+          const e2 = (d2.devices || [])[0] || {};
+          svar.innerHTML = `<p class="lead" style="margin-top:12px">
+            Sendte den <strong>gamle form</strong> uden tekst i pushen —
+            ${e2.ok ? 'Apple kvitterede' : `afvist${e2.status ? ` (${e2.status})` : ''}`}${
+  e2.apnsId ? ` · apns-id ${esc(e2.apnsId)}` : ''}.</p>
+            <p class="gate-note" style="text-align:left">Vent et øjeblik, og
+            <strong>åbn så doda igen</strong>. Står der ovenfor, at service workeren er
+            blevet vækket, kan doda modtage pushes — og så er det nyttelasten, der er
+            galt. Står der stadig »never been woken«, når pushen slet ikke frem, og
+            det er hverken formatet eller hastigheden.</p>`;
+        } catch (ex) { svar.innerHTML = `<p class="meta" style="margin-top:12px">${esc(ex.message)}</p>`; }
+        tom.disabled = false;
+      });
+    }
 
     const test = boks.querySelector('#pushTest');
     if (test) {

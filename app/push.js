@@ -91,15 +91,32 @@ function opret(srv) {
    * adresse - den samme, `sub` i VAPID-tokenet bruger.
    */
   function nyttelast({ titel, tekst }) {
-    return {
+    const rod = srv.kontakt();
+    /*
+     * ALLE adresser skal vaere ABSOLUTTE.
+     *
+     * Nyttelasten laeses af SYSTEMET, ikke af en side - der er ingen base at
+     * oploese `./icon-192.png` imod. v87 sendte den relativt, og en streng
+     * parser kasserer saa hele notifikationen: Apple kvitterer med et
+     * apns-id, intet vises, og service workeren vaekkes heller ikke, fordi
+     * den deklarative vej allerede har slugt pushen. Praecis det billede
+     * Andreas saa 07-09-2026.
+     *
+     * `icon` er valgfri i formatet. Kan den ikke goeres absolut, udelades
+     * den - et ikon er ikke vaerd at miste en notifikation for.
+     */
+    let ikon = null;
+    try { ikon = new URL('icon-192.png', `${rod.replace(/\/*$/, '')}/`).toString(); } catch { ikon = null; }
+    const n = {
       web_push: 8030,
       notification: {
         title: titel,
         body: tekst,
-        navigate: srv.kontakt(),
-        icon: './icon-192.png',
+        navigate: rod,
       },
     };
+    if (ikon) n.notification.icon = ikon;
+    return n;
   }
 
   /**
