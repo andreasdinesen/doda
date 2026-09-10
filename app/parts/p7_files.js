@@ -328,13 +328,34 @@ function registrerBilledvagt() {
   if (billedvagtSat) return;
   billedvagtSat = true;
 
+  /*
+   * FANGFASEN, ikke boblefasen.
+   *
+   * doda har i forvejen en delegeret lytter paa `document`, som i en
+   * hjemmeskaerms-app aabner ethvert `a[target="_blank"]` med `window.open`
+   * (iOS aabner dem ikke selv - se p1_core). Den er registreret, naar app.js
+   * bliver laest, altsaa FOER den her, som saettes fra `bindShell()`.
+   *
+   * I boblefasen kom vi derfor for sent: vinduet med billedet var allerede
+   * aabnet, og billedruden laa bag det. Andreas saa det som »den aabnede bare
+   * billedet« (10-09-2026) - to gange, fordi han proevede igen.
+   *
+   * En lytter i fangfasen paa `document` koerer foer alt andet i stien, og
+   * `stopPropagation()` her betyder, at haendelsen aldrig naar hverken
+   * link-lytteren eller filkortets egne handlere.
+   *
+   * Det var IKKE til at se i min egen proeve: den koerte paa login-siden, som
+   * ikke er standalone, saa link-lytteren sad over og trak sig tilbage med det
+   * samme. En delegeret lytter skal proeves SAMMEN med de andre delegerede
+   * lyttere - alene beviser den kun, at den kan koere alene.
+   */
   document.addEventListener('click', (e) => {
-    const img = e.target.closest('img.mdbillede, .filecard.image img');
+    const img = e.target.closest && e.target.closest('img.mdbillede, .filecard.image img');
     if (!img) return;
     // Vedhaeftningens billede ligger i et <a target="_blank">. Uden det her
     // aabner klikket en fane BAG billedruden.
     e.preventDefault();
     e.stopPropagation();
     visLightbox(img.getAttribute('src'), img.getAttribute('alt'));
-  });
+  }, true);
 }

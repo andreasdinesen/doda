@@ -2421,6 +2421,46 @@ Selve skrivningen til udklipsholderen kræver et ægte brugerklik, og
 browserruden kunne ikke levere et her. Konverteringen er målt (`image/png`,
 2 KB ud af dodas eget ikon), og resten er ordret Sagus, hvor den er i drift.
 
+## 7k · To delegerede lyttere, og den ene kom først (v91)
+
+v90 virkede ikke. Andreas klikkede på et vedhæftet billede, og **billedet
+åbnede i sit eget vindue** i stedet for i billedruden — to gange, fordi han
+prøvede igen.
+
+doda har **to** delegerede klik-lyttere på `document`:
+
+1. **Link-lytteren** (§v45, `p1_core`) registreres, når `app.js` læses, og
+   åbner i en hjemmeskærms-app ethvert `a[target="_blank"]` med `window.open`,
+   fordi iOS ikke gør det selv.
+2. **Billedvagten** (v90) sættes fra `bindShell()` — altså senere.
+
+Begge i boblefasen, og listeners på samme node kører i registreringsrækkefølge.
+Billedvagten kom derfor **efter**: vinduet var allerede åbnet, og
+`preventDefault()` var for sent. Billedruden *blev* tegnet — den lå bare bag
+det nye vindue.
+
+Rettelsen er fangfasen: `addEventListener('click', …, true)` på `document`
+kører før alt andet i stien, og `stopPropagation()` betyder, at hændelsen
+aldrig når hverken link-lytteren eller filkortets egne handlere.
+
+### Hvorfor min egen prøve ikke så det
+
+Jeg målte billedvagten **isoleret** — på login-siden, som ikke er standalone,
+så link-lytteren trak sig tilbage med det samme. Den viste, at vagten kan køre
+alene, og det var aldrig spørgsmålet.
+
+**En delegeret lytter skal prøves sammen med de andre delegerede lyttere.**
+Målt bagefter, med `display-mode: standalone` foregøglet og `window.open`
+talt:
+
+| | Vinduer åbnet | Billedrude |
+|---|---|---|
+| boblefasen (v90) | **1** | bag vinduet |
+| fangfasen (v91) | **0** | fremme |
+
+Det er samme fejlform som §7d og §7i: mekanismen var rigtig, konteksten var
+ikke med i målingen.
+
 ## 7 · Uden for scope
 
 Handover §10 gælder uændret: ingen flere brugere, ingen

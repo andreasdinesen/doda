@@ -128,3 +128,32 @@ test('hvert icon(...) peger paa et ikon, der findes', () => {
   assert.deepEqual([...mangler], [],
     `icon('...') kaldes med navne, der ikke er i ICONS: ${[...mangler].join(', ')}`);
 });
+
+/*
+ * Billedvagten SKAL sidde i fangfasen.
+ *
+ * doda har to delegerede klik-lyttere paa `document`. Link-lytteren
+ * registreres, naar app.js laeses, og aabner i en hjemmeskaerms-app ethvert
+ * `a[target="_blank"]` med `window.open`. Billedvagten saettes fra
+ * `bindShell()` - altsaa senere. I boblefasen kom den derfor for sent: et
+ * vedhaeftet billede aabnede sit eget vindue, og billedruden laa bag det
+ * (Andreas, 10-09-2026).
+ *
+ * Det her er en FORM-paastand, ikke en maaling - den kan ikke se, om
+ * rekkefoelgen stadig er den samme. Men den fanger netop det, der skete:
+ * at `, true` forsvinder ved en oprydning, uden at nogen taenker over hvorfor
+ * den stod der. Maalingen selv staar i DESIGN.md 7k.
+ */
+test('billedvagten lytter i fangfasen - ellers naar link-lytteren foerst', () => {
+  const kode = readFileSync(join(ROD, 'app/public/app.js'), 'utf8');
+  const start = kode.indexOf('function registrerBilledvagt(');
+  assert.notEqual(start, -1, 'registrerBilledvagt findes ikke i den byggede app.js');
+  const krop = kode.slice(start, kode.indexOf('\n}', start));
+
+  assert.match(krop, /addEventListener\('click',/, 'vagten lytter ikke paa klik');
+  assert.match(krop, /\}, true\);/,
+    'lytteren skal registreres med capture (`, true`) - uden den aabner et '
+    + 'vedhaeftet billede sit eget vindue, foer ruden naar at komme frem');
+  assert.match(krop, /stopPropagation\(\)/,
+    'uden stopPropagation naar haendelsen link-lytteren alligevel');
+});
