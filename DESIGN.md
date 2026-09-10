@@ -2369,6 +2369,58 @@ rettelser er den næste ting, man bygger, ikke en rettelse mere — **det er et
 instrument.** Og når instrumentet har svaret, skal det ud igen, før dets
 formuleringer begynder at lyve.
 
+## 7j · Billedruden — Sagus, ikke en ny (v90)
+
+»Når man klikker på et billede, skal det give mulighed for at kopiere det —
+på samme måde som i Sagu« (Andreas, 10-09-2026).
+
+**Samme måde** er taget bogstaveligt: `visLightbox()`, `kopierBillede()` og
+`tilPngBlob()` er Sagus (RUNE-ERFARINGER §9e), ned til de tre ikoner. Det er
+ofte *Sagus* billeder, man klikker på — en note vist inde i doda må ikke føles
+som et fremmed sted, fordi den er tegnet af en anden app.
+
+De valg, der bæres med, og som ikke er indlysende:
+
+- **Billedet, ikke adressen.** En `/api/v1/files/<id>` kan ikke sættes ind i
+  en mail, og den kræver at modtageren er logget ind.
+- **PNG, uanset filtypen** — browserne tager kun `image/png`.
+- **`ClipboardItem` får et LØFTE, ikke en færdig blob.** Safari kræver, at det
+  oprettes i selve klik-hændelsen; venter man på hentningen først, er
+  brugerhandlingen udløbet, og skrivningen afvises uden at noget ser i stykker
+  ud.
+
+### Én lytter, ikke én pr. rendering
+
+Billeder dukker op syv steder: Sagu-noter på en opgave og på et projekt,
+notekort, et projekts udfald, forhåndsvisningen i detaljeruden, en hentet
+Notion-side og vedhæftninger. En binding pr. sted er **præcis den fejl, der er
+gået igen hele vejen** gennem projektet (§7b, §7d, §7i) — reglen kommer ind ét
+sted og glemmes det ottende. Derfor delegering på `document`, som også dækker
+det, der bliver tegnet i morgen.
+
+Men kaldet sidder i `bindShell()`, og den kører ved **hvert** login og logout,
+mens `document` ikke glemmer en lytter, fordi `#root` skrives om. Uden et flag
+ville hvert login lægge en lytter mere oven i. **Det ville ingen se:**
+`visLightbox()` fjerner den forrige rude, så der står stadig kun én på
+skærmen. Målt i browseren: fire registreringer, to klik → **to** åbninger.
+Uden flaget: otte.
+
+### To ting, målingen fandt
+
+- **Billedteksten var blevet en etikette.** `.meta` er dodas versal-stil (11
+  px, uppercase, spatieret), og Sagus markup havde `meta saetning` — men
+  `saetning` findes ikke i doda. »Skitse fra Sagu-noten« blev til »SKITSE FRA
+  SAGU-NOTEN«. En klasse lånt fra en anden app betyder ikke det samme her.
+- **Vedhæftningens billede ligger i et `<a target="_blank">`.** Uden
+  `preventDefault()` åbnede klikket en fane *bag* billedruden. Målt:
+  `defaultPrevented === true`.
+
+### Hvad der ikke er efterprøvet
+
+Selve skrivningen til udklipsholderen kræver et ægte brugerklik, og
+browserruden kunne ikke levere et her. Konverteringen er målt (`image/png`,
+2 KB ud af dodas eget ikon), og resten er ordret Sagus, hvor den er i drift.
+
 ## 7 · Uden for scope
 
 Handover §10 gælder uændret: ingen flere brugere, ingen

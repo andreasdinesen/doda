@@ -5,7 +5,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 89;
+const APP_VERSION = 90;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -190,6 +190,12 @@ const ICONS = {
   chevron: '<path d="M6 9.5l6 6 6-6"/>',
   // Egen pil - IKKE repeat-ikonet, som i denne app betyder "gentagelse".
   sync: '<path d="M19.5 12a7.5 7.5 0 01-12.9 5.3"/><path d="M4.5 12a7.5 7.5 0 0112.9-5.3"/><path d="M17.5 3v4h-4"/><path d="M6.5 21v-4h4"/>',
+  /* Billedruden. ORDRET de samme tre streger som i Sagu - naar den ene app
+     viser en Sagu-note, skal knapperne over billedet ikke se ud, som om man
+     var landet et fremmed sted (RUNE-ERFARINGER §9e). */
+  copy: '<path d="M9 9h10v10a1.5 1.5 0 01-1.5 1.5H9z"/><path d="M15 9V4.5A1.5 1.5 0 0013.5 3H5.5A1.5 1.5 0 004 4.5v9A1.5 1.5 0 005.5 15H9"/>',
+  luk: '<path d="M6 6l12 12M18 6L6 18"/>',
+  tjek: '<path d="M20 6.5L9.5 17 4 11.5"/>',
 };
 
 /**
@@ -724,6 +730,7 @@ function bindShell() {
   document.getElementById('backdrop').addEventListener('click', () => document.body.classList.remove('navopen'));
   bindOmni();
   registrerRullevagt();
+  registrerBilledvagt();
 }
 
 /*

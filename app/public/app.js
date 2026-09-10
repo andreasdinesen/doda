@@ -1032,7 +1032,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 89;
+const APP_VERSION = 90;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -1217,6 +1217,12 @@ const ICONS = {
   chevron: '<path d="M6 9.5l6 6 6-6"/>',
   // Egen pil - IKKE repeat-ikonet, som i denne app betyder "gentagelse".
   sync: '<path d="M19.5 12a7.5 7.5 0 01-12.9 5.3"/><path d="M4.5 12a7.5 7.5 0 0112.9-5.3"/><path d="M17.5 3v4h-4"/><path d="M6.5 21v-4h4"/>',
+  /* Billedruden. ORDRET de samme tre streger som i Sagu - naar den ene app
+     viser en Sagu-note, skal knapperne over billedet ikke se ud, som om man
+     var landet et fremmed sted (RUNE-ERFARINGER §9e). */
+  copy: '<path d="M9 9h10v10a1.5 1.5 0 01-1.5 1.5H9z"/><path d="M15 9V4.5A1.5 1.5 0 0013.5 3H5.5A1.5 1.5 0 004 4.5v9A1.5 1.5 0 005.5 15H9"/>',
+  luk: '<path d="M6 6l12 12M18 6L6 18"/>',
+  tjek: '<path d="M20 6.5L9.5 17 4 11.5"/>',
 };
 
 /**
@@ -1751,6 +1757,7 @@ function bindShell() {
   document.getElementById('backdrop').addEventListener('click', () => document.body.classList.remove('navopen'));
   bindOmni();
   registrerRullevagt();
+  registrerBilledvagt();
 }
 
 /*
@@ -7081,6 +7088,178 @@ function bindVedhaeftninger(host, item, genhent) {
         toast('Removed');
       } catch (ex) { toast(ex.message); }
     });
+  });
+}
+
+/* --------------------------------------------------------------- billedrude
+ *
+ * Klik paa et billede aabner det stort, med »Copy image« over.
+ *
+ * Bygget som Sagus (RUNE-ERFARINGER §9e), fordi det ER Sagus billeder, man
+ * ofte klikker paa: en note vist inde i doda skal ikke opfoere sig anderledes,
+ * end den gjorde ovre i Sagu. Samme knapper, samme ikoner, samme veje ud.
+ *
+ * ── Billedet selv, ikke en adresse ────────────────────────────────────────
+ *
+ * Det nemme ville vaere at laegge `/api/v1/files/<id>` paa udklipsholderen.
+ * Men en adresse kan ikke saettes ind i et dokument, en mail eller en besked
+ * - og den kraever oven i koebet, at modtageren er logget ind. Det, man vil,
+ * er at have billedet.
+ *
+ * ── PNG, uanset hvad filen er ─────────────────────────────────────────────
+ *
+ * Browserne tager kun `image/png` i udklipsholderen. En JPEG tegnes derfor om
+ * paa et laerred foerst. Kilden er samme oprindelse (dodas egen filrute eller
+ * Sagu-broen `/api/v1/sagu/file`), saa laerredet bliver ikke plettet, og
+ * `toBlob` virker.
+ *
+ * ── Loeftet skal laves FOER await ─────────────────────────────────────────
+ *
+ * Safari kraever, at `ClipboardItem` oprettes i selve klik-haendelsen. Venter
+ * man paa hentningen foerst, er brugerhandlingen udloebet, og skrivningen
+ * afvises - uden at noget ser i stykker ud. Derfor faar `ClipboardItem` et
+ * LOEFTE, ikke en faerdig blob.
+ *
+ * ── Og en aerlig vej ud ───────────────────────────────────────────────────
+ *
+ * `navigator.clipboard.write` findes ikke over ren http, og panelet naas paa
+ * `IP:port`. Dér siger knappen det og peger paa »Open«, hvor telefonens og
+ * computerens egen »kopiér billede« virker som altid.
+ */
+
+async function tilPngBlob(src) {
+  const svar = await fetch(src, { credentials: 'same-origin' });
+  if (!svar.ok) throw new Error('Could not read the image.');
+  const blob = await svar.blob();
+  if (blob.type === 'image/png') return blob;
+
+  const bitmap = await createImageBitmap(blob);
+  const laerred = document.createElement('canvas');
+  laerred.width = bitmap.width;
+  laerred.height = bitmap.height;
+  laerred.getContext('2d').drawImage(bitmap, 0, 0);
+  bitmap.close();
+  return new Promise((ok, nej) => {
+    laerred.toBlob((b) => (b ? ok(b) : nej(new Error('Could not convert the image.'))), 'image/png');
+  });
+}
+
+async function kopierBillede(src, knap) {
+  if (!navigator.clipboard || !window.ClipboardItem) {
+    toast('This browser cannot copy images here — use Open, then copy it from there.');
+    return;
+  }
+  const foer = knap.innerHTML;
+  knap.disabled = true;
+  try {
+    // Loeftet laves NU, inde i klikket - se forklaringen ovenfor.
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': tilPngBlob(src) })]);
+    knap.innerHTML = `${icon('tjek', 16)}<span>Copied</span>`;
+    toast('Image copied — paste it wherever you need it.');
+  } catch {
+    /* Nogle browsere afviser et loefte og vil have en faerdig blob. Proev ÉN
+       gang mere med den hentede blob, foer vi giver op - forskellen er
+       usynlig for den, der bare vil have sit billede. */
+    try {
+      const blob = await tilPngBlob(src);
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      knap.innerHTML = `${icon('tjek', 16)}<span>Copied</span>`;
+      toast('Image copied — paste it wherever you need it.');
+    } catch {
+      toast('Could not copy it here — use Open, then copy it from there.');
+      knap.innerHTML = foer;
+    }
+  }
+  knap.disabled = false;
+  setTimeout(() => { if (document.getElementById('lightbox')) knap.innerHTML = foer; }, 2500);
+}
+
+function visLightbox(src, alt) {
+  const gammel = document.getElementById('lightbox');
+  if (gammel) gammel.remove();
+
+  const boks = document.createElement('div');
+  boks.className = 'lightbox';
+  boks.id = 'lightbox';
+  boks.innerHTML = `
+    <div class="lightbox-vaerktoej">
+      <button class="lightbox-knap" id="lbKopi">${icon('copy', 16)}<span>Copy image</span></button>
+      <a class="lightbox-knap" id="lbAaben" href="${esc(src)}" target="_blank"
+         rel="noopener noreferrer">${icon('out', 16)}<span>Open</span></a>
+      <button class="lightbox-luk" aria-label="Close">${icon('luk', 20)}</button>
+    </div>
+    <img src="${esc(src)}" alt="${esc(alt || '')}">
+    ${/* IKKE `meta`: den klasse er dodas versal-etiket (11 px, uppercase,
+         spatieret). En billedtekst er en SAETNING - saaledes blev »Skitse fra
+         Sagu-noten« til »SKITSE FRA SAGU-NOTEN«, maalt i browseren. */ ''}
+    ${alt ? `<div class="lightbox-tekst">${esc(alt)}</div>` : ''}`;
+  document.body.appendChild(boks);
+
+  const luk = () => {
+    boks.remove();
+    document.removeEventListener('keydown', paaTast);
+  };
+  const paaTast = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); luk(); } };
+  // I fangfasen: detaljeruden lytter ogsaa paa Escape, og uden det her ville
+  // ét tryk lukke BEGGE - saa var opgaven vaek under billedet.
+  document.addEventListener('keydown', paaTast, true);
+
+  boks.querySelector('.lightbox-luk').addEventListener('click', luk);
+  const kopiKnap = boks.querySelector('#lbKopi');
+  kopiKnap.addEventListener('click', (e) => { e.stopPropagation(); kopierBillede(src, kopiKnap); });
+  // Et klik paa »Open« maa ikke ogsaa lukke ruden bagved.
+  boks.querySelector('#lbAaben').addEventListener('click', (e) => e.stopPropagation());
+  // Klik paa baggrunden lukker; klik paa selve billedet goer ikke.
+  boks.addEventListener('click', (e) => { if (e.target === boks) luk(); });
+
+  // Swipe. pointer-events virker ens paa mus, pen og finger - HTML5 drag
+  // findes ikke paa touch (RUNE-ERFARINGER §4).
+  let start = null;
+  boks.addEventListener('pointerdown', (e) => { start = { x: e.clientX, y: e.clientY }; });
+  boks.addEventListener('pointerup', (e) => {
+    if (!start) return;
+    const dx = e.clientX - start.x;
+    const dy = e.clientY - start.y;
+    start = null;
+    if (Math.hypot(dx, dy) > 80) luk();
+  });
+}
+
+/**
+ * Ét sted, der lytter - ikke en binding pr. tegning.
+ *
+ * Billeder dukker op syv steder i doda: Sagu-noter paa en opgave og paa et
+ * projekt, notekort, et projekts udfald, forhaandsvisningen i detaljeruden,
+ * en hentet Notion-side og vedhaeftninger. En binding pr. sted er praecis den
+ * fejl, der er gaaet igen hele vejen gennem det her projekt - reglen kommer
+ * ind ét sted og bliver glemt det ottende (v58, v60, v81, v84, v89).
+ *
+ * Delegering paa `document` gaelder ogsaa det, der bliver tegnet i morgen.
+ */
+let billedvagtSat = false;
+
+function registrerBilledvagt() {
+  /*
+   * ÉN gang, ikke én pr. optegning.
+   *
+   * Kaldet sidder i `bindShell()`, som koerer ved hvert login og logout - og
+   * `document` glemmer ikke en lytter, fordi #root bliver skrevet om. Uden
+   * flaget ville hvert login laegge en lytter mere oven i, og hvert klik paa
+   * et billede ville koere haandteringen to, tre, fire gange. Det ville
+   * ingen se: `visLightbox()` fjerner den forrige rude, saa der staar stadig
+   * kun én paa skaermen.
+   */
+  if (billedvagtSat) return;
+  billedvagtSat = true;
+
+  document.addEventListener('click', (e) => {
+    const img = e.target.closest('img.mdbillede, .filecard.image img');
+    if (!img) return;
+    // Vedhaeftningens billede ligger i et <a target="_blank">. Uden det her
+    // aabner klikket en fane BAG billedruden.
+    e.preventDefault();
+    e.stopPropagation();
+    visLightbox(img.getAttribute('src'), img.getAttribute('alt'));
   });
 }
 

@@ -99,3 +99,32 @@ test('kun filnavne, et menneske ville skrive, foreslås som titel', () => {
     'Årsregnskab.xlsx', 'tilbud fra Aagaard.pdf',
   ]) assert.equal(menneskeligt(n), true, `${n} er et brugbart forslag`);
 });
+
+/*
+ * Et ikonnavn, der ikke findes, er STILLE.
+ *
+ * `icon()` slutter af med `ICONS[name] || ''`, saa en tastefejl giver et tomt
+ * <svg> - en knap uden ikon. Intet kastes, intet logges, og paa en knap, der
+ * ogsaa har tekst, opdager man det maaske aldrig. Det er samme slags fejl som
+ * v60's manglende navn, bare uden et brag.
+ *
+ * Vagten er billig, fordi begge ender staar i den byggede app.js: ICONS-
+ * objektet og hvert eneste kald.
+ */
+test('hvert icon(...) peger paa et ikon, der findes', () => {
+  const kode = readFileSync(join(ROD, 'app/public/app.js'), 'utf8');
+
+  const blok = kode.match(/const ICONS = \{([\s\S]*?)\n\};/);
+  assert.ok(blok, 'kunne ikke finde ICONS i den byggede app.js');
+  const findes = new Set([...blok[1].matchAll(/^\s{2}([A-Za-z_$][\w$]*):/gm)].map((m) => m[1]));
+  assert.ok(findes.size > 15, `fandt kun ${findes.size} ikoner - moensteret passer ikke`);
+
+  const mangler = new Set();
+  // Kun de LITTERALE kald. `icon(el.dataset.x)` kan ikke afgoeres her, og en
+  // vagt, der gaetter, er en vagt, man slaar fra.
+  for (const m of kode.matchAll(/\bicon\(\s*'([A-Za-z_$][\w$]*)'/g)) {
+    if (!findes.has(m[1])) mangler.add(m[1]);
+  }
+  assert.deepEqual([...mangler], [],
+    `icon('...') kaldes med navne, der ikke er i ICONS: ${[...mangler].join(', ')}`);
+});

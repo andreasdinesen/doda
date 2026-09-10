@@ -866,6 +866,8 @@ a:hover { text-decoration-thickness: 2px; }
   margin: 8px 0;
   border-radius: var(--r-sm);
   background: var(--bg);
+  /* Klik aabner billedruden. Markoeren skal sige det, foer man proever. */
+  cursor: zoom-in;
 }
 /* Kunne ikke hentes - fx et billede ude i verden, som doda ikke selv henter. */
 .mdbillede-maerkat {
@@ -1496,7 +1498,7 @@ textarea.input { resize: vertical; min-height: 90px; font-family: inherit; }
   border: 1px solid var(--border-soft);
 }
 
-.filecard.image img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.filecard.image img { width: 100%; height: 100%; object-fit: cover; display: block; cursor: zoom-in; }
 
 .filecard.doc {
   display: flex;
@@ -2036,3 +2038,87 @@ a.item-flag:hover { color: var(--accent); }
 .notionpage h3, .notionpage h4, .notionpage h5 { margin: 14px 0 6px; font-size: 15px; }
 .notionpage p { margin: 8px 0; }
 .notionpage ul, .notionpage ol { margin: 8px 0; padding-left: 22px; }
+
+
+/* --------------------------------------------------------------- billedrude
+ *
+ * Klik paa et billede aabner det stort, med »Copy image« over. Ordret Sagus
+ * udseende (RUNE-ERFARINGER §9e): det ER ofte Sagus billeder, man klikker
+ * paa, og en note vist inde i doda skal ikke se ud, som om man var landet et
+ * fremmed sted.
+ */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 32px;
+  background: rgba(0, 0, 0, .88);
+}
+
+.lightbox img { max-width: 100%; max-height: 82vh; object-fit: contain; border-radius: var(--r-sm); }
+.lightbox-tekst {
+  color: #ddd;
+  max-width: 60ch;
+  text-align: center;
+  font-size: .92rem;
+  line-height: 1.45;
+}
+
+/* Vaerktoejerne i toppen: kopiér, aabn, luk. Én raekke, saa de ikke kan lande
+   oven i hinanden paa en telefon - og saa »kopiér« staar dér, hvor man ser
+   billedet, ikke gemt i en menu. */
+.lightbox-vaerktoej {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  left: 16px;
+  z-index: 2;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.lightbox-knap {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: var(--pill);
+  background: rgba(255, 255, 255, .16);
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  text-decoration: none;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+.lightbox-knap:hover { background: rgba(255, 255, 255, .28); }
+.lightbox-knap[disabled] { opacity: .6; cursor: default; }
+.lightbox-knap svg { flex: none; }
+/* Paa en smal skaerm er ordene dyre - ikonerne baerer betydningen. */
+@media (max-width: 420px) { .lightbox-knap span { display: none; } }
+
+/* Der SKAL vaere en synlig vej ud. Esc og swipe virker, men en telefon har
+   ingen Esc-tast, og et billede i fuld skaerm uden en knap er en blindgyde. */
+.lightbox-luk {
+  position: static;
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--pill);
+  background: rgba(255, 255, 255, .14);
+  color: #fff;
+  cursor: pointer;
+}
+.lightbox-luk:hover { background: rgba(255, 255, 255, .26); }
