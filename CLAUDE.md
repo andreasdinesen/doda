@@ -33,6 +33,16 @@
 - Repoet er **offentligt** (Andreas, 2026-08-21), som Sagus. **Hver eneste ændring skal
   auditeres, før den pushes:** ingen rigtige mailadresser, ingen rigtige værtsnavne, ingen
   tokens. `navn@eksempel.dk` og `doda.eksempel.dk` er de former, der bruges i tests og docs.
+  - Kommandoen er **fast**, og undtagelsen er **kun** `eksempel`:
+
+    ```sh
+    git diff -- . | grep -nE '@[a-z0-9.-]+\.(dk|com)|https?://[a-z0-9.-]+\.(dk|com)|192\.168|[0-9]{1,3}(\.[0-9]{1,3}){3}' | grep -v eksempel
+    ```
+
+  - **Føj ALDRIG et ord til `grep -v` for at få listen kortere.** Det skete 11-09-2026:
+    Andreas' rigtige webshop stod i DESIGN.md som eksempel, og `grep -v <webshoppen>`
+    skjulte netop dét. Rammer auditten noget, er det noget at **rette** — ikke at filtrere.
+    En audit, hvis undtagelser man skriver undervejs, auditerer ikke.
 - **Serveren henter selv sin kode** (v82). `app/kilde.js` kører fra runens
   `startup`, før serveren starter: den spørger GitHub efter nyeste `vN` — eller
   henter præcis den, `KODE_VERSION` peger på — og bytter `app/` ud. Følger:
