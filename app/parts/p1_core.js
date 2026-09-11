@@ -5,7 +5,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 91;
+const APP_VERSION = 92;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -71,6 +71,24 @@ const visNavn = (n) => (typeof dodaParse !== 'undefined'
  * kun pa http(s). Det er med vilje: javascript: og data: ma aldrig kunne slippe
  * igennem fra en import, et API-kald eller en MCP-klient (DESIGN.md §3).
  */
+/**
+ * Ramte klikket et link inde i en raekke?
+ *
+ * Siden v92 kan en TITEL indeholde et link (`linkify`). En raekke, der aabner
+ * opgaven ved klik, maa derfor spoerge foerst - ellers gaar man to steder hen
+ * paa én gang: linket aabner, OG opgaven aabner bagved.
+ *
+ * Det er en navngivet regel og ikke en `if` hvert sted, saa den kan findes
+ * med et grep, naar der kommer en raekke mere. Den er med vilje IKKE en
+ * delegeret lytter: den eneste maade at stoppe raekken paa fra `document`
+ * ville vaere `stopPropagation()` i fangfasen, og saa ville den ogsaa stoppe
+ * link-lytteren, som er den, der overhovedet aabner links i en app paa
+ * hjemmeskaermen (§7k).
+ */
+function paaLink(e) {
+  return !!(e && e.target && e.target.closest && e.target.closest('a[href]'));
+}
+
 function linkify(tekst) {
   let ud = esc(tekst);
   ud = ud.replace(/\[([^\]\n]{1,120})\]\((https?:\/\/[^)\s]{1,500})\)/g,

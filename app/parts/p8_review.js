@@ -387,7 +387,7 @@ function reviewTrin(id, d) {
     return d.skipped.length
       ? `<div class="list">${d.skipped.map((r) => `<div class="item-row">
           <span class="rep-icon ${r.mode === 'completion' ? 'completion' : 'schedule'}">${icon('repeat', 16)}</span>
-          <div class="item-main"><div class="item-title">${esc(r.title)}</div>
+          <div class="item-main"><div class="item-title">${linkify(r.title)}</div>
           <div class="item-meta meta">${esc(r.description)}</div></div>
           <span class="skipcount">${r.skips} skipped</span></div>`).join('')}</div>
          <button class="btn" data-goto="repeat" style="margin-top:14px">Go to recurring</button>`

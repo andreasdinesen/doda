@@ -289,7 +289,7 @@ function projektOpgave(it, i, ialt) {
 
 function noteKort(it) {
   return `<div class="notecard" data-id="${esc(it.id)}" tabindex="0">
-    <div class="notecard-title">${esc(it.title)}</div>
+    <div class="notecard-title">${linkify(it.title)}</div>
     ${it.note ? `<div class="notecard-body">${markdown(it.note)}</div>` : ''}
   </div>`;
 }
@@ -365,7 +365,7 @@ function bindProjektvisning(p, d) {
 
   document.querySelectorAll('.item-row[data-id]').forEach((el) => {
     el.addEventListener('click', (ev) => {
-      if (ev.target.closest('.mover, .tick')) return;
+      if (paaLink(ev) || ev.target.closest('.mover, .tick')) return;
       const it = [...d.tasks].find((x) => x.id === el.dataset.id);
       if (it) aabnElement(it);
     });
@@ -373,11 +373,12 @@ function bindProjektvisning(p, d) {
   });
 
   document.querySelectorAll('.item-row[data-project]').forEach((el) => {
-    el.addEventListener('click', () => gaaTilProjekt(el.dataset.project));
+    el.addEventListener('click', (ev) => { if (!paaLink(ev)) gaaTilProjekt(el.dataset.project); });
   });
 
   document.querySelectorAll('.notecard').forEach((el) => {
-    el.addEventListener('click', () => {
+    el.addEventListener('click', (ev) => {
+      if (paaLink(ev)) return;
       const it = d.notes.find((x) => x.id === el.dataset.id);
       if (it) aabnElement(it);
     });

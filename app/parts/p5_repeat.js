@@ -62,7 +62,7 @@ function gentagelsesRaekke(r) {
   return `<div class="item-row repeat-row" data-rec="${esc(r.id)}" tabindex="0">
     <span class="rep-icon ${r.mode === 'completion' ? 'completion' : 'schedule'}">${icon('repeat', 16)}</span>
     <div class="item-main">
-      <div class="item-title">${esc(r.title)}</div>
+      <div class="item-title">${linkify(r.title)}</div>
       <div class="item-meta meta">${esc(r.description)}</div>
       <div class="item-meta meta">${forfald.join(' · ')}</div>
     </div>
@@ -72,7 +72,8 @@ function gentagelsesRaekke(r) {
 
 function bindRepeat(alle) {
   document.querySelectorAll('.repeat-row').forEach((el) => {
-    el.addEventListener('click', () => {
+    el.addEventListener('click', (ev) => {
+      if (paaLink(ev)) return;
       const r = alle.find((x) => x.id === el.dataset.rec);
       if (r) aabnGentagelse(r);
     });
@@ -91,7 +92,7 @@ function aabnGentagelse(r) {
   host.className = 'modal';
   host.innerHTML = `
   <div class="modal-card" role="dialog" aria-modal="true">
-    <h2>${esc(r.title)}</h2>
+    <h2>${linkify(r.title)}</h2>
     <p class="lead" style="margin:6px 0 18px">${esc(r.description)}</p>
 
     <label class="field"><span>Title (applies to every future one)</span>

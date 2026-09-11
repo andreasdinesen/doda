@@ -2461,6 +2461,52 @@ talt:
 Det er samme fejlform som §7d og §7i: mekanismen var rigtig, konteksten var
 ikke med i målingen.
 
+## 7l · Et link i en titel (v92)
+
+En opgave fanget fra en webshop hed
+`[Tjek om der ligger ordre i webshoppen](https://webshop.eksempel.dk/...)` —
+seks linjer markdown, hvor der skulle stå fem ord (Andreas, 11-09-2026).
+
+`linkify()` har kunnet oversætte `[tekst](adresse)` siden v45. Den blev bare
+**kun** brugt ét sted: listerækken. Noterkort, gentagelser, gennemgangen,
+logbogen og detaljeruden viste råt `esc(title)`.
+
+Det er samme mønster som §7b, §7d, §7i og §7k, femte gang: en regel kommer ind
+ét sted og glemmes de andre. Den er nu anvendt alle steder, en titel **vises**
+— og bevidst ikke to steder:
+
+- **Søgerækken** er en `<button>`, og et `<a>` inde i en knap er ugyldig HTML.
+  Rækken findes desuden for at *åbne* opgaven, ikke for at forlade den.
+- **Redigeringsfeltet** er kilden. Der skal man kunne rette selve markdown'en.
+
+### To lag om den samme titel
+
+Men detaljeruden var dét, Andreas kiggede på, og et `<textarea>` kan ikke
+indeholde et link. Derfor ligger der nu en **visning** ovenpå feltet, så længe
+titlen indeholder et link og feltet ikke har fokus. Et klik på teksten — alt
+andet end selve linket — bytter tilbage til feltet med markøren for enden.
+
+De to lag deler `.detail-title`, så titlen ikke hopper i det øjeblik man
+klikker for at rette den. Målt i browseren: `fontSize`, `fontWeight`,
+`lineHeight`, `letterSpacing`, `color` og `fontFamily` er identiske.
+
+`opdaterTitelVis()` kaldes **altid** ved blur — ikke kun når `anvendSyntaks()`
+fandt noget. Ellers ville visningen kun komme tilbage, hvis man tilfældigvis
+havde skrevet et `#`.
+
+### Og en regel, der fulgte med
+
+En række, der åbner opgaven ved klik, skal nu spørge, om klikket ramte et
+link — ellers går man to steder hen på én gang: linket åbner, **og** opgaven
+åbner bagved. Det er en navngiven funktion, `paaLink(e)`, og ikke en `if` hvert
+sted, så den kan findes med et grep, når der kommer en række mere.
+
+Den er med vilje **ikke** en delegeret lytter. Den eneste måde at stoppe
+rækken på fra `document` ville være `stopPropagation()` i fangfasen — og så
+ville den også stoppe link-lytteren, som er den, der overhovedet åbner links i
+en app på hjemmeskærmen (§7k). To delegerede lyttere, der slår hinanden ihjel,
+er præcis den fejl, v91 lige har ryddet op efter.
+
 ## 7 · Uden for scope
 
 Handover §10 gælder uændret: ingen flere brugere, ingen

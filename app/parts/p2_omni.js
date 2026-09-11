@@ -396,6 +396,9 @@ function tegnPanel() {
       const faerdig = it.status === 'done' || it.status === 'dropped';
       return `<button class="omni-row${faerdig ? ' dim' : ''}"${valgt} data-i="${i}">
         ${icon(it.kind === 'note' ? 'note' : 'next')}
+        ${/* IKKE linkify her. Soegeraekken er en <button>, og et <a> inde i en
+       knap er ugyldig HTML - og forkert: raekken findes for at AABNE opgaven,
+       ikke for at forlade den. Titlen staar raa, praecis som man skrev den. */ ''}
         <span class="omni-row-main"><span class="omni-row-title">${esc(it.title)}</span>
         <span class="omni-row-sub">${esc(statusNavn(it.status))}${it.contexts.length ? ` · ${it.contexts.map((c) => `#${c.name}`).join(' ')}` : ''}</span></span>
       </button>`;

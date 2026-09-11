@@ -218,7 +218,8 @@ function bindListe() {
   });
 
   document.querySelectorAll('.item-row').forEach((el) => {
-    el.addEventListener('click', () => {
+    el.addEventListener('click', (ev) => {
+      if (paaLink(ev)) return;
       const it = state.items.find((x) => x.id === el.dataset.id);
       if (it) aabnElement(it);
     });
@@ -639,8 +640,22 @@ async function aabnElement(listeItem) {
     <div class="detail-head">
       ${it.kind === 'task' ? `<button class="tick big${u.status === 'done' ? ' on' : ''}" id="dTick"
         aria-label="Mark done" title="Mark done"></button>` : `<span class="detail-noteicon">${icon('note', 22)}</span>`}
+      ${/*
+        * To lag om den samme titel.
+        *
+        * Feltet er KILDEN - der skal man kunne rette `[tekst](adresse)`, og
+        * et <textarea> kan ikke indeholde et link. Men saa laeste man ogsaa
+        * markdown'en, hver gang man aabnede opgaven: »[Tjek om der ligger
+        * ordre i webshoppen](https://...)« fyldte seks linjer, hvor der
+        * skulle staa fem ord (Andreas, 11-09-2026).
+        *
+        * Visningen staar derfor OVENPAA, saa laenge titlen indeholder et
+        * link og feltet ikke har fokus. Et klik paa teksten - alt andet end
+        * selve linket - bytter tilbage til feltet med markoeren for enden.
+        */ ''}
       <textarea class="detail-title" id="dTitle" rows="1" placeholder="Title"
         aria-label="Title" spellcheck="false">${esc(u.title)}</textarea>
+      <div class="detail-title vis" id="dTitleVis" hidden></div>
       <button class="detail-close" id="dClose" aria-label="Close">×</button>
     </div>
 
@@ -881,7 +896,34 @@ async function aabnElement(listeItem) {
     titelEl.style.height = 'auto';
     titelEl.style.height = `${titelEl.scrollHeight}px`;
   };
+
+  /* Har titlen et link i sig? Kun da er der noget at vise frem for at redigere. */
+  const titelHarLink = () => /\[[^\]\n]{1,120}\]\(https?:\/\//.test(u.title)
+    || /(^|\s)https?:\/\//.test(u.title);
+
+  const visEl = host.querySelector('#dTitleVis');
+  const opdaterTitelVis = () => {
+    const vis = titelHarLink() && document.activeElement !== titelEl;
+    if (vis) visEl.innerHTML = linkify(u.title);
+    visEl.hidden = !vis;
+    titelEl.hidden = vis;
+    // scrollHeight er 0, saa laenge feltet er skjult - maal kun naar det staar
+    // fremme, ellers klapper titlen sammen til én linje, naar man aabner den.
+    if (!vis) voksTitel();
+  };
+
+  visEl.addEventListener('click', (e) => {
+    // Linket skal kunne foelges. Alt ANDET betyder »jeg vil rette titlen«.
+    if (paaLink(e)) return;
+    visEl.hidden = true;
+    titelEl.hidden = false;
+    voksTitel();
+    titelEl.focus();
+    titelEl.setSelectionRange(titelEl.value.length, titelEl.value.length);
+  });
+
   voksTitel();
+  opdaterTitelVis();
   titelEl.addEventListener('input', () => {
     if (titelEl.value.includes('\n')) {
       const pos = titelEl.selectionStart;
@@ -906,11 +948,15 @@ async function aabnElement(listeItem) {
   // dukke op, foer noget gemmes.
   titelEl.addEventListener('blur', () => {
     const ny = anvendSyntaks(u, titelEl.value);
-    if (ny === null) return;
-    titelEl.value = ny;
-    u.title = ny;
-    voksTitel();
-    tegnChipsRow();
+    if (ny !== null) {
+      titelEl.value = ny;
+      u.title = ny;
+      voksTitel();
+      tegnChipsRow();
+    }
+    // ALTID, ogsaa naar der ikke var genvejssyntaks at tolke: ellers blev
+    // visningen kun byttet ind, naar man tilfaeldigvis havde skrevet et #.
+    opdaterTitelVis();
   });
 
   // Feltet vokser med teksten - en fast hoejde ville enten spilde plads

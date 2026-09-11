@@ -1681,6 +1681,18 @@ textarea.input { resize: vertical; min-height: 90px; font-family: inherit; }
 
 .detail-title::placeholder { color: var(--muted); font-weight: 600; }
 
+/* Visningen af titlen, naar den indeholder et link og ikke redigeres (§7l).
+   Den ARVER .detail-title, saa de to lag staar praecis ens - ellers ville
+   titlen hoppe, i det oejeblik man klikker for at rette den. */
+.detail-title.vis { cursor: text; }
+.detail-title.vis a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1.5px;
+}
+.detail-title.vis a:hover { text-decoration-thickness: 2.5px; }
+
 .detail-close {
   flex: none;
   width: 30px;

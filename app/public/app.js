@@ -1032,7 +1032,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 91;
+const APP_VERSION = 92;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -1098,6 +1098,24 @@ const visNavn = (n) => (typeof dodaParse !== 'undefined'
  * kun pa http(s). Det er med vilje: javascript: og data: ma aldrig kunne slippe
  * igennem fra en import, et API-kald eller en MCP-klient (DESIGN.md §3).
  */
+/**
+ * Ramte klikket et link inde i en raekke?
+ *
+ * Siden v92 kan en TITEL indeholde et link (`linkify`). En raekke, der aabner
+ * opgaven ved klik, maa derfor spoerge foerst - ellers gaar man to steder hen
+ * paa én gang: linket aabner, OG opgaven aabner bagved.
+ *
+ * Det er en navngivet regel og ikke en `if` hvert sted, saa den kan findes
+ * med et grep, naar der kommer en raekke mere. Den er med vilje IKKE en
+ * delegeret lytter: den eneste maade at stoppe raekken paa fra `document`
+ * ville vaere `stopPropagation()` i fangfasen, og saa ville den ogsaa stoppe
+ * link-lytteren, som er den, der overhovedet aabner links i en app paa
+ * hjemmeskaermen (§7k).
+ */
+function paaLink(e) {
+  return !!(e && e.target && e.target.closest && e.target.closest('a[href]'));
+}
+
 function linkify(tekst) {
   let ud = esc(tekst);
   ud = ud.replace(/\[([^\]\n]{1,120})\]\((https?:\/\/[^)\s]{1,500})\)/g,
@@ -2654,6 +2672,9 @@ function tegnPanel() {
       const faerdig = it.status === 'done' || it.status === 'dropped';
       return `<button class="omni-row${faerdig ? ' dim' : ''}"${valgt} data-i="${i}">
         ${icon(it.kind === 'note' ? 'note' : 'next')}
+        ${/* IKKE linkify her. Soegeraekken er en <button>, og et <a> inde i en
+       knap er ugyldig HTML - og forkert: raekken findes for at AABNE opgaven,
+       ikke for at forlade den. Titlen staar raa, praecis som man skrev den. */ ''}
         <span class="omni-row-main"><span class="omni-row-title">${esc(it.title)}</span>
         <span class="omni-row-sub">${esc(statusNavn(it.status))}${it.contexts.length ? ` · ${it.contexts.map((c) => `#${c.name}`).join(' ')}` : ''}</span></span>
       </button>`;
@@ -3355,7 +3376,8 @@ function bindListe() {
   });
 
   document.querySelectorAll('.item-row').forEach((el) => {
-    el.addEventListener('click', () => {
+    el.addEventListener('click', (ev) => {
+      if (paaLink(ev)) return;
       const it = state.items.find((x) => x.id === el.dataset.id);
       if (it) aabnElement(it);
     });
@@ -3776,8 +3798,22 @@ async function aabnElement(listeItem) {
     <div class="detail-head">
       ${it.kind === 'task' ? `<button class="tick big${u.status === 'done' ? ' on' : ''}" id="dTick"
         aria-label="Mark done" title="Mark done"></button>` : `<span class="detail-noteicon">${icon('note', 22)}</span>`}
+      ${/*
+        * To lag om den samme titel.
+        *
+        * Feltet er KILDEN - der skal man kunne rette `[tekst](adresse)`, og
+        * et <textarea> kan ikke indeholde et link. Men saa laeste man ogsaa
+        * markdown'en, hver gang man aabnede opgaven: »[Tjek om der ligger
+        * ordre i webshoppen](https://...)« fyldte seks linjer, hvor der
+        * skulle staa fem ord (Andreas, 11-09-2026).
+        *
+        * Visningen staar derfor OVENPAA, saa laenge titlen indeholder et
+        * link og feltet ikke har fokus. Et klik paa teksten - alt andet end
+        * selve linket - bytter tilbage til feltet med markoeren for enden.
+        */ ''}
       <textarea class="detail-title" id="dTitle" rows="1" placeholder="Title"
         aria-label="Title" spellcheck="false">${esc(u.title)}</textarea>
+      <div class="detail-title vis" id="dTitleVis" hidden></div>
       <button class="detail-close" id="dClose" aria-label="Close">×</button>
     </div>
 
@@ -4018,7 +4054,34 @@ async function aabnElement(listeItem) {
     titelEl.style.height = 'auto';
     titelEl.style.height = `${titelEl.scrollHeight}px`;
   };
+
+  /* Har titlen et link i sig? Kun da er der noget at vise frem for at redigere. */
+  const titelHarLink = () => /\[[^\]\n]{1,120}\]\(https?:\/\//.test(u.title)
+    || /(^|\s)https?:\/\//.test(u.title);
+
+  const visEl = host.querySelector('#dTitleVis');
+  const opdaterTitelVis = () => {
+    const vis = titelHarLink() && document.activeElement !== titelEl;
+    if (vis) visEl.innerHTML = linkify(u.title);
+    visEl.hidden = !vis;
+    titelEl.hidden = vis;
+    // scrollHeight er 0, saa laenge feltet er skjult - maal kun naar det staar
+    // fremme, ellers klapper titlen sammen til én linje, naar man aabner den.
+    if (!vis) voksTitel();
+  };
+
+  visEl.addEventListener('click', (e) => {
+    // Linket skal kunne foelges. Alt ANDET betyder »jeg vil rette titlen«.
+    if (paaLink(e)) return;
+    visEl.hidden = true;
+    titelEl.hidden = false;
+    voksTitel();
+    titelEl.focus();
+    titelEl.setSelectionRange(titelEl.value.length, titelEl.value.length);
+  });
+
   voksTitel();
+  opdaterTitelVis();
   titelEl.addEventListener('input', () => {
     if (titelEl.value.includes('\n')) {
       const pos = titelEl.selectionStart;
@@ -4043,11 +4106,15 @@ async function aabnElement(listeItem) {
   // dukke op, foer noget gemmes.
   titelEl.addEventListener('blur', () => {
     const ny = anvendSyntaks(u, titelEl.value);
-    if (ny === null) return;
-    titelEl.value = ny;
-    u.title = ny;
-    voksTitel();
-    tegnChipsRow();
+    if (ny !== null) {
+      titelEl.value = ny;
+      u.title = ny;
+      voksTitel();
+      tegnChipsRow();
+    }
+    // ALTID, ogsaa naar der ikke var genvejssyntaks at tolke: ellers blev
+    // visningen kun byttet ind, naar man tilfaeldigvis havde skrevet et #.
+    opdaterTitelVis();
   });
 
   // Feltet vokser med teksten - en fast hoejde ville enten spilde plads
@@ -5045,7 +5112,7 @@ function projektOpgave(it, i, ialt) {
 
 function noteKort(it) {
   return `<div class="notecard" data-id="${esc(it.id)}" tabindex="0">
-    <div class="notecard-title">${esc(it.title)}</div>
+    <div class="notecard-title">${linkify(it.title)}</div>
     ${it.note ? `<div class="notecard-body">${markdown(it.note)}</div>` : ''}
   </div>`;
 }
@@ -5121,7 +5188,7 @@ function bindProjektvisning(p, d) {
 
   document.querySelectorAll('.item-row[data-id]').forEach((el) => {
     el.addEventListener('click', (ev) => {
-      if (ev.target.closest('.mover, .tick')) return;
+      if (paaLink(ev) || ev.target.closest('.mover, .tick')) return;
       const it = [...d.tasks].find((x) => x.id === el.dataset.id);
       if (it) aabnElement(it);
     });
@@ -5129,11 +5196,12 @@ function bindProjektvisning(p, d) {
   });
 
   document.querySelectorAll('.item-row[data-project]').forEach((el) => {
-    el.addEventListener('click', () => gaaTilProjekt(el.dataset.project));
+    el.addEventListener('click', (ev) => { if (!paaLink(ev)) gaaTilProjekt(el.dataset.project); });
   });
 
   document.querySelectorAll('.notecard').forEach((el) => {
-    el.addEventListener('click', () => {
+    el.addEventListener('click', (ev) => {
+      if (paaLink(ev)) return;
       const it = d.notes.find((x) => x.id === el.dataset.id);
       if (it) aabnElement(it);
     });
@@ -6004,7 +6072,7 @@ function gentagelsesRaekke(r) {
   return `<div class="item-row repeat-row" data-rec="${esc(r.id)}" tabindex="0">
     <span class="rep-icon ${r.mode === 'completion' ? 'completion' : 'schedule'}">${icon('repeat', 16)}</span>
     <div class="item-main">
-      <div class="item-title">${esc(r.title)}</div>
+      <div class="item-title">${linkify(r.title)}</div>
       <div class="item-meta meta">${esc(r.description)}</div>
       <div class="item-meta meta">${forfald.join(' · ')}</div>
     </div>
@@ -6014,7 +6082,8 @@ function gentagelsesRaekke(r) {
 
 function bindRepeat(alle) {
   document.querySelectorAll('.repeat-row').forEach((el) => {
-    el.addEventListener('click', () => {
+    el.addEventListener('click', (ev) => {
+      if (paaLink(ev)) return;
       const r = alle.find((x) => x.id === el.dataset.rec);
       if (r) aabnGentagelse(r);
     });
@@ -6033,7 +6102,7 @@ function aabnGentagelse(r) {
   host.className = 'modal';
   host.innerHTML = `
   <div class="modal-card" role="dialog" aria-modal="true">
-    <h2>${esc(r.title)}</h2>
+    <h2>${linkify(r.title)}</h2>
     <p class="lead" style="margin:6px 0 18px">${esc(r.description)}</p>
 
     <label class="field"><span>Title (applies to every future one)</span>
@@ -7674,7 +7743,7 @@ function reviewTrin(id, d) {
     return d.skipped.length
       ? `<div class="list">${d.skipped.map((r) => `<div class="item-row">
           <span class="rep-icon ${r.mode === 'completion' ? 'completion' : 'schedule'}">${icon('repeat', 16)}</span>
-          <div class="item-main"><div class="item-title">${esc(r.title)}</div>
+          <div class="item-main"><div class="item-title">${linkify(r.title)}</div>
           <div class="item-meta meta">${esc(r.description)}</div></div>
           <span class="skipcount">${r.skips} skipped</span></div>`).join('')}</div>
          <button class="btn" data-goto="repeat" style="margin-top:14px">Go to recurring</button>`
