@@ -157,3 +157,46 @@ test('billedvagten lytter i fangfasen - ellers naar link-lytteren foerst', () =>
   assert.match(krop, /stopPropagation\(\)/,
     'uden stopPropagation naar haendelsen link-lytteren alligevel');
 });
+
+/*
+ * Opgavens alder (§7m). »Hvor gammel er opgaven?« (Andreas, 13-09-2026)
+ *
+ * Grænserne er dér, den slags glider: »1 days ago«, »0 weeks ago«, eller et
+ * døgn, der bliver til »24 hours ago« i stedet for »yesterday«. Funktionen er
+ * ren, så den hentes ud af den byggede app.js og køres med et fast »nu«.
+ */
+test('alderen står i en enhed, der er til at forholde sig til', () => {
+  const kode = readFileSync(join(ROD, 'app/public/app.js'), 'utf8');
+  const start = kode.indexOf('function alder(');
+  assert.ok(start > 0, 'alder() findes i den byggede app.js');
+  const slut = kode.indexOf('\nfunction ', start + 10);
+  // eslint-disable-next-line no-new-func
+  const alder = new Function(`${kode.slice(start, slut)}; return alder;`)();
+
+  const NU = 2_000_000_000;
+  const H = 3600;
+  const D = 86400;
+  const tilfaelde = [
+    [0, 'just now'],
+    [59 * 60, 'just now'],
+    [H, '1 hour ago'],
+    [2 * H, '2 hours ago'],
+    [23 * H, '23 hours ago'],
+    [24 * H, 'yesterday'],            // ikke »24 hours ago«
+    [47 * H, 'yesterday'],
+    [2 * D, '2 days ago'],            // ikke »1 days ago«
+    [13 * D, '13 days ago'],
+    [14 * D, '2 weeks ago'],          // ikke »14 days ago« og aldrig »1 weeks«
+    [59 * D, '8 weeks ago'],
+    [60 * D, '2 months ago'],
+    [364 * D, '12 months ago'],
+    [365 * D, 'a year ago'],
+    [730 * D, '2 years ago'],
+  ];
+  for (const [siden, forventet] of tilfaelde) {
+    assert.equal(alder(NU - siden, NU), forventet, `${siden} s siden`);
+  }
+
+  // Et ur, der er en smule foran serverens, maa ikke give »-1 hours ago«.
+  assert.equal(alder(NU + 30, NU), 'just now');
+});

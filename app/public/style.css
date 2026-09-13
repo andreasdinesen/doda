@@ -1794,6 +1794,11 @@ button.chip:not(.flat):hover { text-decoration: line-through; }
 .detail .filehint { text-align: left; }
 .detail .modal-foot { margin-top: 22px; }
 
+/* Opgavens alder (§7m). Stille: den er en oplysning, ikke noget man skal
+   goere noget ved, og den maa ikke konkurrere med knapperne under den. */
+.detail-alder { margin-top: 18px; }
+.detail-alder + .modal-foot { margin-top: 10px; }
+
 @media (max-width: 900px) {
   .modal-card.detail { padding: 18px; }
   .detail-title { font-size: 22px; }

@@ -2507,6 +2507,39 @@ ville den også stoppe link-lytteren, som er den, der overhovedet åbner links i
 en app på hjemmeskærmen (§7k). To delegerede lyttere, der slår hinanden ihjel,
 er præcis den fejl, v91 lige har ryddet op efter.
 
+## 7m · Opgavens alder (v93)
+
+»Er det muligt at tilføje oprettelsesdato til opgaverne? Det behøver ikke
+være søgbart, blot et infofelt, så man kan se hvor gammel opgaven er«
+(Andreas, 13-09-2026).
+
+**Datoen fandtes allerede.** `items.created_at` er `NOT NULL` i skemaet og har
+været med i `ITEM_FELTER` — altså i hvert eneste svar til appen — fra dag ét.
+Den blev bare aldrig vist. Derfor er det en ren visningsændring, og de gamle
+opgaver får deres *rigtige* dato med det samme: intet skulle efterudfyldes,
+og intet er gættet.
+
+Linjen står i detaljeruden lige over knapperne: `Created 3 weeks ago · 21 Aug
+2026`. Holder man musen over, står hele tidspunktet.
+
+### Alder først, dato bagefter
+
+Spørgsmålet er »hvor længe har den ligget?«. `visTid()` skifter til en dato
+efter et døgn — rigtigt for »tilføjet« på en nøgle — men »21 Aug« kræver
+hovedregning. `alder()` svarer i den enhed, der er til at forholde sig til:
+timer, `yesterday`, dage, uger, måneder, år. Datoen har årstal med, for noget
+der er måneder gammelt, er året en del af svaret.
+
+Grænserne er prøvet, fordi det er dér, den slags glider: ingen `1 days ago`,
+intet `0 weeks`, et døgn bliver `yesterday` og ikke `24 hours ago`, og et ur,
+der er en smule foran serverens, giver ikke `-1 hours ago`.
+
+### Kun en oplysning
+
+Den kan hverken rettes eller søges i, og den står ikke i listen. Andreas bad om
+et infofelt — og en dato på hver række ville være støj i en liste, der skal
+læses på et øjeblik.
+
 ## 7 · Uden for scope
 
 Handover §10 gælder uændret: ingen flere brugere, ingen

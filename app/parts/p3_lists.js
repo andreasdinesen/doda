@@ -696,6 +696,23 @@ async function aabnElement(listeItem) {
 
     ${vedhaeftningerHtml(it)}
 
+    ${/*
+      * Hvor gammel er opgaven?
+      *
+      * `created_at` har vaeret gemt paa hver eneste opgave fra dag ét - den er
+      * NOT NULL i skemaet og har ligget i hvert svar til appen hele tiden.
+      * Den blev bare aldrig vist. Derfor faar ogsaa de gamle opgaver deres
+      * RIGTIGE dato med det samme; intet skulle efterudfyldes eller gaettes.
+      *
+      * Alder FOERST, datoen bagefter: spoergsmaalet er »hvor laenge har den
+      * ligget?«, og »22 Aug« svarer ikke paa det uden hovedregning.
+      *
+      * Kun en oplysning, ikke et felt - den kan hverken rettes eller soeges i
+      * (Andreas, 13-09-2026).
+      */ ''}
+    ${it.created_at ? `<div class="detail-alder meta" title="${esc(fuldDato(it.created_at))}">
+      Created ${esc(alder(it.created_at))} · ${esc(kortDato(it.created_at))}</div>` : ''}
+
     <div class="modal-foot">
       <button class="btn ghost" id="edDelete">Delete</button>
       ${it.kind === 'note' || state.notesEnabled
@@ -1548,6 +1565,38 @@ async function tegnForbindelser() {
       });
     });
   } catch (ex) { host.innerHTML = `<p class="lead">${esc(ex.message)}</p>`; }
+}
+
+/**
+ * Hvor laenge siden - i den enhed, der er til at forholde sig til.
+ *
+ * `visTid()` ovenfor skifter til en dato efter et doegn, og det er rigtigt for
+ * »tilfoejet« paa en noegle. Men for en OPGAVE er spoergsmaalet alder: »22 Aug«
+ * kraever hovedregning, »3 weeks ago« goer ikke.
+ */
+function alder(unix, nu = Date.now() / 1000) {
+  const s = Math.max(0, nu - unix);
+  const timer = s / 3600;
+  const dage = Math.floor(s / 86400);
+  if (timer < 1) return 'just now';
+  if (timer < 24) return `${Math.floor(timer)} hour${Math.floor(timer) === 1 ? '' : 's'} ago`;
+  if (dage < 2) return 'yesterday';
+  if (dage < 14) return `${dage} days ago`;
+  if (dage < 60) return `${Math.floor(dage / 7)} weeks ago`;
+  if (dage < 365) return `${Math.floor(dage / 30)} months ago`;
+  const aar = Math.floor(dage / 365);
+  return aar === 1 ? 'a year ago' : `${aar} years ago`;
+}
+
+/* Med AARSTAL: for noget, der er maaneder gammelt, er aaret en del af svaret. */
+function kortDato(unix) {
+  return new Date(unix * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function fuldDato(unix) {
+  return new Date(unix * 1000).toLocaleString('en-GB', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
 }
 
 function visTid(unix) {
