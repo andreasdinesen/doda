@@ -300,13 +300,37 @@
   }
 
   /**
+   * »I dag« som en KALENDERDAG ved lokal midnat - uanset hvordan den kom ind.
+   *
+   * En dato som tekst (»2026-09-21«) laeses af `new Date()` som UTC-midnat, og
+   * i enhver tidszone vest for UTC er det den 20. om aftenen lokalt. Serveren
+   * kalder `tolkGentagelse` med netop den form (`iDag()`), saa en »fra
+   * fuldfoerelse«-regel afsluttet den 21. fik `monthday: 20`, og naeste
+   * forekomst landede den 20-10 - praecis den fejl, Andreas beskrev
+   * (14-09-2026). doda tvinger Europe/Copenhagen, saa den ramte ikke i drift,
+   * men en panel-variabel ville vaere nok til at vaekke den.
+   *
+   * ÉN hjaelper, fordi den samme to-linjers konstruktion stod BAADE her og i
+   * `tolkGentagelse`. Var kun den ene rettet, havde »!tomorrow« og »!every!
+   * month« regnet »i dag« forskelligt.
+   */
+  function somDag(nu) {
+    let base;
+    if (typeof nu === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(nu)) {
+      base = new Date(Number(nu.slice(0, 4)), Number(nu.slice(5, 7)) - 1, Number(nu.slice(8, 10)));
+    } else {
+      base = nu ? new Date(nu) : new Date();
+    }
+    return new Date(base.getFullYear(), base.getMonth(), base.getDate());
+  }
+
+  /**
    * Tolker en dansk datofrase. Returnerer {dato, tid} eller null.
    * Omfanget er bevidst lille - se DESIGN.md §3. Kan en frase ikke tolkes,
    * skal fangsten stadig lykkes; det er kaldsstedets ansvar.
    */
   function tolkDato(frase, nu) {
-    const base = nu ? new Date(nu) : new Date();
-    const iDag = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+    const iDag = somDag(nu);
 
     const k = findKlokkeslaet(String(frase || ''));
     const tid = k.tid;
@@ -445,8 +469,7 @@
     // blive laest som en ugentlig gentagelse i stedet for en dato.
     if (!m && !BARE_FORMER.test(raa)) return null;
 
-    const base = nu ? new Date(nu) : new Date();
-    const iDag = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+    const iDag = somDag(nu);
     const mode = m && m[2] === '!' ? 'completion' : 'schedule';
 
     const k = findKlokkeslaet(m ? m[3] : raa);
@@ -1032,7 +1055,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 93;
+const APP_VERSION = 94;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er

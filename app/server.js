@@ -1345,6 +1345,76 @@ function rykGentagelse(r, fraDato, taelSomSprunget) {
 }
 
 /**
+ * Afslut et element - og rul dets gentagelse frem. ÉN vej ind.
+ *
+ * Indtil v94 fandtes den her logik KUN i /complete. Status-chippen i
+ * detaljeruden, MCP's `update_item`, Raycast og iOS-genveje satte `status:
+ * 'done'` gennem den generelle opdateringsrute, som bare kaldte opdaterItem -
+ * og saa blev gentagelsen aldrig rullet frem. For en »fra fuldfoerelse«-regel
+ * betoed det, at `next_due` blev staaende paa den gamle dato, og at der ALDRIG
+ * kom en ny forekomst: `rulFrem()` roerer kun faste planer. Gentagelsen doede
+ * stille (Andreas, 14-09-2026 - »istedet for 20-9«).
+ *
+ * v85 rettede RINGEN til /complete. Chippen blev glemt. Derfor ligger reglen
+ * nu her paa serveren, hvor enhver klient - ogsaa den, der skrives i morgen -
+ * ender det samme sted.
+ */
+function fuldfoerItem(item) {
+  const faerdig = opdaterItem(item.id, { status: 'done', completed_at: now() });
+  if (!item.recurrence_id) return { item: faerdig, next: null };
+  const r = hentGentagelse(item.recurrence_id);
+  if (!r) return { item: faerdig, next: null };
+  // "Fra fuldfoerelse" regner fra i dag; "fast plan" fra forekomstens egen
+  // dato. Det er hele forskellen mellem de to tilstande.
+  const fra = r.mode === 'completion' ? iDag() : (item.due_date || iDag());
+  return { item: faerdig, next: rykGentagelse(r, fra, false), recurrence: hentGentagelse(r.id) };
+}
+
+/**
+ * Drop en forekomst af en gentagelse = spring denne gang over.
+ *
+ * Samme regel som skip-ruten: tael springet, og regn fra forekomstens egen
+ * dato. Uden det ville `dropped` via chippen efterlade gentagelsen uden en ny
+ * forekomst - praecis som `done` gjorde.
+ */
+function springItemOver(item) {
+  const droppet = opdaterItem(item.id, { status: 'dropped', completed_at: now(), skipped: 1 });
+  if (!item.recurrence_id) return { item: droppet, next: null };
+  const r = hentGentagelse(item.recurrence_id);
+  if (!r) return { item: droppet, next: null };
+  return {
+    item: droppet,
+    next: rykGentagelse(r, item.due_date || r.next_due, true),
+    recurrence: hentGentagelse(r.id),
+  };
+}
+
+/**
+ * Opdater felter - men lad en AFSLUTNING af en gentagelse gaa den rigtige vej.
+ *
+ * Kun overgangen TIL done/dropped fra en aaben status taeller. Er elementet
+ * allerede afsluttet, er det en almindelig rettelse (samme idempotens som
+ * /complete: en genafsendt genvej maa ikke rulle gentagelsen to gange).
+ */
+function opdaterMedGentagelse(id, felter) {
+  const foer = hentItem(id);
+  if (!foer) return null;
+  const nyStatus = felter.status;
+  const afsluttes = !!foer.recurrence_id
+    && (nyStatus === 'done' || nyStatus === 'dropped')
+    && foer.status !== 'done' && foer.status !== 'dropped';
+  if (!afsluttes) return { item: opdaterItem(id, felter), next: null };
+
+  // Resten af rettelserne FOERST - titel, noter, datoer - saa den nye
+  // forekomst ser samme element, som brugeren lige har gemt.
+  const resten = Object.assign({}, felter);
+  delete resten.status;
+  if (Object.keys(resten).length) opdaterItem(id, resten);
+  const opdateret = hentItem(id);
+  return nyStatus === 'done' ? fuldfoerItem(opdateret) : springItemOver(opdateret);
+}
+
+/**
  * Ruller overskredne FASTE planer frem. En forekomst, der aldrig blev lavet,
  * forsvinder ikke i det stille - hvert spring taelles.
  */
@@ -4295,14 +4365,8 @@ const mcp = require('./mcp.js').opret({
   readJsonBody,
   logError,
   soeg: (q) => soegItems(q),
-  fuldfoer(item) {
-    const faerdig = opdaterItem(item.id, { status: 'done', completed_at: now() });
-    if (!item.recurrence_id) return { item: faerdig, next: null };
-    const r = hentGentagelse(item.recurrence_id);
-    if (!r) return { item: faerdig, next: null };
-    const fra = r.mode === 'completion' ? iDag() : (item.due_date || iDag());
-    return { item: faerdig, next: rykGentagelse(r, fra, false), recurrence: hentGentagelse(r.id) };
-  },
+  fuldfoer: (item) => fuldfoerItem(item),
+  opdaterMedGentagelse,
 });
 
 /* Ruter med sti-parametre. Rakkefolgen er den, de proves i. */
@@ -4724,7 +4788,10 @@ const MOENSTRE = [
         if (!hentItem(ctx.params[0])) { apiFejl(res, 404, 'not_found', 'No such item.'); return; }
         saetKontekster(ctx.params[0], gyldige);
       }
-      const item = opdaterItem(ctx.params[0], felter);
+      // Ikke opdaterItem direkte: en afslutning af en gentagelse skal rulle
+      // den frem, uanset om den kommer fra ringen, chippen eller en genvej.
+      const resultat = opdaterMedGentagelse(ctx.params[0], felter);
+      const item = resultat && resultat.item;
       if (!item) { apiFejl(res, 404, 'not_found', 'No such item.'); return; }
 
       // "Kun denne gang" er standard: aendringen rammer forekomsten alene.
@@ -4742,7 +4809,9 @@ const MOENSTRE = [
             .run(JSON.stringify(t), now(), r.id);
         }
       }
-      sendJson(res, 200, { item });
+      sendJson(res, 200, resultat.recurrence
+        ? { item, next: resultat.next, recurrence: resultat.recurrence }
+        : { item });
     },
   },
   {
@@ -4755,20 +4824,10 @@ const MOENSTRE = [
       // Én fuldfoerelse pr. element. Er den allerede udfoert, er svaret det
       // samme - sa en genafsendt genvej ikke laver ravage (DESIGN.md §6).
       if (item.status === 'done') { sendJson(res, 200, { item }); return; }
-      const faerdig = opdaterItem(item.id, { status: 'done', completed_at: now() });
-
-      if (item.recurrence_id) {
-        const r = hentGentagelse(item.recurrence_id);
-        if (r) {
-          // "Fra fuldfoerelse" regner fra i dag; "fast plan" fra forekomstens
-          // egen dato. Det er hele forskellen mellem de to tilstande.
-          const fra = r.mode === 'completion' ? iDag() : (item.due_date || iDag());
-          const naeste = rykGentagelse(r, fra, false);
-          sendJson(res, 200, { item: faerdig, next: naeste, recurrence: hentGentagelse(r.id) });
-          return;
-        }
-      }
-      sendJson(res, 200, { item: faerdig });
+      const svar = fuldfoerItem(item);
+      sendJson(res, 200, svar.recurrence
+        ? { item: svar.item, next: svar.next, recurrence: svar.recurrence }
+        : { item: svar.item });
     },
   },
   {

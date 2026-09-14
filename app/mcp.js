@@ -148,9 +148,13 @@ function opret(srv) {
       kald(a) {
         const felter = srv.renseItem(a);
         if (!Object.keys(felter).length) return { fejl: 'Nothing to change.' };
-        const item = srv.opdaterItem(String(a.id || ''), felter);
+        // Samme vej som appen: saettes en gentagelse til done/dropped, skal
+        // den rulles frem - ellers stopper den stille (server.js, fuldfoerItem).
+        const svar = srv.opdaterMedGentagelse(String(a.id || ''), felter);
+        const item = svar && svar.item;
         if (!item) return { fejl: `No item with id ${a.id}.` };
-        return { tekst: `Updated: ${item.title} (${item.status})`, data: { item } };
+        const naeste = svar.next ? ` Next: ${svar.next.due_date}.` : '';
+        return { tekst: `Updated: ${item.title} (${item.status}).${naeste}`, data: { item, next: svar.next || null } };
       },
     },
     {

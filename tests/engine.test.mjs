@@ -1038,3 +1038,114 @@ test('push-tilmeldinger kan LISTES og fjernes enkeltvis', async () => {
   assert.equal(efter.devices, 1, 'kun den ene blev fjernet');
   assert.equal(efter.subscriptions[0].id, d.subscriptions[0].id, 'og det var den rigtige');
 });
+
+/* ============ »fra fuldførelse« skal regne fra fuldførelsesdagen ============ */
+
+/*
+ * »Når jeg bruger !every!, og den er sat til den 20-9 og afsluttes den 21-9,
+ * forventede jeg, at næste forekomst blev 21-10« (Andreas, 14-09-2026).
+ *
+ * Prøven lader som om reglen blev skrevet for SEKS dage siden - så står den
+ * udledte dag (maanedsdag/ugedag) i reglen og peger på en ANDEN dag end i dag.
+ * Afsluttes den i dag, skal næste forekomst regnes fra i dag.
+ */
+function datoStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+async function afslutGentagelseFraAndenDag(tekst, forfalden) {
+  const r = await J('/api/v1/capture', { text: `betal regningen !${tekst}`, createNew: true });
+  assert.ok(r.recurrence, `»${tekst}« skulle give en gentagelse`);
+  assert.equal(r.recurrence.mode, 'completion');
+
+  const seksDageSiden = new Date();
+  seksDageSiden.setDate(seksDageSiden.getDate() - 6);
+  const anker = datoStr(seksDageSiden);
+
+  medDb((db) => {
+    const raekke = db.prepare('SELECT rule FROM recurrences WHERE id = ?').get(r.recurrence.id);
+    const regel = JSON.parse(raekke.rule);
+    Object.assign(regel, forfalden(seksDageSiden), { anchor: anker });
+    db.prepare('UPDATE recurrences SET rule = ?, next_due = ? WHERE id = ?')
+      .run(JSON.stringify(regel), anker, r.recurrence.id);
+    db.prepare('UPDATE items SET due_date = ?, defer_date = ? WHERE id = ?').run(anker, anker, r.item.id);
+  });
+
+  const svar = await J(`/api/v1/items/${r.item.id}/complete`, {});
+  assert.ok(svar.next, `afslutningen skulle lave en ny forekomst: ${JSON.stringify(svar)}`);
+  return svar.next.due_date;
+}
+
+test('every! month regner fra fuldførelsesdagen - ikke fra den dag, reglen blev skrevet', async () => {
+  const naeste = await afslutGentagelseFraAndenDag('every! month',
+    (d) => ({ monthday: d.getDate() }));
+  const iDag = new Date();
+  const forventet = new Date(iDag.getFullYear(), iDag.getMonth() + 1,
+    Math.min(iDag.getDate(), new Date(iDag.getFullYear(), iDag.getMonth() + 2, 0).getDate()));
+  assert.equal(naeste, datoStr(forventet),
+    'næste forekomst skal ligge en måned efter I DAG, ikke på reglens gamle månedsdag');
+});
+
+test('every! week regner fra fuldførelsesdagen', async () => {
+  const naeste = await afslutGentagelseFraAndenDag('every! week',
+    (d) => ({ weekdays: [((d.getDay() + 6) % 7) + 1] }));
+  const forventet = new Date();
+  forventet.setDate(forventet.getDate() + 7);
+  assert.equal(naeste, datoStr(forventet), 'næste forekomst skal ligge 7 dage efter I DAG');
+});
+
+/*
+ * Status-chippen i detaljeruden, MCP's update_item, Raycast og iOS-genveje
+ * saetter `status: 'done'` gennem den GENERELLE rute - ikke /complete.
+ *
+ * Foer v94 rullede den rute aldrig gentagelsen frem. Maalt: `next_due` blev
+ * staaende paa den gamle dato, og der var 0 aabne forekomster bagefter.
+ * Gentagelsen doede stille (Andreas, 14-09-2026).
+ */
+const aabneForekomster = (id) => medDb((db) => db.prepare(`SELECT id, due_date FROM items
+  WHERE recurrence_id = ? AND deleted = 0 AND status NOT IN ('done','dropped')`).all(id));
+
+test('done via den generelle rute ruller gentagelsen frem - den dør ikke stille', async () => {
+  const r = await J('/api/v1/capture', { text: 'betal husleje !every! month', createNew: true });
+  const svar = await J(`/api/v1/items/${r.item.id}`, { status: 'done' });
+
+  assert.equal(svar.item.status, 'done');
+  const aabne = aabneForekomster(r.recurrence.id);
+  assert.equal(aabne.length, 1, 'der skal ligge PRÆCIS én ny forekomst');
+
+  const efter = (await J('/api/v1/recurrences')).recurrences.find((x) => x.id === r.recurrence.id);
+  assert.notEqual(efter.next_due, r.recurrence.next_due,
+    'next_due må ikke blive stående på den gamle dato');
+  assert.equal(efter.next_due, aabne[0].due_date, 'og den nye forekomst skal ligge på next_due');
+  assert.ok(svar.next, 'svaret skal bære den nye forekomst - ligesom /complete');
+});
+
+test('dropped via den generelle rute springer denne gang over', async () => {
+  const r = await J('/api/v1/capture', { text: 'vand planter !every! 3 days', createNew: true });
+  await J(`/api/v1/items/${r.item.id}`, { status: 'dropped' });
+  assert.equal(aabneForekomster(r.recurrence.id).length, 1, 'gentagelsen skal fortsætte');
+  const efter = (await J('/api/v1/recurrences')).recurrences.find((x) => x.id === r.recurrence.id);
+  assert.equal(efter.skips, 1, 'et drop tælles som et spring - samme regel som skip-ruten');
+});
+
+test('en rettelse på noget, der allerede er afsluttet, ruller IKKE en gang til', async () => {
+  // Samme idempotens som /complete: en genafsendt genvej maa ikke lave ravage.
+  const r = await J('/api/v1/capture', { text: 'tøm opvaskeren !every! day', createNew: true });
+  await J(`/api/v1/items/${r.item.id}`, { status: 'done' });
+  await J(`/api/v1/items/${r.item.id}`, { status: 'done' });
+  await J(`/api/v1/items/${r.item.id}`, { status: 'done', title: 'tøm opvaskeren nu' });
+  assert.equal(aabneForekomster(r.recurrence.id).length, 1, 'tre gange done må stadig give ÉN forekomst');
+});
+
+test('titlen, man retter i samme gem, følger med den afsluttede opgave', async () => {
+  const r = await J('/api/v1/capture', { text: 'ring til banken !every! week', createNew: true });
+  const svar = await J(`/api/v1/items/${r.item.id}`, { status: 'done', note: 'fik fat i dem' });
+  assert.equal(svar.item.note, 'fik fat i dem', 'rettelsen må ikke tabes, fordi status også skiftede');
+});
+
+test('en opgave UDEN gentagelse opfører sig som før', async () => {
+  const r = await J('/api/v1/capture', { text: 'køb mælk', createNew: true });
+  const svar = await J(`/api/v1/items/${r.item.id}`, { status: 'done' });
+  assert.equal(svar.item.status, 'done');
+  assert.equal(svar.next, undefined, 'intet at rulle - svaret skal have samme form som før');
+});

@@ -106,13 +106,48 @@
   }
 
   /**
+   * »I dag« som en KALENDERDAG ved lokal midnat - uanset hvordan den kom ind.
+   *
+   * En dato som tekst (»2026-09-21«) laeses af `new Date()` som UTC-midnat, og
+   * i enhver tidszone vest for UTC er det den 20. om aftenen lokalt. Serveren
+   * kalder `tolkGentagelse` med netop den form (`iDag()`), saa en »fra
+   * fuldfoerelse«-regel afsluttet den 21. fik `monthday: 20`, og naeste
+   * forekomst landede den 20-10 - praecis den fejl, Andreas beskrev
+   * (14-09-2026). doda tvinger Europe/Copenhagen, saa den ramte ikke i drift,
+   * men en panel-variabel ville vaere nok til at vaekke den.
+   *
+   * ÉN hjaelper, fordi den samme to-linjers konstruktion stod BAADE her og i
+   * `tolkGentagelse`. Var kun den ene rettet, havde »!tomorrow« og »!every!
+   * month« regnet »i dag« forskelligt.
+   */
+  function somTidspunkt(nu) {
+    if (typeof nu === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(nu)) {
+      return new Date(Number(nu.slice(0, 4)), Number(nu.slice(5, 7)) - 1, Number(nu.slice(8, 10)));
+    }
+    return nu ? new Date(nu) : new Date();
+  }
+
+  /*
+   * To hjaelpere, ikke én. »!om 3 timer« regner i ABSOLUT tid ud fra det
+   * praecise tidspunkt (se `timer`-grenen i tolkDato), mens »i dag« er en
+   * kalenderdag uden klokkeslaet. Den foerste udgave af rettelsen havde kun
+   * `somDag`, og `const base` forsvandt fra tolkDato, mens linjen, der regner
+   * timerne, stadig brugte den - fire proever blev roede (samme fejl som v60:
+   * en erstatning slugte en erklaering, mens brugen blev staaende).
+   */
+  function somDag(nu) {
+    const base = somTidspunkt(nu);
+    return new Date(base.getFullYear(), base.getMonth(), base.getDate());
+  }
+
+  /**
    * Tolker en dansk datofrase. Returnerer {dato, tid} eller null.
    * Omfanget er bevidst lille - se DESIGN.md §3. Kan en frase ikke tolkes,
    * skal fangsten stadig lykkes; det er kaldsstedets ansvar.
    */
   function tolkDato(frase, nu) {
-    const base = nu ? new Date(nu) : new Date();
-    const iDag = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+    const base = somTidspunkt(nu);   // med klokkeslaet - timer regnes i absolut tid
+    const iDag = somDag(nu);
 
     const k = findKlokkeslaet(String(frase || ''));
     const tid = k.tid;
@@ -251,8 +286,7 @@
     // blive laest som en ugentlig gentagelse i stedet for en dato.
     if (!m && !BARE_FORMER.test(raa)) return null;
 
-    const base = nu ? new Date(nu) : new Date();
-    const iDag = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+    const iDag = somDag(nu);
     const mode = m && m[2] === '!' ? 'completion' : 'schedule';
 
     const k = findKlokkeslaet(m ? m[3] : raa);

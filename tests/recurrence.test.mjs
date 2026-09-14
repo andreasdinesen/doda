@@ -190,3 +190,34 @@ test('gentagelse kan fanges sammen med kontekst og projekt', () => {
   assert.deepEqual(g.weekdays, [7]);
   assert.equal(g.time, '10:00');
 });
+
+/*
+ * »I dag« som tekst skal vaere den samme KALENDERDAG i alle tidszoner.
+ *
+ * Serveren kalder tolkGentagelse med `iDag()` = »2026-09-21«. `new Date()`
+ * laeser den form som UTC-midnat, og vest for UTC er det den 20. om aftenen
+ * lokalt. Saa gav »every! month« afsluttet den 21. naeste forekomst den 20-10
+ * - praecis den fejl, Andreas beskrev (14-09-2026).
+ *
+ * TZ laeses, foerste gang en Date bruges, saa den kan ikke skiftes inde i
+ * denne proces. Hver tidszone faar derfor sin egen node.
+ */
+import { spawnSync } from 'node:child_process';
+
+test('»i dag« som tekst er samme kalenderdag i alle tidszoner', () => {
+  const kode = `
+    const P = require(${JSON.stringify(require.resolve('../app/shared/parse.js'))});
+    const r = P.tolkGentagelse('every! month', '2026-09-21');
+    const d = P.tolkDato('tomorrow', '2026-09-21');
+    process.stdout.write(JSON.stringify({ naeste: P.naesteForekomst(r, '2026-09-21'), imorgen: d && d.dato }));`;
+  // Fra UTC-10 til UTC+14 - fejlen boed kun vest for UTC.
+  for (const tz of ['Pacific/Honolulu', 'America/New_York', 'UTC', 'Europe/Copenhagen', 'Pacific/Kiritimati']) {
+    const res = spawnSync(process.execPath, ['-e', kode], {
+      env: Object.assign({}, process.env, { TZ: tz }), encoding: 'utf8',
+    });
+    assert.equal(res.status, 0, `${tz}: ${res.stderr}`);
+    const ud = JSON.parse(res.stdout);
+    assert.equal(ud.naeste, '2026-10-21', `${tz}: every! month afsluttet 21-9 skal give 21-10`);
+    assert.equal(ud.imorgen, '2026-09-22', `${tz}: tomorrow set fra 21-9 skal vaere 22-9`);
+  }
+});

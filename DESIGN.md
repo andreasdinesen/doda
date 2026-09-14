@@ -2540,6 +2540,83 @@ Den kan hverken rettes eller søges i, og den står ikke i listen. Andreas bad o
 et infofelt — og en dato på hver række ville være støj i en liste, der skal
 læses på et øjeblik.
 
+## 7n · »Fra fuldførelse« døde stille ad chippen (v94)
+
+»Når jeg bruger `!every!`, og den er sat til den 20-9 og afsluttes den 21-9,
+forventede jeg, at næste forekomst blev 21-10« (Andreas, 14-09-2026).
+
+**Forventningen er rigtig, og motoren gjorde det allerede.** `rykGentagelse()`
+har gentolket reglen med fuldførelsesdatoen som anker siden v52. Målt gennem
+en rigtig server: `every! month` afsluttet i dag, med en regel der var skrevet
+for seks dage siden, gav en måned efter *i dag*. `every! week` gav syv dage.
+
+Så fejlen var ikke i regnestykket. Den var i **vejen derhen**.
+
+### Den glemte vej
+
+Kun `/complete` rullede gentagelsen frem. Status-chippen i detaljeruden (vælg
+*Done*, tryk Save), MCP's `update_item`, Raycast og iOS-genveje satte
+`status: 'done'` gennem den generelle opdateringsrute — som bare kaldte
+`opdaterItem`. Målt på v93:
+
+```
+next_due før=2026-09-14  efter=2026-09-14  åbne_forekomster=0
+```
+
+`next_due` blev stående på den gamle dato, og **der kom aldrig en ny
+forekomst**: `rulFrem()` rører kun faste planer. Gentagelsen døde stille, og
+Recurring-siden blev ved med at vise den gamle dato — ordret »i stedet for
+20-9«.
+
+**v85 rettede ringen til `/complete`. Chippen blev glemt.** Sjette gang i det
+her projekt: reglen blev lagt ét sted (§7b, §7d, §7i, §7k, §7l).
+
+### Én vej ind, på serveren
+
+Reglen ligger nu i `fuldfoerItem()` på serveren, ikke i en klient. `/complete`,
+MCP's `complete_task`, den generelle rute og MCP's `update_item` bruger den
+alle. En klient, der skrives i morgen, ender samme sted uden at nogen husker
+det.
+
+- **`done`** fra en åben status = fuldfør og rul frem.
+- **`dropped`** fra en åben status = spring denne gang over. Samme regel som
+  skip-ruten: tæl springet, regn fra forekomstens egen dato. Uden det ville et
+  drop via chippen have efterladt gentagelsen uden forekomst, præcis som done.
+- **Allerede afsluttet** = almindelig rettelse. Tre gange `done` giver stadig
+  én forekomst — samme idempotens som `/complete`.
+- Rettelser i **samme gem** (titel, noter) lægges på først, så de ikke tabes,
+  fordi status også skiftede.
+
+Prøverne er kørt mod v93-koden: de tre, der beskriver fejlen, bliver røde.
+
+### Og en fælde i regnevejen, der gav nøjagtig samme symptom
+
+`rykGentagelse` kalder `tolkGentagelse(tekst, iDag())` — med datoen som
+**tekst**. `new Date("2026-09-21")` er UTC-midnat, og i enhver tidszone vest
+for UTC er det den 20. om aftenen. Målt:
+
+| Tidszone | `every! month` afsluttet 21-9 |
+|---|---|
+| Europe/Copenhagen, UTC | 21-10 |
+| America/New_York, Pacific/Honolulu | **20-10** |
+
+doda tvinger Europe/Copenhagen, så den ramte ikke i drift. Men den lå lige i
+den regnevej, hvor ingen ville lede, og en panel-variabel ville have været
+nok til at vække den — med præcis den fejl, Andreas beskrev.
+
+Den samme to-linjers konstruktion stod **to** steder: i `tolkGentagelse` og i
+`tolkDato`. Rettet med én hjælper brugt begge steder — ellers havde
+`!tomorrow` og `!every! month` regnet »i dag« forskelligt.
+
+**Og den første udgave af rettelsen brød noget.** Jeg erstattede begge linjer
+med `const iDag = somDag(nu)` — men `tolkDato` brugte stadig `base` til
+`!om 3 timer`, som regner i *absolut* tid med klokkeslæt. Fire prøver blev
+røde. Det er v60-fejlen igen: en erstatning slugte en erklæring, mens brugen
+blev stående. Nu er det to hjælpere: `somTidspunkt()` beholder klokkeslættet,
+`somDag()` stripper det. Prøven kører
+parseren i fem tidszoner fra UTC−10 til UTC+14, hver i sin egen node, fordi
+`TZ` læses første gang en `Date` bruges.
+
 ## 7 · Uden for scope
 
 Handover §10 gælder uændret: ingen flere brugere, ingen
