@@ -23,6 +23,7 @@ const { DatabaseSync } = require('node:sqlite');
 const parse = require('./shared/parse.js');
 const totp = require('./totp.js');
 const qr = require('./qr.js');
+const { klientIp } = require('./klientip.js');
 // Hvor koden kom fra. Modulet henter appen ved opstart; serveren bruger det
 // kun til at LAESE (hvilken udgave ligger der, findes der en nyere).
 const kilde = require('./kilde.js');
@@ -497,9 +498,10 @@ function sessionCookie(req, token, maxAge) {
   return bits.join('; ');
 }
 
+// Aldrig den foerste vaerdi i X-Forwarded-For: den vaelger klienten selv, og
+// saa kunne login-spaerringen og loftene omgaas (app/klientip.js).
 function clientIp(req) {
-  const fwd = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
-  return fwd || req.socket.remoteAddress || 'ukendt';
+  return klientIp(req);
 }
 
 /* ------------------------------------------------------------ http-svar */

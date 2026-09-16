@@ -444,6 +444,7 @@ Se `PLAN.md` for faseoversigt og status, `DESIGN.md` for de trufne beslutninger 
 
 | Version | Ændringer |
 |---|---|
+| 98 | **Login-spærringen kan ikke længere omgås** ved at sende en opdigtet IP-adresse i `X-Forwarded-For`, og sikkerhedsloggen viser nu den adresse, forbindelsen faktisk kom fra. |
 | 97 | **Vedligehold, ingen synlige ændringer.** Sideoversigten lytter nu også efter rulning i selve siden, så den virker den dag, den vises på telefonen. Lagene i stylesheet'et er dokumenteret ét sted, med en prøve der holder listen sand. |
 | 96 | **En vedhæftning med tankestreg i navnet kan hentes igen.** Lagde du en fil op, hvis navn indeholdt et tegn uden for vesteuropæisk — og det kræver ikke andet end den tankestreg, macOS selv sætter ind i et kopieret filnavn — så blev den lagt op og stod rigtigt i listen, men kunne derefter **aldrig hentes**: serveren svarede med en fejl. Nu kommer filen ned med sit rigtige navn, æøå, tankestreger og japansk inklusive. |
 | 95 | **Fold en kontekst eller et område sammen.** Klik på en gruppeoverskrift i **Next Actions** eller **Projects**, og listen under den lægger sig sammen — tilbage står overskriften og **tallet**: `YOUTUBE 8` fortæller, at der ligger otte, uden at de fylder skærmen. Vil du se dem, klikker du igen. **Valget huskes** pr. kontekst og pr. område, og kun i den browser du sidder ved: på telefonen kigger man tit efter noget andet end ved skrivebordet. En **ny** kontekst er altid foldet ud — det, du lige har lavet, skal ikke gemme sig. Og piletasterne springer nu over det, der er foldet væk. |
