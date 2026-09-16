@@ -150,15 +150,19 @@ function sideNext() {
     return a[0].localeCompare(b[0]);
   });
 
+  // Hver kontekst kan foldes sammen, sa der kun star overskriften og tallet
+  // tilbage (Andreas, 16-09-2026). Valget huskes pr. kontekst - se
+  // `foldGrupper` i p1_core.
+  const gruppe = foldGrupper('next');
+
   let n = 0;
   return `<section class="page">
     <div class="page-head"><h1>Next Actions</h1><p class="lead">${esc(BESKRIVELSER.next)}</p></div>
     ${state.contexts.length ? `<div class="pills">
       <button class="pill${state.filterContext ? '' : ' on'}" data-ctx="">All</button>${filtre}</div>` : ''}
     <div data-keynav>
-      ${sorteret.map(([navn, liste]) => `
-        <h2 class="group meta">${esc(navn)} <span class="group-count">${liste.length}</span></h2>
-        <div class="list">${liste.map((it) => elementRaekke(it, n++)).join('')}</div>`).join('')}
+      ${sorteret.map(([navn, liste]) => gruppe(navn, navn, liste.length,
+    liste.map((it) => elementRaekke(it, n++)).join(''))).join('')}
     </div>
     <p class="hintline meta">↑↓ select · enter open · space done · esc leave</p>
   </section>`;
@@ -230,9 +234,9 @@ function bindListe() {
   // forfra ved hvert element.
   if (sideState.fokusId) {
     const el = document.querySelector(`.item-row[data-id="${CSS.escape(sideState.fokusId)}"]`);
-    if (el) el.focus();
+    if (el && !el.closest('[hidden]')) el.focus();
     else {
-      const foerste = document.querySelector('.item-row');
+      const [foerste] = synligeRaekker();
       if (foerste) foerste.focus();
     }
     sideState.fokusId = null;
@@ -257,17 +261,19 @@ document.addEventListener('keydown', (e) => {
   const el = document.activeElement;
   if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
   if (document.querySelector('.modal')) return;
-  // Er man allerede inde i listen, klarer raekkens egen handler det.
-  if (el && el.closest && el.closest('[data-keynav]')) return;
+  // Er man allerede paa en raekke, klarer raekkens egen handler det. Star
+  // fokus derimod pa en foldeknap (den ligger OGSA inde i [data-keynav]),
+  // skal piletasterne stadig kunne hoppe ned i listen.
+  if (el && el.closest && el.closest('.item-row')) return;
 
-  const raekker = document.querySelectorAll('[data-keynav] .item-row');
+  const raekker = synligeRaekker('[data-keynav] .item-row');
   if (!raekker.length) return;
   e.preventDefault();
   (e.key === 'ArrowDown' ? raekker[0] : raekker[raekker.length - 1]).focus();
 });
 
 function naboRaekke(el, retning) {
-  const alle = [...document.querySelectorAll('.item-row')];
+  const alle = synligeRaekker();
   const i = alle.indexOf(el);
   return alle[i + retning] || alle[retning > 0 ? 0 : alle.length - 1];
 }

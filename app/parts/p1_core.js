@@ -5,7 +5,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 94;
+const APP_VERSION = 95;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -974,6 +974,99 @@ function saetNavSkjult(skjult) {
     knap.title = tekst;
     knap.classList.toggle('off', skjult);
   }
+}
+
+/* ----------------------------------------------------- foldegrupper */
+
+/*
+ * »Hvilke gruppeoverskrifter er foldet sammen?«
+ *
+ * Samme slags valg som sidebaren og `faerdigeFoldet()`: en vane ved DENNE
+ * skaerm, ikke en indstilling der skal folge med til telefonen. Derfor
+ * localStorage, ikke serveren.
+ *
+ * Vi gemmer de SAMMENFOLDEDE navne - ikke de udfoldede. Sa dukker en ny
+ * kontekst (eller et nyt omraade) altid op udfoldet: det, man lige har
+ * lavet, skal kunne ses uden at man forst skal finde ud af, hvor det gemte
+ * sig. Og forsvinder en kontekst, ligger dens navn bare tilbage uden at
+ * skygge for noget.
+ */
+function foldedeGrupper(noegle) {
+  try {
+    const raa = JSON.parse(localStorage.getItem(`doda_fold_${noegle}`) || '[]');
+    return new Set(Array.isArray(raa) ? raa : []);
+  } catch { return new Set(); }
+}
+
+function saetGruppeFoldet(noegle, id, foldet) {
+  const sat = foldedeGrupper(noegle);
+  if (foldet) sat.add(id); else sat.delete(id);
+  try { localStorage.setItem(`doda_fold_${noegle}`, JSON.stringify([...sat])); } catch { /* privat */ }
+}
+
+/* Loebenummer til `aria-controls`. Knappen og dens liste skal kunne pege pa
+   hinanden, og et gruppenavn duer ikke som DOM-id: det kan indeholde hvad
+   som helst, og to skaerme kan tegne den samme gruppe. */
+let foldNr = 0;
+
+/**
+ * Giver en funktion, der tegner foldbare grupper for ÉN skaerm.
+ *
+ * `noegle` er skaermens navn i localStorage (fx 'next'), og de foldede
+ * navne laeses ÉN gang - ikke en gang pr. gruppe.
+ *
+ * Overskriften ser ud praecis som `h2.group`; CSS'en under
+ * `button.group.foldknap` gentager reglerne, sa listerne ikke skifter
+ * udseende, bare fordi overskrifterne blev knapper. Tallet bliver staaende,
+ * nar gruppen er foldet sammen - det er hele pointen: man vil vide HVOR
+ * MEGET der ligger, uden at se det.
+ *
+ * Raekkerne bliver STAAENDE i dokumentet (bare `hidden`), som Done-afsnittet
+ * pa et projekt. Sa er foldningen ojeblikkelig, og nummereringen i `data-i`
+ * holder.
+ */
+function foldGrupper(noegle) {
+  const foldede = foldedeGrupper(noegle);
+  return (id, navn, antal, indhold, klasse = 'list') => {
+    const foldet = foldede.has(id);
+    const domId = `grp${++foldNr}`;
+    return `<button class="group meta foldknap" data-fold="${esc(noegle)}" data-foldid="${esc(id)}"
+      aria-expanded="${foldet ? 'false' : 'true'}" aria-controls="${domId}">
+      ${icon('chevron', 13)} ${esc(navn)} <span class="group-count">${antal}</span>
+    </button>
+    <div class="${klasse}" id="${domId}"${foldet ? ' hidden' : ''}>${indhold}</div>`;
+  };
+}
+
+/*
+ * Klikket haandteres ÉT sted for hele appen.
+ *
+ * En foldeknap tegnes om, hver gang listen gor det - og `bindListe()` kores
+ * ogsa, nar en ENKELT raekke er tegnet om (`gentegnRaekke`). En lytter pr.
+ * knap ville derfor hobe sig op og folde gruppen frem og tilbage ved ét klik.
+ * Boblefasen er nok her: knappen ligger ikke inde i en raekke, sa den slas
+ * ikke med de lyttere, §7k handler om.
+ */
+document.addEventListener('click', (e) => {
+  const knap = e.target.closest && e.target.closest('.foldknap[data-fold]');
+  if (!knap) return;
+  const skalFoldes = knap.getAttribute('aria-expanded') === 'true';
+  knap.setAttribute('aria-expanded', skalFoldes ? 'false' : 'true');
+  const krop = document.getElementById(knap.getAttribute('aria-controls'));
+  if (krop) krop.hidden = skalFoldes;
+  saetGruppeFoldet(knap.dataset.fold, knap.dataset.foldid, skalFoldes);
+});
+
+/**
+ * Raekkerne, man kan hoppe til med piletasterne.
+ *
+ * En raekke i en sammenfoldet gruppe er stadig i dokumentet, men den kan
+ * ikke ses - og tastaturet ma ikke kunne lande pa noget usynligt. Vi
+ * spoerger efter `[hidden]` frem for at male geometri: det er praecis det
+ * flag, foldningen saetter.
+ */
+function synligeRaekker(vaelger = '.item-row') {
+  return [...document.querySelectorAll(vaelger)].filter((r) => !r.closest('[hidden]'));
 }
 
 /* ------------------------------------------------------- gem-genvejen */

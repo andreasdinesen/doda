@@ -2617,6 +2617,67 @@ blev stående. Nu er det to hjælpere: `somTidspunkt()` beholder klokkeslættet,
 parseren i fem tidszoner fra UTC−10 til UTC+14, hver i sin egen node, fordi
 `TZ` læses første gang en `Date` bruges.
 
+## 7o · Gruppeoverskrifter kan foldes sammen (v95)
+
+»Jeg vil gerne kunne folde #context-områderne sammen, så hvis jeg fx ikke vil
+se YouTube-listen, men blot overskriften og hvor mange opgaver der ligger under
+den« (Andreas, 16-09-2026). Det gælder **både Next Actions og Projects**.
+
+Otte kontekster med otte videoer i den ene fyldte hele skærmen, og de fem ting,
+man faktisk kunne gøre nu, lå under folden. Det er ikke støj, der skal væk —
+YouTube-listen er rigtige opgaver — det er støj, der skal kunne **lægges
+sammen**, og tallet er det, der gør sammenlægningen til et svar frem for en
+forsvinding: `YOUTUBE 8` siger, at der ligger otte, uden at tage plads fra de
+andre.
+
+### Mekanikken, og hvorfor den bor i `p1_core`
+
+Formen fandtes allerede: **Done**-afsnittet på et projekt (§6o-slægten) er en
+`button.group.foldknap` med en vinkel, der drejer. Den er nu trukket ud som
+`foldGrupper(noegle)` i `p1_core`, og begge skærme kalder den. Én form, ét
+sted — ellers driver de to lister fra hinanden, som §6ø handler om.
+
+Tre valg, der ikke er vilkårlige:
+
+- **Rækkerne bliver stående i dokumentet, bare `hidden`.** Så koster en
+  foldning ingen rundtur, `data-i`-nummereringen holder, og en foldet gruppe
+  kan foldes ud igen midt i en stille synkronisering.
+- **Vi gemmer de SAMMENFOLDEDE navne, ikke de udfoldede.** En ny kontekst står
+  ikke i listen og er derfor altid udfoldet. Gemte vi det modsatte, ville
+  enhver ny kontekst blive født usynlig — en fejl, man først opdager uger
+  senere, med en opgave man var sikker på at have fanget.
+- **Valget bor i `localStorage`, ikke på serveren** — som temaet, sidebaren og
+  `faerdigeFoldet()`. Det er en vane ved *denne* skærm: på telefonen kigger man
+  typisk efter noget andet end ved skrivebordet.
+
+Nøglerne har præfiks på Projects (`area:Hjem`, `status:someday`), fordi et
+område godt må hedde »Someday« uden at folde statusafsnittet nedenfor.
+
+### De to ting, der kunne gå galt uden at se galt ud
+
+**Piletasterne.** En række i en foldet gruppe er stadig i DOM'en.
+`naboRaekke()` og dokumentets egen pilelytter spurgte efter `.item-row` og
+ville derfor sende fokus ud i det usynlige — ingen fejl, ingen log, bare en
+liste der ser ud til at springe over sig selv. Begge går nu gennem
+`synligeRaekker()`, som spørger efter `[hidden]` frem for at måle geometri.
+Dokumentets vagt blev samtidig strammet fra `closest('[data-keynav]')` til
+`closest('.item-row')`: foldeknappen ligger **også** inde i `[data-keynav]`, og
+efter et klik på den ville piletasterne ellers ikke længere kunne komme ned i
+listen.
+
+**Klikket.** En lytter pr. knap ville hobe sig op: `bindListe()` køres også,
+når en *enkelt* række er tegnet om (`gentegnRaekke`), og to lyttere på samme
+knap folder gruppen sammen og ud igen ved ét klik — altså ser ud, som om intet
+skete. Derfor én delegeret lytter på `document`. Boblefasen rækker her, i
+modsætning til §7k: knappen ligger ikke inde i en række, så den slås ikke med
+hverken linklytteren eller rækkens egne handlere.
+
+Målt efter fem gentegninger i træk: ét klik = ét skift, og en gennemløbning af
+hele listen med `naboRaekke()` ramte en skjult række **nul** gange (13 rækker,
+11 synlige). Regnestykket har sin egen prøve i `tests/foldegrupper.test.mjs`,
+der henter funktionerne **ud af** `app/public/app.js` — en prøve på en
+afskrift beviser kun, at afskriften virker.
+
 ## 7 · Uden for scope
 
 Handover §10 gælder uændret: ingen flere brugere, ingen

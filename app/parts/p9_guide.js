@@ -110,6 +110,7 @@ const GUIDE_DELE = [
             lead: 'What you can do right now, grouped by context.',
             raekker: [
               ['#', 'The chips above the list narrow it to one context.'],
+              ['FOLD', 'Click a group heading to fold that context away. The count stays, so you still know how much is under it.'],
               ['~', '<code>~in 2 weeks</code> hides a task until then. Not late — just not yet.'],
               ['!', '<code>!friday</code> is a real deadline, and the only thing that reaches your calendar.'],
             ],
@@ -139,6 +140,7 @@ const GUIDE_DELE = [
               ['NEXT', 'A project with open work but no next action says so quietly.'],
               ['↑ ↓', 'Order tasks by hand. The buttons work with a thumb as well as a mouse.'],
               ['DROP', 'Dropping a project takes its open tasks with it; finished ones are never touched.'],
+              ['FOLD', 'Click an area heading to fold it away. The count stays.'],
             ],
             go: [['projects', 'Open Projects']],
           },

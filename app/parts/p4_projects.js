@@ -51,6 +51,11 @@ async function sideProjects() {
     return a[0].localeCompare(b[0]);
   });
 
+  /* Hvert omrade kan foldes sammen, som konteksterne i Next Actions
+     (Andreas, 16-09-2026). Nogler med praefiks: et omrade ma gerne hedde
+     »Someday«, uden at det folder statusafsnittet nedenfor. */
+  const gruppe = foldGrupper('projects');
+
   /* Tallet staar HER og ikke i menuen: det er svar paa et spoergsmaal, man
      lige har stillet ved at klikke ind (Andreas, 26-08-2026). */
   return `<section class="page">
@@ -58,15 +63,12 @@ async function sideProjects() {
     <p class="meta" style="margin-bottom:12px">${aktive.length} active${
   parkerede.length ? ` · ${parkerede.length} someday` : ''}${
   afsluttede.length ? ` · ${afsluttede.length} finished` : ''}</p>
-    ${sorteret.map(([navn, liste]) => `
-      <h2 class="group meta">${esc(navn)} <span class="group-count">${liste.length}</span></h2>
-      <div class="list">${liste.map(projektRaekke).join('')}</div>`).join('')}
-    ${parkerede.length ? `
-      <h2 class="group meta">Someday <span class="group-count">${parkerede.length}</span></h2>
-      <div class="list">${parkerede.map(projektRaekke).join('')}</div>` : ''}
-    ${afsluttede.length ? `
-      <h2 class="group meta">Finished <span class="group-count">${afsluttede.length}</span></h2>
-      <div class="list dim">${afsluttede.map(projektRaekke).join('')}</div>` : ''}
+    ${sorteret.map(([navn, liste]) => gruppe(`area:${navn}`, navn, liste.length,
+    liste.map(projektRaekke).join(''))).join('')}
+    ${parkerede.length ? gruppe('status:someday', 'Someday', parkerede.length,
+    parkerede.map(projektRaekke).join('')) : ''}
+    ${afsluttede.length ? gruppe('status:finished', 'Finished', afsluttede.length,
+    afsluttede.map(projektRaekke).join(''), 'list dim') : ''}
   </section>`;
 }
 

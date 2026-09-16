@@ -314,13 +314,23 @@
    * `tolkGentagelse`. Var kun den ene rettet, havde »!tomorrow« og »!every!
    * month« regnet »i dag« forskelligt.
    */
-  function somDag(nu) {
-    let base;
+  function somTidspunkt(nu) {
     if (typeof nu === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(nu)) {
-      base = new Date(Number(nu.slice(0, 4)), Number(nu.slice(5, 7)) - 1, Number(nu.slice(8, 10)));
-    } else {
-      base = nu ? new Date(nu) : new Date();
+      return new Date(Number(nu.slice(0, 4)), Number(nu.slice(5, 7)) - 1, Number(nu.slice(8, 10)));
     }
+    return nu ? new Date(nu) : new Date();
+  }
+
+  /*
+   * To hjaelpere, ikke én. »!om 3 timer« regner i ABSOLUT tid ud fra det
+   * praecise tidspunkt (se `timer`-grenen i tolkDato), mens »i dag« er en
+   * kalenderdag uden klokkeslaet. Den foerste udgave af rettelsen havde kun
+   * `somDag`, og `const base` forsvandt fra tolkDato, mens linjen, der regner
+   * timerne, stadig brugte den - fire proever blev roede (samme fejl som v60:
+   * en erstatning slugte en erklaering, mens brugen blev staaende).
+   */
+  function somDag(nu) {
+    const base = somTidspunkt(nu);
     return new Date(base.getFullYear(), base.getMonth(), base.getDate());
   }
 
@@ -330,6 +340,7 @@
    * skal fangsten stadig lykkes; det er kaldsstedets ansvar.
    */
   function tolkDato(frase, nu) {
+    const base = somTidspunkt(nu);   // med klokkeslaet - timer regnes i absolut tid
     const iDag = somDag(nu);
 
     const k = findKlokkeslaet(String(frase || ''));
@@ -1055,7 +1066,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 94;
+const APP_VERSION = 95;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -2024,6 +2035,99 @@ function saetNavSkjult(skjult) {
     knap.title = tekst;
     knap.classList.toggle('off', skjult);
   }
+}
+
+/* ----------------------------------------------------- foldegrupper */
+
+/*
+ * »Hvilke gruppeoverskrifter er foldet sammen?«
+ *
+ * Samme slags valg som sidebaren og `faerdigeFoldet()`: en vane ved DENNE
+ * skaerm, ikke en indstilling der skal folge med til telefonen. Derfor
+ * localStorage, ikke serveren.
+ *
+ * Vi gemmer de SAMMENFOLDEDE navne - ikke de udfoldede. Sa dukker en ny
+ * kontekst (eller et nyt omraade) altid op udfoldet: det, man lige har
+ * lavet, skal kunne ses uden at man forst skal finde ud af, hvor det gemte
+ * sig. Og forsvinder en kontekst, ligger dens navn bare tilbage uden at
+ * skygge for noget.
+ */
+function foldedeGrupper(noegle) {
+  try {
+    const raa = JSON.parse(localStorage.getItem(`doda_fold_${noegle}`) || '[]');
+    return new Set(Array.isArray(raa) ? raa : []);
+  } catch { return new Set(); }
+}
+
+function saetGruppeFoldet(noegle, id, foldet) {
+  const sat = foldedeGrupper(noegle);
+  if (foldet) sat.add(id); else sat.delete(id);
+  try { localStorage.setItem(`doda_fold_${noegle}`, JSON.stringify([...sat])); } catch { /* privat */ }
+}
+
+/* Loebenummer til `aria-controls`. Knappen og dens liste skal kunne pege pa
+   hinanden, og et gruppenavn duer ikke som DOM-id: det kan indeholde hvad
+   som helst, og to skaerme kan tegne den samme gruppe. */
+let foldNr = 0;
+
+/**
+ * Giver en funktion, der tegner foldbare grupper for ÉN skaerm.
+ *
+ * `noegle` er skaermens navn i localStorage (fx 'next'), og de foldede
+ * navne laeses ÉN gang - ikke en gang pr. gruppe.
+ *
+ * Overskriften ser ud praecis som `h2.group`; CSS'en under
+ * `button.group.foldknap` gentager reglerne, sa listerne ikke skifter
+ * udseende, bare fordi overskrifterne blev knapper. Tallet bliver staaende,
+ * nar gruppen er foldet sammen - det er hele pointen: man vil vide HVOR
+ * MEGET der ligger, uden at se det.
+ *
+ * Raekkerne bliver STAAENDE i dokumentet (bare `hidden`), som Done-afsnittet
+ * pa et projekt. Sa er foldningen ojeblikkelig, og nummereringen i `data-i`
+ * holder.
+ */
+function foldGrupper(noegle) {
+  const foldede = foldedeGrupper(noegle);
+  return (id, navn, antal, indhold, klasse = 'list') => {
+    const foldet = foldede.has(id);
+    const domId = `grp${++foldNr}`;
+    return `<button class="group meta foldknap" data-fold="${esc(noegle)}" data-foldid="${esc(id)}"
+      aria-expanded="${foldet ? 'false' : 'true'}" aria-controls="${domId}">
+      ${icon('chevron', 13)} ${esc(navn)} <span class="group-count">${antal}</span>
+    </button>
+    <div class="${klasse}" id="${domId}"${foldet ? ' hidden' : ''}>${indhold}</div>`;
+  };
+}
+
+/*
+ * Klikket haandteres ÉT sted for hele appen.
+ *
+ * En foldeknap tegnes om, hver gang listen gor det - og `bindListe()` kores
+ * ogsa, nar en ENKELT raekke er tegnet om (`gentegnRaekke`). En lytter pr.
+ * knap ville derfor hobe sig op og folde gruppen frem og tilbage ved ét klik.
+ * Boblefasen er nok her: knappen ligger ikke inde i en raekke, sa den slas
+ * ikke med de lyttere, §7k handler om.
+ */
+document.addEventListener('click', (e) => {
+  const knap = e.target.closest && e.target.closest('.foldknap[data-fold]');
+  if (!knap) return;
+  const skalFoldes = knap.getAttribute('aria-expanded') === 'true';
+  knap.setAttribute('aria-expanded', skalFoldes ? 'false' : 'true');
+  const krop = document.getElementById(knap.getAttribute('aria-controls'));
+  if (krop) krop.hidden = skalFoldes;
+  saetGruppeFoldet(knap.dataset.fold, knap.dataset.foldid, skalFoldes);
+});
+
+/**
+ * Raekkerne, man kan hoppe til med piletasterne.
+ *
+ * En raekke i en sammenfoldet gruppe er stadig i dokumentet, men den kan
+ * ikke ses - og tastaturet ma ikke kunne lande pa noget usynligt. Vi
+ * spoerger efter `[hidden]` frem for at male geometri: det er praecis det
+ * flag, foldningen saetter.
+ */
+function synligeRaekker(vaelger = '.item-row') {
+  return [...document.querySelectorAll(vaelger)].filter((r) => !r.closest('[hidden]'));
 }
 
 /* ------------------------------------------------------- gem-genvejen */
@@ -3331,15 +3435,19 @@ function sideNext() {
     return a[0].localeCompare(b[0]);
   });
 
+  // Hver kontekst kan foldes sammen, sa der kun star overskriften og tallet
+  // tilbage (Andreas, 16-09-2026). Valget huskes pr. kontekst - se
+  // `foldGrupper` i p1_core.
+  const gruppe = foldGrupper('next');
+
   let n = 0;
   return `<section class="page">
     <div class="page-head"><h1>Next Actions</h1><p class="lead">${esc(BESKRIVELSER.next)}</p></div>
     ${state.contexts.length ? `<div class="pills">
       <button class="pill${state.filterContext ? '' : ' on'}" data-ctx="">All</button>${filtre}</div>` : ''}
     <div data-keynav>
-      ${sorteret.map(([navn, liste]) => `
-        <h2 class="group meta">${esc(navn)} <span class="group-count">${liste.length}</span></h2>
-        <div class="list">${liste.map((it) => elementRaekke(it, n++)).join('')}</div>`).join('')}
+      ${sorteret.map(([navn, liste]) => gruppe(navn, navn, liste.length,
+    liste.map((it) => elementRaekke(it, n++)).join(''))).join('')}
     </div>
     <p class="hintline meta">↑↓ select · enter open · space done · esc leave</p>
   </section>`;
@@ -3411,9 +3519,9 @@ function bindListe() {
   // forfra ved hvert element.
   if (sideState.fokusId) {
     const el = document.querySelector(`.item-row[data-id="${CSS.escape(sideState.fokusId)}"]`);
-    if (el) el.focus();
+    if (el && !el.closest('[hidden]')) el.focus();
     else {
-      const foerste = document.querySelector('.item-row');
+      const [foerste] = synligeRaekker();
       if (foerste) foerste.focus();
     }
     sideState.fokusId = null;
@@ -3438,17 +3546,19 @@ document.addEventListener('keydown', (e) => {
   const el = document.activeElement;
   if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
   if (document.querySelector('.modal')) return;
-  // Er man allerede inde i listen, klarer raekkens egen handler det.
-  if (el && el.closest && el.closest('[data-keynav]')) return;
+  // Er man allerede paa en raekke, klarer raekkens egen handler det. Star
+  // fokus derimod pa en foldeknap (den ligger OGSA inde i [data-keynav]),
+  // skal piletasterne stadig kunne hoppe ned i listen.
+  if (el && el.closest && el.closest('.item-row')) return;
 
-  const raekker = document.querySelectorAll('[data-keynav] .item-row');
+  const raekker = synligeRaekker('[data-keynav] .item-row');
   if (!raekker.length) return;
   e.preventDefault();
   (e.key === 'ArrowDown' ? raekker[0] : raekker[raekker.length - 1]).focus();
 });
 
 function naboRaekke(el, retning) {
-  const alle = [...document.querySelectorAll('.item-row')];
+  const alle = synligeRaekker();
   const i = alle.indexOf(el);
   return alle[i + retning] || alle[retning > 0 ? 0 : alle.length - 1];
 }
@@ -4946,6 +5056,11 @@ async function sideProjects() {
     return a[0].localeCompare(b[0]);
   });
 
+  /* Hvert omrade kan foldes sammen, som konteksterne i Next Actions
+     (Andreas, 16-09-2026). Nogler med praefiks: et omrade ma gerne hedde
+     »Someday«, uden at det folder statusafsnittet nedenfor. */
+  const gruppe = foldGrupper('projects');
+
   /* Tallet staar HER og ikke i menuen: det er svar paa et spoergsmaal, man
      lige har stillet ved at klikke ind (Andreas, 26-08-2026). */
   return `<section class="page">
@@ -4953,15 +5068,12 @@ async function sideProjects() {
     <p class="meta" style="margin-bottom:12px">${aktive.length} active${
   parkerede.length ? ` · ${parkerede.length} someday` : ''}${
   afsluttede.length ? ` · ${afsluttede.length} finished` : ''}</p>
-    ${sorteret.map(([navn, liste]) => `
-      <h2 class="group meta">${esc(navn)} <span class="group-count">${liste.length}</span></h2>
-      <div class="list">${liste.map(projektRaekke).join('')}</div>`).join('')}
-    ${parkerede.length ? `
-      <h2 class="group meta">Someday <span class="group-count">${parkerede.length}</span></h2>
-      <div class="list">${parkerede.map(projektRaekke).join('')}</div>` : ''}
-    ${afsluttede.length ? `
-      <h2 class="group meta">Finished <span class="group-count">${afsluttede.length}</span></h2>
-      <div class="list dim">${afsluttede.map(projektRaekke).join('')}</div>` : ''}
+    ${sorteret.map(([navn, liste]) => gruppe(`area:${navn}`, navn, liste.length,
+    liste.map(projektRaekke).join(''))).join('')}
+    ${parkerede.length ? gruppe('status:someday', 'Someday', parkerede.length,
+    parkerede.map(projektRaekke).join('')) : ''}
+    ${afsluttede.length ? gruppe('status:finished', 'Finished', afsluttede.length,
+    afsluttede.map(projektRaekke).join(''), 'list dim') : ''}
   </section>`;
 }
 
@@ -9275,6 +9387,7 @@ const GUIDE_DELE = [
             lead: 'What you can do right now, grouped by context.',
             raekker: [
               ['#', 'The chips above the list narrow it to one context.'],
+              ['FOLD', 'Click a group heading to fold that context away. The count stays, so you still know how much is under it.'],
               ['~', '<code>~in 2 weeks</code> hides a task until then. Not late — just not yet.'],
               ['!', '<code>!friday</code> is a real deadline, and the only thing that reaches your calendar.'],
             ],
@@ -9304,6 +9417,7 @@ const GUIDE_DELE = [
               ['NEXT', 'A project with open work but no next action says so quietly.'],
               ['↑ ↓', 'Order tasks by hand. The buttons work with a thumb as well as a mouse.'],
               ['DROP', 'Dropping a project takes its open tasks with it; finished ones are never touched.'],
+              ['FOLD', 'Click an area heading to fold it away. The count stays.'],
             ],
             go: [['projects', 'Open Projects']],
           },
