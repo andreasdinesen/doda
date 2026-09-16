@@ -1066,7 +1066,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 96;
+const APP_VERSION = 97;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -2295,11 +2295,16 @@ function markerToc() {
 // Én rAF pr. rulning: getBoundingClientRect pa hvert afsnit ved hvert
 // scroll-tick ville ellers laese layout hundredvis af gange i sekundet.
 let tocVenter = false;
-window.addEventListener('scroll', () => {
+const tocRullet = () => {
   if (tocVenter || !tocState.punkter.length) return;
   tocVenter = true;
   requestAnimationFrame(() => { tocVenter = false; markerToc(); });
-}, { passive: true });
+};
+// Begge, som registrerRullevagt(): under mobilgraensen er det body, der ruller
+// (§6c), og rulle-haendelser bobler ikke op til window. I dag skjuler byggToc()
+// oversigten dér, men den dag den vises pa en telefon, skal den kunne foelge med.
+window.addEventListener('scroll', tocRullet, { passive: true });
+document.body.addEventListener('scroll', tocRullet, { passive: true });
 
 // Skiftes der mellem telefon og desktop, skal oversigten med.
 window.addEventListener('resize', () => { byggToc(); });

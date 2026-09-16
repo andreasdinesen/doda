@@ -1,5 +1,25 @@
 /* doda - design efter tingdo.app. Tokens og begrundelser: DESIGN.md §2. */
 
+/* z-index-lagene - ALLE tolv, nederst til oeverst (RUNE-ERFARINGER §4).
+   Flyt aldrig ét lag uden at tjekke resten; staar en ny vaerdi ikke her,
+   er den ikke dokumenteret.
+
+      2  .lightbox-vaerktoej        knapperne oven paa billedet, INDE i billedruden
+     20  .topbar                    den klaebende bar med feltet
+     30  .toc                       sideoversigten i hoejre side
+     40  .navtoggle                 den faste menuknap
+     44  .bottomnav                 bundmenuen (kun under mobilgraensen)
+     45  .backdrop                  skyggen bag den udfoldede sidebar
+     50  .sidebar                   sidebaren som overlay (smal skaerm / navskjult)
+     55  .focusbar                  fokusbjaelken, fast paa tvaers af skaerme
+     58  .usermenu                  brugermenuen
+     60  .toasts, .traekny          beskeder og traek-for-at-hente-maerket
+     70  .modal                     dialoger og paletten
+     90  .lightbox                  billedruden - over alt, ogsaa en aaben dialog
+
+   Raekkefoelgen er ikke tilfaeldig: backdrop (45) skal ligge under sidebaren (50)
+   og over bundmenuen (44), og brugermenuen (58) over fokusbjaelken (55). */
+
 :root {
   --bg: #efe9e2;
   --sidebar: #e7e0d7;
