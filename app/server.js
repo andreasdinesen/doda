@@ -1163,6 +1163,31 @@ function renseFilnavn(raa) {
   return n || 'file';
 }
 
+/*
+ * Content-Disposition med et filnavn, der IKKE er ASCII.
+ *
+ * En http-header kan kun baere latin-1: Node kaster ERR_INVALID_CHAR paa alt
+ * over U+00FF, og hele svaret bliver en 500. Filen kunne altsaa uploades med
+ * japansk, emoji - eller bare den tankestreg, macOS selv saetter ind i et
+ * kopieret navn - og var derefter UMULIG at hente igen. Uploaden kvitterede
+ * 200, navnet stod rigtigt i listen, og foerst klikket gav en tavs 500.
+ *
+ * RFC 6266 loeser begge ender paa én gang: `filename=` er ren ASCII og
+ * forstaas af alt, og `filename*=UTF-8''…` baerer det rigtige navn. Vinder
+ * det sidste, faar man sit navn; gor det ikke, faar man en laeselig
+ * erstatning i stedet for en fejlside.
+ *
+ * `'()*` procent-kodes ud over det, `encodeURIComponent` tager: de er ikke
+ * `attr-char` i RFC 5987, og et enkelt anfoerselstegn ville afslutte vaerdien.
+ */
+function disposition(type, raa) {
+  const navn = renseFilnavn(raa);
+  const ascii = navn.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '') || 'file';
+  const utf8 = encodeURIComponent(navn)
+    .replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  return `${type}; filename="${ascii}"; filename*=UTF-8''${utf8}`;
+}
+
 function filSti(id) {
   // id'et kommer fra newId() og er ren hex - men tjek alligevel, sa en
   // fremtidig aendring ikke aabner for sti-traversering.
@@ -4569,7 +4594,7 @@ const MOENSTRE = [
         // bytestroem og TVINGES til download. SVG er med vilje ikke pa
         // listen: den kan baere script og ville koere pa dodas eget domaene.
         'Content-Type': inline ? a.mime : 'application/octet-stream',
-        'Content-Disposition': `${inline ? 'inline' : 'attachment'}; filename="${a.name.replace(/["\\]/g, '')}"`,
+        'Content-Disposition': disposition(inline ? 'inline' : 'attachment', a.name),
         'Content-Length': stat.size,
         'Cache-Control': 'private, max-age=31536000, immutable',
         ETag: `"${a.sha}"`,
