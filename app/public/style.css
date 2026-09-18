@@ -1234,7 +1234,22 @@ textarea.input { resize: vertical; min-height: 90px; font-family: inherit; }
   .toc { display: none; }
 }
 
-.hint {
+/*
+ * Maerket i skaermens nederste hoejre hjoerne: »A · type to capture«.
+ *
+ * Den hed `.hint` indtil 18-09-2026, og det var en faelde. `hint` er et
+ * ALMINDELIGT ord, saa den blev naturligt grebet to steder mere - som
+ * underetiket inde i en <label>, hvor `position: fixed` river teksten ud af
+ * ruden og tegner den nede i hjoernet oven i det rigtige maerke. Begge steder
+ * var forkerte, og de blev ikke opdaget, fordi de ligner almindelig markup.
+ *
+ * Et fast placeret element skal have et navn, der siger HVAD det er, og ikke
+ * et, nogen kan komme til at genbruge. Underetiketter hedder `.fieldhint`
+ * nedenfor. Navnet `.hint` findes ikke laengere - med vilje: bruger nogen det
+ * igen, sker der INGENTING, og det er til at se. Det er bedre end tavst at
+ * faa noget andet, end man bad om.
+ */
+.capturehint {
   position: fixed;
   right: 22px;
   bottom: 20px;
@@ -1243,6 +1258,29 @@ textarea.input { resize: vertical; min-height: 90px; font-family: inherit; }
   gap: 8px;
   color: var(--muted);
   pointer-events: none;
+}
+
+/*
+ * Den lille forklaring UNDER en feltetiket - i almindeligt flow, hvor den
+ * hoerer hjemme.
+ *
+ * SPECIFICITETEN er ikke til pynt. `.field span` (0-1-1) saetter allerede
+ * `font-weight: 600; font-size: 13px` paa alt inde i en etiket, og et bart
+ * `.fieldhint` (0-1-0) TABER den kamp. Foerste udgave gjorde netop det: kun
+ * `color` slog igennem, saa teksten var daempet men stadig fed og lige saa
+ * stor som etiketten over den - og det ligner en tekst, der bare er lidt
+ * graa. Maalt i browseren, ikke gaettet.
+ *
+ * `.field .fieldhint` er (0-2-0) og vinder. Den bare klasse staar med, saa
+ * den ogsaa virker uden for en `.field`.
+ */
+.fieldhint,
+.field .fieldhint {
+  margin: 3px 0 0;
+  font-weight: 400;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--muted);
 }
 
 .key {
@@ -1365,7 +1403,7 @@ textarea.input { resize: vertical; min-height: 90px; font-family: inherit; }
    */
   .input, textarea.input, select.input, .komskriv textarea { font-size: 16px; }
   .omni-icon { left: 17px; }
-  .hint { display: none; }
+  .capturehint { display: none; }
   h1 { font-size: 27px; }
 
   /* Kun under mobilgraensen: et net, saa et layoutbrud ikke goer siden
@@ -2159,3 +2197,61 @@ a.item-flag:hover { color: var(--accent); }
   cursor: pointer;
 }
 .lightbox-luk:hover { background: rgba(255, 255, 255, .26); }
+
+/* ------------------------------------------------ tidtagning (tovo, F10) */
+
+/*
+ * Optageknappen. Den staar tre steder - yderst i en raekke, som en chip i
+ * detaljeruden og paa fokusskaermen - og skal se ens ud alle tre steder,
+ * saa den kan genkendes uden at laese.
+ *
+ * I hvile er den daempet som de andre flag i raekken: en knap, der ikke
+ * bliver brugt lige nu, skal ikke traekke oejet. Koerer den, faar den
+ * accentfarven og et tal ved siden af.
+ */
+.timerbtn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  opacity: .6;
+  cursor: pointer;
+  margin-top: 2px;
+  font: inherit;
+}
+.timerbtn:hover { color: var(--accent); opacity: 1; }
+.timerbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+/* Prikken og firkanten er de eneste fyldte flader i ikonsaettet. De fylder
+   med den farve, knappen HAR - ellers ville de skulle kende begge temaer. */
+.timerbtn svg [data-fyld] { fill: currentColor; stroke: none; }
+
+/* Koerer den: fuld accentfarve og et ur, der tikker. */
+.timerbtn.koerer { color: var(--accent); opacity: 1; }
+.timerbtn .timertid {
+  font-size: 12.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .01em;
+}
+
+/*
+ * Koerer uret paa en ANDEN opgave, er knappen stadig til at trykke paa - den
+ * flytter bare tidtagningen. Det skal kunne ses FOER trykket, ikke bagefter:
+ * tovo tillader kun én koerende timer, saa et tryk her stopper den anden.
+ * Den stiplede ring siger »der er noget i gang et andet sted«.
+ */
+.timerbtn.optaget { opacity: .38; }
+.timerbtn.optaget:hover { opacity: 1; }
+
+/* Som chip i detaljeruden arver den chippens ramme i stedet for sin egen. */
+.timerbtn.chip { margin-top: 0; opacity: 1; gap: 6px; }
+.timerbtn.chip.koerer { border-color: var(--accent); color: var(--accent-text); }
+
+/* Linjen under knapperne paa fokusskaermen. Den forklarer forskellen paa
+   Stop og Done, og den skal kunne laeses uden at fylde som broedtekst. */
+.focushint { max-width: 46ch; margin: 18px auto 0; text-align: center; }

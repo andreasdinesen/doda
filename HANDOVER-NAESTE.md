@@ -1,7 +1,7 @@
 # Handover — doda
 
 **Til:** Claude Code i en ny session
-**Skrevet:** 2026-08-19, efter v39
+**Skrevet:** 2026-08-19, efter v39 · **opdateret:** 2026-09-18, efter v99
 
 > **Læs i denne rækkefølge, før du rører noget:**
 > 1. `~/ClaudeMacBook/RUNE-ERFARINGER.md` — fælles lærepenge for alle runer.
@@ -16,13 +16,15 @@
 
 ## Tilstand
 
-**v39 er udgivet. Arbejdsmappen er ren.** Alt er pushet.
+**v99 er klargjort, ikke pushet.** Arbejdsmappen indeholder tovo-broen (fase 1 og 2)
+plus to rettelser, der faldt ud undervejs. `APP_VERSION` er bumpet til 99; der mangler
+commit → `git tag v99` → `git push --tags`.
 
 | | |
 |---|---|
-| Tests | **296 grønne** (`node --test tests/*.mjs`) |
-| Install-script | **1.586 / 126.000 tegn (1 %)** — siden v40 henter runen koden fra `refs/tags/v<N>` i det offentlige repo, så payloaden ligger ikke længere i scriptet |
-| Kode | `server.js` 3.594 linjer + syv moduler |
+| Tests | **415 grønne** (`node --test tests/*.test.mjs`) |
+| Install-script | **1.732 / 126.000 tegn (1 %)** — runen henter koden fra `refs/tags/v<N>` i det offentlige repo, så payloaden ligger ikke i scriptet |
+| Kode | `server.js` ~5.500 linjer + ti moduler |
 
 **Udgivelse kræver et git-tag.** Install-scriptet henter `refs/tags/v<N>`, så efter
 commit skal der køres `git tag v<N>` og `git push --tags` — uden det svarer GitHub
@@ -45,6 +47,8 @@ vedhæftninger, eksport/import, Todoist-import, passkeys, PWA) har den:
 | `app/oauth.js` | OAuth 2.1, så **claude.ai** kan forbinde som connector |
 | `app/push.js` | Web Push (VAPID, uden nyttelast) |
 | `app/notion.js` | Notion: søg, titler, og sidens indhold vist i doda |
+| `app/sagu.js` | Sagu: noterne — søg, opret, kommentarer, billeder |
+| `app/tovo.js` | **tovo: tidsregistreringen** (F10). doda beder tovo starte et ur; der synkroniseres intet, og tovo har ikke fået en linje kode. Se `DESIGN.md`, »tovo-broen«. |
 | `app/webauthn.js` | Passkeys |
 | `app/shared/parse.js` | Genvejssyntaksen — **én parser, tre køresteder** |
 | `app/parts/p9_guide.js` | Guiden: ren data i `GUIDE_DELE`, nået fra brugermenuen |
@@ -103,6 +107,13 @@ Det skete tre gange. Brug Edit-værktøjet, eller skriv filen efter hvert trin.
 ## Kendte huller
 
 - **Ingen deling og ingen flere brugere.** Bevidst — se `DESIGN.md §7`.
+- **`%` virker ikke gennem MCP.** Parseren forstår markøren, men værktøjerne i
+  `app/mcp.js` kaldes synkront (dispatcheren venter ikke på et promise), og en
+  tidtagning kræver en rundtur til tovo. Fangst gennem Claude **siger det** i stedet
+  for at sluge markøren. Skal det lukkes, er det dispatcheren, der skal kunne await'e.
+- **doda omdøber aldrig en opgave i tovo.** `POST /api/v1/items` dér gemmer en *hel*
+  opgave, så en titel-only-skrivning ville slette estimat, note, kolonne og links.
+  Det står i indstillingskortet, så det ikke overrasker.
 
 De to andre blev lukket i **v24**:
 

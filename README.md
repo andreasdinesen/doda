@@ -109,7 +109,58 @@ overblik, ikke måling.
 begynder at tælle. Den kører videre, mens du skifter skærm — og overlever, at
 du lukker og genåbner appen, fordi det er starttidspunktet der huskes.
 
-Ingen tidsregistrering, ingen rapport. Timeren er der kun, hvis du vil se den.
+Uden tovo forbundet er timeren der kun, hvis du vil se den: ingen
+tidsregistrering, ingen rapport. **Er tovo forbundet**, læser uret sin tid
+derfra, og de tre knapper gør hver sit — se næste afsnit.
+
+### Tidsregistrering med tovo
+
+**tovo** er søsterappen, hvor timerne bor. Forbind den under **Settings →
+Connections**, og hver opgave får en lille **optageknap** — både i listerne og
+inde i opgaven. Ét klik, og uret kører.
+
+Knappen viser, hvad der er i gang:
+
+| | |
+|---|---|
+| ○ ring med prik | intet kører — tryk for at starte |
+| ⏺ firkant + ur | denne opgave kører — tryk for at stoppe |
+| ring, dæmpet | en **anden** opgave kører — hold musen over, og der står hvilken |
+
+Der kan kun køre **én** tidtagning ad gangen, og det er tovo, der bestemmer
+det. Starter du på noget nyt, stopper det forrige af sig selv — og kvitteringen
+siger det. På en markeret række i listen gør tasten **`t`** det samme.
+
+**Fang med et `%`, og uret går i gang med det samme.** Skriv
+`+ Ring til revisor % /Nordvind` i kommandobaren: opgaven oprettes, og
+tidtagningen starter, før du har sluppet tastaturet. En chip viser `⏺ start
+timer`, før du trykker Enter, så det aldrig sker bag om ryggen på dig. Er tovo
+ikke forbundet, oprettes opgaven alligevel, og kvitteringen siger hvorfor.
+
+**Krydser du opgaven af, stopper uret.** Det gælder uanset hvordan — ringen i
+listen, ringen inde i opgaven, status-chippen, en iOS-genvej eller Claude. Og
+kun *dens* ur: afslutter du noget andet, mens du sidder midt i en opgave,
+kører den videre.
+
+**Hvor lang tid der er gået** står nederst i opgaven: *2h 15m tracked in tovo*.
+Tallet er tovos eget — det er regnet der, med din afrunding — så det passer med
+ugerapporten i stedet for at være et andet bud.
+
+**Stop er ikke det samme som færdig.** Skal du holde op uden at blive færdig —
+et møde, fyraften, noget andet der haster — så stopper **Stop** uret og lader
+opgaven stå åben. I morgen trykker du bare igen, og tiden lægges til den
+**samme** opgave i tovo i stedet for at lave en ny. **Done** stopper uret *og*
+krydser opgaven af.
+
+Hvilket **tovo-projekt** timerne lander på, sættes på projektet i doda (**rediger
+projekt → Time goes on the tovo project**). Uden det havner alt i tovos *no
+project*, og ugerapporten kan ikke bruges til noget.
+
+> Der synkroniseres **ingenting**. doda beder tovo om at starte et ur, og det
+> er alt, de to gør ved hinanden. Døber du opgaven om i doda, hedder den
+> stadig det gamle i tovo — en titel-rettelse derovre ville kunne slette
+> estimatet og noten, som kun tovo kender. Og kobler du tovo fra, bliver hver
+> eneste registreret time stående; kun knapperne forsvinder.
 
 ### Billeder og filer
 
@@ -444,6 +495,7 @@ Se `PLAN.md` for faseoversigt og status, `DESIGN.md` for de trufne beslutninger 
 
 | Version | Ændringer |
 |---|---|
+| 99 | **Tidsregistrering: doda kan tage tid i tovo.** Forbind **tovo** under Settings → Connections, og hver opgave får en optageknap — i listerne og inde i opgaven. Knappen viser, hvad der kører: din egen opgave, en anden (med navn), eller ingenting. Der kan kun køre **én** tidtagning, så start på noget nyt stopper det forrige — og siger det, før du trykker. **Stop er ikke det samme som færdig:** kan du ikke blive færdig i dag, stopper **Stop** uret og lader opgaven stå åben, og i morgen lægges tiden til **samme** opgave i tovo i stedet for at lave en ny. Fokusskærmen henter sin tid fra tovo, så uret er rigtigt, også efter du har lukket appen. Fanger du med et **`%`** i teksten, starter uret i samme øjeblik opgaven findes — en chip viser det, før du trykker Enter. **Krydser du en opgave af, stopper dens ur af sig selv**, uanset om det sker fra listen, inde i opgaven, fra en genvej eller fra Claude — og kun dens eget: er du midt i noget andet, kører det videre. Nederst i opgaven står, hvor lang tid der er gået, **regnet af tovo** med din egen afrunding, så tallet passer med ugerapporten. Hvilket tovo-projekt timerne lander på, sættes på projektet. En afkrydsning venter aldrig på tovo: er den nede, kører uret videre, og det kan ses på ikonet. **Der synkroniseres ingenting** — og tovo har ikke fået en eneste linje kode af det. **Undervejs faldt to ældre fejl ud:** en gendannet backup satte **hvert eneste Sagu- og Notion-link** til tomt — linkene *var* med i filen, det var vejen ind, der tabte dem — og det samme gjaldt stemplet for »der er mindet om denne her«, så en backup lagt ind midt på dagen kunne sende dagens påmindelser en gang til. Begge dele gendannes nu, og en prøve holder listen over, hvad der gendannes, op mod databasens virkelige felter. Og to hjælpetekster — den under »Also push me a notification« og den om totrinskoden i loginruden — blev tegnet nede i skærmens hjørne i stedet for under deres eget felt, fordi de delte klassenavn med »type to capture«-mærket. Teksten om totrinskoden er nu også synlig på telefonen. |
 | 98 | **Login-spærringen kan ikke længere omgås** ved at sende en opdigtet IP-adresse i `X-Forwarded-For`, og sikkerhedsloggen viser nu den adresse, forbindelsen faktisk kom fra. |
 | 97 | **Vedligehold, ingen synlige ændringer.** Sideoversigten lytter nu også efter rulning i selve siden, så den virker den dag, den vises på telefonen. Lagene i stylesheet'et er dokumenteret ét sted, med en prøve der holder listen sand. |
 | 96 | **En vedhæftning med tankestreg i navnet kan hentes igen.** Lagde du en fil op, hvis navn indeholdt et tegn uden for vesteuropæisk — og det kræver ikke andet end den tankestreg, macOS selv sætter ind i et kopieret filnavn — så blev den lagt op og stod rigtigt i listen, men kunne derefter **aldrig hentes**: serveren svarede med en fejl. Nu kommer filen ned med sit rigtige navn, æøå, tankestreger og japansk inklusive. |

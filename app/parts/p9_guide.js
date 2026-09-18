@@ -215,9 +215,42 @@ const GUIDE_DELE = [
             lead: 'One task, everything else stepped back.',
             raekker: [
               ['TIMER', 'It starts itself and survives closing the app: what is kept is when you began.'],
+              /*
+               * Raekken sagde »Nothing is recorded and nothing is reported«.
+               * Med tovo forbundet er det ikke laengere sandt, og en
+               * forklaring, der er blevet forkert, er vaerre end ingen
+               * (DESIGN.md 7i). De to udgaver staar derfor hver for sig.
+               */
               ['none', 'Nothing is recorded and nothing is reported.'],
               ['esc', 'Leave again. The task is unchanged.'],
             ],
+            naar: () => !state.tovo.connected,
+          },
+          {
+            titel: 'Focus',
+            lead: 'One task, everything else stepped back — and the clock runs in tovo.',
+            raekker: [
+              ['TIMER', 'It reads its time from tovo, so it is right even after you close the app.'],
+              ['STOP', 'Ends the entry and leaves the task open — for when you have to stop without finishing.'],
+              ['DONE', 'Stops the clock and closes the task.'],
+              ['esc', 'Leave the screen. The clock keeps running.'],
+            ],
+            naar: () => state.tovo.connected,
+          },
+          {
+            titel: 'Time',
+            lead: 'The record button on a task starts a timer in tovo, where your hours live.',
+            raekker: [
+              ['t', 'Start or stop it from the list, without opening the task.'],
+              ['%', 'Capture with a % and the clock starts the moment the task exists.'],
+              ['ONE', 'Only one timer runs at a time — starting a second one stops the first, and the button says so before you press it.'],
+              ['DONE', 'Ticking a task off stops its clock. Ticking off a different one does not.'],
+              ['AGAIN', 'Picking the same task up tomorrow adds to its total instead of making a second task.'],
+              ['TOTAL', 'How long you have spent on a task is at the bottom of the task, counted by tovo.'],
+              ['PROJECT', 'Which tovo project the hours land on is set on the doda project.'],
+            ],
+            kort: 'nothing is synchronised — doda asks tovo to start a timer, and that is all either of them does to the other.',
+            naar: () => state.tovo.connected,
           },
           {
             titel: 'The weekly review',
@@ -400,7 +433,16 @@ function sideGuide() {
       </div>
       ${d.grupper.map((g) => `
         ${g.gruppe ? `<div class="guide-group">${esc(g.gruppe)}</div>` : ''}
-        ${g.emner.filter((e) => e.titel !== 'Notes' || state.notesEnabled).map((e) => {
+        ${/*
+          * `naar` er en valgfri betingelse pr. emne: staar den, og er den
+          * falsk, findes emnet ikke paa siden. Den blev sat ind, fordi
+          * tidtagningen kun eksisterer, naar tovo er forbundet - og guiden
+          * maa ALDRIG love mere, end koden kan (regel 1 oeverst i filen).
+          * Noterne havde deres egen betingelse skrevet i haanden; nu er der
+          * ét sted, en tredje kan skrives.
+          */ ''}
+        ${g.emner.filter((e) => (e.titel !== 'Notes' || state.notesEnabled)
+    && (!e.naar || e.naar())).map((e) => {
     if (e.syntaks) {
       return `<h2>${esc(e.titel)}</h2><p class="lead guide-lead">${e.lead}</p>
         <div class="card">${syntaksTabel()}

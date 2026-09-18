@@ -422,6 +422,30 @@ function redigerProjekt(p) {
     </div>
     <div class="field"><span>Link</span>
       <div class="chiprow" id="pLinkRow" style="margin-top:2px"></div></div>
+    ${/*
+      * Projektkoblingen til tovo (F10). Den staar HER og ikke paa
+      * indstillingssiden: valget hoerer til projektet, og en fane med en
+      * liste over samtlige projekter ville vaere et andet sted at
+      * vedligeholde det samme.
+      *
+      * Feltet vises kun, naar tovo er forbundet OG har projekter. Et tomt
+      * felt, der altid staar der, er et spoergsmaal uden et svar.
+      */ ''}
+    ${state.tovo.connected && state.tovo.projects.length ? `
+    <label class="field"><span>Time goes on the tovo project</span>
+      <select class="input" id="pTovo"><option value="">— none —</option>
+        ${state.tovo.projects.map((t) => `<option value="${esc(t.id)}"${
+  !nyt && t.id === p.tovo_project_id ? ' selected' : ''}>${esc(t.name)}${
+  t.customer ? ` · ${esc(t.customer)}` : ''}</option>`).join('')}
+      </select></label>
+    ${/*
+      * Forklaringen staar som `gate-note` under feltet - IKKE som en
+      * `.hint` inde i etiketten. `.hint` er optaget: den er `position:
+      * fixed` og tegner »type to capture«-maerket nede i hoejre hjoerne, saa
+      * teksten ville lande der i stedet for i ruden.
+      */ ''}
+    <p class="gate-note" style="text-align:left;margin-top:-8px">Without this, the hours
+    land in tovo's <em>no project</em> — and the weekly report cannot be used for anything.</p>` : ''}
     <div class="modal-foot">
       ${nyt ? '' : '<button class="btn ghost" id="pDelete">Delete</button>'}
       <span style="flex:1"></span>
@@ -464,6 +488,21 @@ function redigerProjekt(p) {
         id = r.project.id;
       }
       await api('POST', `/api/v1/projects/${id}`, felter);
+      /*
+       * tovo-koblingen gemmes for sig, EFTER projektet.
+       *
+       * Den er ikke et felt paa projektet i dodas forstand - den er en
+       * kobling til en anden app, og den har sin egen rute, som proever, at
+       * projektet faktisk findes i tovo. Fejler den, er projektet stadig
+       * gemt: man har rettet et navn og skal ikke miste det, fordi en
+       * fremmed server var nede.
+       */
+      const tv = host.querySelector('#pTovo');
+      if (tv && tv.value !== (nyt ? '' : (p.tovo_project_id || ''))) {
+        try {
+          await api('POST', '/api/v1/tovo/project', { projectId: id, tovoProjectId: tv.value });
+        } catch (ex) { toast(`The project was saved, but the tovo link was not: ${ex.message}`); }
+      }
       luk();
       await hentState();
       opdaterNav();

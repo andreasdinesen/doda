@@ -13,11 +13,11 @@
 
 | | |
 |---|---|
-| **Fase** | **Sagu-broen bygget 2026-08-21** (Sagus F8, dodas halvdel). v50 er udgivet. |
-| **Næste** | Ingen igangværende opgave. Se `HANDOVER-NAESTE.md`. |
-| **Tilstand** | 193 tests grønne. Install-scriptet **henter app-koden fra GitHub** og er **1.753 / 126.000 (1 %)**; payloaden ville indlejret være ~120.600 tegn (96 %). |
-| **Udgivet version** | **36** |
-| **Sidst opdateret** | 2026-08-18 |
+| **Fase** | **tovo-broen, fase 1 OG 2 bygget 2026-09-18.** Ikke udgivet endnu. |
+| **Næste** | Fase 3: fokusskærmen er allerede drevet af tovo (kom med i fase 1) — broen er dermed færdig. Ingen igangværende opgave. |
+| **Tilstand** | 413 tests grønne. Install-scriptet **henter app-koden fra GitHub** og er **1.732 / 126.000 (1 %)**. |
+| **Udgivet version** | **99** |
+| **Sidst opdateret** | 2026-09-18 |
 
 **Sprog:** interfacet er **engelsk** (Andreas' valg — æøå er besværligt at taste).
 Parseren er tosproget: engelsk primært, dansk virker fortsat. Kode, kommentarer og
@@ -493,6 +493,8 @@ brug. Begrundelserne står i README's versionshistorik; her er sporet:
 | 34 | **Kommentér en Notion-side** fra doda — læs og skriv, uden at gemme noget |
 | 35 | **Noter kan slås fra** · en Notion-side kan **oprettes** fra link-vælgeren |
 | 36 | **Fil på kommandobaren** → opgave · Queued ryddet op · Notion-ruden foldet ud |
+| 99 | **tovo-broen, fase 1** — optageknap i listerne og i opgaven, projektkobling, fokusuret drevet af tovo. Stop ≠ Done: man kan holde op uden at blive færdig. Ingen ændringer i tovo. Se DESIGN.md, »tovo-broen«. |
+| 99 | **tovo-broen, fase 2** — `%` i fangstlinjen starter uret, en afkrydsning stopper det (kun dens eget), og den registrerede tid står i ruden, regnet af tovo. Se DESIGN.md, »tovo-broen, fase 2«. |
 
 ### Om guiden, og hvad den kostede
 

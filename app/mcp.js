@@ -49,6 +49,19 @@ function opret(srv) {
         if (i.due_date) s += `\nDue: ${i.due_date}${i.due_time ? ` ${i.due_time}` : ''}`;
         if (i.contexts.length) s += `\nContexts: ${i.contexts.map((c) => `#${c.name}`).join(' ')}`;
         s += `\nStatus: ${i.status}\nid: ${i.id}`;
+        /*
+         * `%` bliver FORSTAAET af parseren, men ingen starter et ur her.
+         *
+         * Vaerktoejerne kaldes synkront (dispatcheren venter ikke paa et
+         * promise), og en tidtagning kraever en rundtur til tovo. At lade
+         * markoeren forsvinde i stilhed er det eneste rigtigt forkerte
+         * svar: den blev jo fjernet fra titlen. Saa siges det - og der
+         * peges paa den vej, der faktisk virker herfra.
+         */
+        if (svar.tolket && svar.tolket.startTimer) {
+          s += '\nNote: "%" was understood but no timer was started — capturing through '
+            + 'this tool cannot reach tovo. Start it from doda, or use tovo\'s own tools.';
+        }
         return { tekst: s, data: { item: i, recurrence: svar.recurrence || null } };
       },
     },

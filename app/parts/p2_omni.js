@@ -25,6 +25,9 @@ const MODER = {
   '+': { id: 'task', pil: '+ New Task', ph: 'Task title… try !tomorrow at 9',
     // `: area` staar med mellemrum EFTER kolonet, fordi det er saadan den
     // skrives - legenden er en kravspecifikation (§v9) og skal vise formen.
+    // `%` foejes til i `MODE_LEGENDE()`, naar tovo er forbundet - en legende,
+    // der lover mere end koden kan, er den fejl, »/projekt« var i fire
+    // versioner (RUNE-ERFARINGER, doda v9).
     legend: ['/ project', '# context', '! date', '~ hide until', ': area', '> stage'], enter: 'Create' },
   '*': { id: 'note', pil: '* New Note', ph: 'Note title…', legend: ['/ project', '# context'], enter: 'Create' },
   '/': { id: 'project', pil: '/ Projects', ph: 'Find or create a project…', legend: [], enter: 'Open' },
@@ -219,7 +222,18 @@ function tegnLegend() {
   const host = document.getElementById('omniLegend');
   if (!host) return;
   const m = omniState.mode ? MODER[omniState.mode] : null;
-  const dele = m ? m.legend : standardLegend();
+  /*
+   * `%` er den ENESTE post i legenden, der afhaenger af noget: uret bor i
+   * tovo, og er den ikke forbundet, findes markoeren ikke. Legenden er en
+   * kravspecifikation - staar der noget, skal det virke.
+   *
+   * Den laegges til HER og ikke i `MODER`, fordi `MODER` er en konstant, der
+   * laeses én gang ved indlaesning, mens forbindelsen kan skifte under en
+   * session (man kan forbinde tovo og gaa direkte til paletten).
+   */
+  const dele = m
+    ? (m.id === 'task' && state.tovo.connected ? m.legend.concat('% start timer') : m.legend)
+    : standardLegend();
   const enter = m ? m.enter : 'Select';
   host.innerHTML = `
     <span class="legend-keys">${dele.map((d) => {
@@ -259,6 +273,18 @@ function tegnChips() {
   if (t.due) chips.push([`⏰ ${visDato(t.due.dato)}${t.due.tid ? ` ${t.due.tid}` : ''}`, 'accent']);
   if (t.defer) chips.push([`hidden until ${visDato(t.defer)}`, 'neutral']);
   if (t.note) chips.push(['+ description', 'neutral']);
+  /*
+   * `%` skal SES, foer man trykker Enter. Chip-raekken findes netop for at
+   * afsloere det, der ellers ville ske bag om ryggen paa brugeren - og en
+   * tidtagning, der gaar tavst i gang, er en, man glemmer at stoppe.
+   *
+   * Er tovo ikke forbundet, siges det HER og ikke bagefter: chippen er
+   * stedet, hvor man kan naa at fjerne tegnet igen.
+   */
+  if (t.startTimer && t.kind !== 'note') {
+    chips.push([state.tovo.connected ? '⏺ start timer' : '⏺ no tovo — no timer',
+      state.tovo.connected ? 'accent' : 'neutral']);
+  }
 
   // Gentagelsen skal staa SKREVET UD. Forskellen mellem "fast plan" og "fra
   // fuldfoerelse" er ét udrabstegn i teksten - chippen er det eneste sted,
@@ -671,7 +697,33 @@ async function fangstNu(bekraeftet) {
     // Ellers hentes state og liste som foer (p3_lists' indsaetStraks).
     if (indsaetStraks(it)) opfriskBagefter();
     else await genindlaes();
-    toast(it.kind === 'note' ? 'Note saved' : `Added to ${statusNavn(it.status)}`, {
+
+    /*
+     * `%` startede et ur. To ting skal foelge med, og begge blev glemt i
+     * foerste udgave (fundet i browseren 18-09-2026 - serveren gjorde det
+     * rigtige, fladen kastede svaret vaek):
+     *
+     *  - tilstanden, saa ikonet paa den nye raekke er taendt med det samme,
+     *  - og BESKEDEN, saa man kan se, at uret gik i gang. En fangst, der
+     *    tavst starter en tidtagning, er en tidtagning, man glemmer at stoppe.
+     *
+     * Serverens `message` baerer allerede begge dele af historien (»timer
+     * started«, »the one that was running has been stopped«, eller hvorfor
+     * det ikke lykkedes), saa den vises ordret frem for at gaette den igen.
+     */
+    if (svar.timer) { state.tovo.timer = svar.timer; tikTimer(); opdaterTimerIkoner(); }
+    /*
+     * Flaget laeses af SERVERENS svar, ikke af `omniState.tolket`.
+     *
+     * `luk()` er kaldt et par linjer oppe, og den nulstiller omniState - saa
+     * den lokale tolkning er vaek her. Foerste udgave laeste den alligevel og
+     * fik altid `null`: beskeden om, at uret var startet, blev aldrig vist,
+     * mens uret faktisk koerte. Serverens `parsed` er desuden den rigtige
+     * kilde: det er DEN tolkning, der blev handlet paa.
+     */
+    const startede = svar.parsed && svar.parsed.startTimer;
+    toast(startede ? svar.message
+      : (it.kind === 'note' ? 'Note saved' : `Added to ${statusNavn(it.status)}`), {
       label: 'Undo',
       run: async () => { await api('DELETE', `/api/v1/items/${it.id}`, {}); await genindlaes(); },
     });

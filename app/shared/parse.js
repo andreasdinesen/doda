@@ -546,6 +546,8 @@
       kind: 'task', title: '', note: '',
       contexts: [], project: null, area: null,
       due: null, defer: null, status: null,
+      // `%` - start uret i tovo med det samme. Et flag, ikke et felt.
+      startTimer: false,
       recurrenceText: null, warnings: [],
     };
 
@@ -563,6 +565,27 @@
         ud.note = tekst.slice(sep + 4).trim();
         tekst = tekst.slice(0, sep);
       }
+    }
+
+    /*
+     * `%` = start uret paa den, saa snart den er oprettet (F10, fase 2).
+     *
+     * Den staar UDEN FOR markoer-loekken, fordi den ikke har en vaerdi efter
+     * sig: den er et flag, ikke et felt. Derfor kraeves der ogsaa mellemrum
+     * eller linjeslut EFTER tegnet - saa »100% faerdig« og »5%rabat« er
+     * almindelig tekst og ikke en timer, der gaar i gang.
+     *
+     * Tegnet er tovos. Det er MENINGEN at det er det samme: skriver man `%`
+     * i den ene app, skal det betyde det samme i den anden - ellers er der
+     * to syntakser at huske for én handling. Koden her er porteret ordret
+     * fra tovos `parse.js`; retter du den ene, saa ret den anden.
+     *
+     * `/` kunne ikke bruges: den er projektmarkoer i forvejen.
+     */
+    const timerFlag = tekst.match(/(^|\s)%(?=\s|$)/);
+    if (timerFlag) {
+      ud.startTimer = true;
+      tekst = tekst.replace(/(^|\s)%(?=\s|$)/, '$1');
     }
 
     // Type-praefiks.

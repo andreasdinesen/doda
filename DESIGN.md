@@ -2845,3 +2845,358 @@ det, GitHub har, er det, der installeres. `tjek_git()` i build'et fælder ellers
 | Hver vagt set fejle | tilbagerulning · `wrong_scope` · linket på sin egen linje · stemplet på titel-opslaget |
 | Mod en RIGTIG Sagu | note oprettet i den rigtige notesbog med link tilbage · fundet igen ved søgning · `link`-nøglen får 403 på en sletning |
 | Install-script | 122.701 → **1.753 tegn** |
+
+---
+
+## tovo-broen (2026-09-18)
+
+tovo er søsterappen, hvor **timerne** bor. Fra nu af har hver opgave i doda en
+optageknap — i listerne og inde i opgaven — så et klik starter en tidtagning i
+tovo uden at forlade doda.
+
+### Det er et link, ikke en synkronisering
+
+Det er den samme beslutning som Sagu-broens, og den er værd at sige højt, fordi
+tovos egne regler indtil i dag lød »**ingen kobling til doda**«. Den regel var
+rettet mod *synkronisering* — to apps, der holder hinandens data ved lige, og
+som derfor kan overskrive hinanden. Det sker ikke her:
+
+- doda **spørger**; tovo svarer. tovo ved ikke, at doda findes, og har ikke
+  fået en eneste linje kode af det her.
+- Ingen felter holdes i trit. Døber man opgaven om i doda, hedder den stadig
+  det gamle i tovo — se nedenfor, det er ikke en mangel.
+- Tiden er tovos, opgaven er dodas. Ingen af dem er en kopi af den anden.
+
+### tovo behøvede ikke at blive ændret
+
+Alt, broen bruger, fandtes: `/api/v1/state` (projekter **og** den kørende timer
+i ét kald), `/api/v1/items` (opret en opgave uden at gå gennem fangst-parseren),
+og `/api/v1/timer/start|stop|current`. Nøglen skal være **`full`** — broen både
+læser, hvilken timer der kører, og starter nye.
+
+### Koblingen har én ejer: doda
+
+`items.tovo_task_id` og `projects.tovo_project_id` (migration m14). De ligger
+her og **ikke** i tovo som et `dodaTaskId`, selv om tovo har præcis det mønster
+til Planner og ServiceNow. Grunden er, at en kobling med to ejere kan blive
+uenig med sig selv, og så er der ingen at spørge. doda er den, der spørger, så
+doda holder nøglen.
+
+To følger, som begge er prøvet:
+
+- **`tovo_task_id` skal stå i `IMPORT_TABELLER`.** Importen er
+  `INSERT OR REPLACE`; en kolonne, der ikke er med, bliver NULL ved en
+  gendannelse — tavst — og næste tidtagning ville oprette en dublet i tovo ved
+  siden af den, timerne står på.
+- **Koblingen overlever en frakobling.** Den er en kendsgerning om opgaven
+  (»her ligger dens tid«), ikke en følge af en indstilling. Ryddede vi den,
+  ville en genforbindelse lave et nyt sæt opgaver ved siden af de gamle.
+
+### doda opretter i tovo — og rører den aldrig igen
+
+tovos `POST /api/v1/items` gemmer en **hel** opgave. Et bart objekt med kun
+titlen sletter estimat, note, kolonne og links — tovos egen dyrekøbte lektie
+(`flet()`/`luk()`). En »ret lige titlen med«-funktion herfra ville altså kunne
+rydde felter, doda ikke aner findes. Derfor: opret én gang, læs bagefter.
+
+Oprettelsen går **uden om `/api/v1/capture`**. Fangstlinjen ville tolke titlen,
+og en doda-titel er ikke skrevet til tovos parser: dér betyder `#` et mærkat og
+`~` et estimat. »Møde @ 9 om #12 ~ kaffe« ville komme ud i den anden ende som
+noget andet, end der står i doda.
+
+### Ikonet viser tilstand — det er ikke pynt
+
+tovo håndhæver i databasen, at der kun kører **én** timer. Et tryk på opgave B
+stopper altså uret på A. Det skal kunne ses **før** trykket, ellers er knappen
+en fælde, så knappen har tre tilstande: ring med prik (start), firkant med et
+tikkende ur (denne kører, tryk stopper), og dæmpet ring (en anden kører — og
+`title` siger *hvilken*).
+
+Den kørende timer hentes i **et kald for sig**, aldrig som en del af
+`/api/v1/state`. En rundtur til en fremmed server ved hver optegning er præcis
+den fejl, Sagu-broen allerede har betalt for. Opfriskningen sker ved opstart og
+på `visibilitychange` — tovo har SSE og opdager selv en timer startet fra
+telefonen, doda har ikke, og en poll hvert minut døgnet rundt ville være dyrt
+for noget, der kun betyder noget, når man kigger.
+
+**Svarer tovo ikke, ryddes den kendte timer ikke.** Det var første udgave, og
+den var forkert: tovo kører stadig sin tidtagning — det er kun forbindelsen,
+der er væk — så et ikon, der falder tilbage til »ingenting kører«, lyver. Værre:
+næste tryk ville være en *start* på en opgave, der allerede løb, og tovo ville
+lukke posten og åbne en ny. Én tidtagning blev til to.
+
+### Stop og Done er to ting (Andreas, 18-09-2026)
+
+Fokusskærmen havde allerede tre knapper, og det viste sig at være det rigtige
+svar på et krav, der først blev stillet nu: **man kan være nødt til at holde op
+uden at blive færdig.**
+
+| Knap | Hvad der sker |
+|---|---|
+| **Stop** | Tidsposten lukkes. Opgaven forbliver **åben**. |
+| **Keep it running** | Forlader kun skærmen — uret kører videre, nu på en server. |
+| **Done** | Stopper uret **og** afslutter opgaven. |
+
+At tage fat igen i morgen er så bare et tryk mere: `tovo_task_id` står stadig på
+opgaven, så den nye tidspost lander på den **samme** tovo-opgave, og tovos
+`forbrugPaaOpgave` lægger dem sammen. Én opgave over tre dage giver ét samlet
+tal og tre linjer i timesedlen — hvilket er det rigtige begge steder.
+
+**Fokusuret læser sit starttidspunkt fra tovo,** når tovo er forbundet. Før
+talte det fra et tidspunkt i `localStorage`, og det var rigtigt, så længe
+browseren stod åben. To ure på den samme opgave, der viser hver sit, er værre
+end ét ur.
+
+### Projektkoblingen er ikke valgfri pynt
+
+Uden den lander alle timer i tovos »no project«, og ugerapporten — som er hele
+grunden til, at tovo findes — kan ikke bruges til noget. Valget står på
+**projektet** i doda, ikke på en indstillingsside: et felt pr. projekt er ét
+sted at vedligeholde det, en liste over samtlige projekter ville være to.
+Forsvinder et projekt i tovo, ryddes koblingen ved næste opfriskning — ellers
+ville doda blive ved med at vise et navn, der er slettet, mens tiden i
+virkeligheden landede i »no project«, og **intet ville fejle**.
+
+### Timeren går aldrig i offline-køen
+
+En »start«, der sendes 40 minutter senere, registrerer et forkert
+starttidspunkt og **ser rigtig ud**. Uden net siger doda det i stedet:
+*»No connection — a timer has to be started while you are online.«*
+
+### Målt
+
+| | |
+|---|---|
+| Tests | **395 grønne** (+22 i `tests/tovo.test.mjs`) |
+| Hver vagt set fejle | `tovo_task_id` ud af `IMPORT_TABELLER` → backup-prøven rød · genbrug af koblingen fjernet → fire prøver røde |
+| Mod en RIGTIG tovo | opgave oprettet i det rigtige projekt · start → stop → genoptag gav **to tidsposter på samme opgave** · opgaven stod stadig åben efter Stop |
+| Ændringer i tovo | **ingen** |
+
+---
+
+## Gendannelsen, der slettede links (2026-09-18)
+
+Fundet under tovo-broens arbejde, hvor den samme fælde var ved at blive
+gentaget med `tovo_task_id`.
+
+**Eksporten er `SELECT *`. Importen er `INSERT OR REPLACE` med en eksplicit
+kolonneliste.** De to er ikke hinandens spejl, og forskellen er tavs: en
+kolonne, der ikke står i `IMPORT_TABELLER`, ligger med i backupfilen og bliver
+**NULL**, når filen læses ind igen. Intet fejler, loggen er tom, og antallet af
+importerede rækker er det rigtige.
+
+Fire kolonner manglede:
+
+| Kolonne | Hvad en gendannelse gjorde |
+|---|---|
+| `items.link_url` · `link_title` | slettede **hvert eneste** Sagu- og Notion-link på opgaver |
+| `projects.link_url` · `link_title` | det samme på projekter |
+| `link_checked_at` (begge) | titlerne blev hentet forfra — harmløst, men det er stadig data |
+| `items.notified_at` | **sendte dagens påmindelser igen**, fordi stemplet er det eneste værn i `paamind()` |
+
+Den sidste er den værste, fordi den er aktiv: en backup, lagt ind midt på
+dagen, ville fyre notifikationer af for opgaver, der allerede var mindet om.
+
+### Hvorfor den kunne ligge der så længe
+
+Fejlen viser sig **kun** hos den, der faktisk gendanner. Man tester
+eksport/import ved at køre en fil ind i den base, den kom fra — og dér ser en
+række, der allerede var rigtig, rigtig ud bagefter. Prøven kører derfor to
+servere: en **tom** base i en anden proces er den eneste form, der beviser
+noget om en gendannelse.
+
+### Vagten, ikke kun rettelsen
+
+At rette fire kolonner løser i dag. Den næste kolonne, nogen tilføjer, er den
+samme fejl igen, og den ville være lige så tavs. `tests/import.test.mjs`
+sammenligner derfor hvidlisten med det **virkelige** skema, læst med
+`pragma_table_info` ud af en base, serveren selv har migreret.
+
+To valg i den prøve, som begge er betalt for andetsteds:
+
+- **Listen læses ud af kilden, ikke skrevet af.** En afskrift beviser kun, at
+  afskriften er rigtig (samme regel som tovos `opdatering.test.mjs`, der kører
+  panelets eget script).
+- **Skemaet læses fra databasen, ikke fra `CREATE TABLE`-teksten.** Alle fire
+  manglende kolonner kom fra `ALTER TABLE ... ADD COLUMN` i senere
+  migrationer — de står ikke i den første erklæring. En prøve, der granskede
+  kildeteksten, ville have overset præcis dem, den skulle finde.
+
+Vil man bevidst udelade en kolonne, står undtagelsen i `MED_VILJE_UDE` i
+prøven **med en begrundelse**. En udeladelse uden en er ikke til at skelne fra
+en forglemmelse.
+
+Der er også en prøve på, at eksporten og importen er enige om *tabellerne*:
+tilføjer man en tabel til `byggEksport()` alene, ligger dataene i filen og
+bliver aldrig læst ind — og backuppen ser komplet ud.
+
+---
+
+## `.hint` betød to ting (2026-09-18)
+
+Fundet under tovo-broens arbejde, hvor jeg var ved at skrive en tredje.
+
+`.hint` var **`position: fixed; right: 22px; bottom: 20px`** — mærket »A · type
+to capture« i skærmens nederste højre hjørne. Men `hint` er et *almindeligt
+ord*, så den blev grebet to steder mere som underetiket inde i en `<label>`:
+
+- **loginruden**, hjælpeteksten til totrinskoden
+- **gennemgangens indstillinger**, teksten om push
+
+Begge steder blev teksten revet ud af sin rude og tegnet nede i hjørnet. Den
+anden af dem var 799 px bred, tværs over bunden af Review-siden, oven i det
+rigtige mærke — altså synlig for enhver med en valgt gennemgangsdag, ikke bare
+i login med totrin.
+
+### Navnet er fejlen, ikke brugen
+
+Det havde været nok at give underetiketterne deres egen klasse. Det er ikke
+nok: så står `.hint` der stadig som et generisk ord med `position: fixed`
+bagved, og den næste, der skriver `class="hint"` i en etiket, får præcis det
+samme. Derfor er **begge** omdøbt:
+
+| | |
+|---|---|
+| `.capturehint` | mærket i hjørnet. Navnet siger hvad det **er**. |
+| `.fieldhint` | den lille forklaring under en feltetiket, i almindeligt flow. |
+
+`.hint` findes ikke længere. Skriver nogen den igen, sker der **ingenting** —
+og det er til at se. Det er bedre end tavst at få noget andet, end man bad om.
+
+### Specificiteten var halvdelen af arbejdet
+
+Første udgave af `.fieldhint` satte vægt, størrelse og farve. Kun **farven**
+slog igennem: `.field span` er (0-1-1) og sætter allerede
+`font-weight: 600; font-size: 13px` på alt inde i en etiket, mens et bart
+`.fieldhint` er (0-1-0). Teksten var altså dæmpet, men stadig fed og lige så
+stor som etiketten over den — hvilket ligner en tekst, der bare er lidt grå,
+og derfor ikke ser forkert ud nok til at blive opdaget.
+
+Selektoren er nu `.fieldhint, .field .fieldhint`. **Målt i browseren**
+(12,5 px / 400 mod etikettens 13 px / 600), ikke sluttet ud fra CSS'en.
+
+### Sidegevinst
+
+Mobilreglen `.hint { display: none }` gjaldt før *begge* betydninger, så
+hjælpeteksten til totrinskoden var usynlig på en telefon. Nu skjules kun
+`.capturehint` — som er det eneste rigtige: et tastaturmærke hører ikke til på
+en telefon, men en forklaring til et felt gør.
+
+### Vagten
+
+`tests/fastnavne.test.mjs` er bevidst **smal** — der findes ingen generel måde
+at måle »den her klasse betyder to ting«. Men reglen kan skrives ned:
+
+- ingen klasse med `position: fixed` må hedde noget fra en liste over for
+  generiske ord (`hint`, `label`, `note`, `text`, `box`, `small`, `info`,
+  `tip`, `help`). `.modal`, `.sidebar` og `.lightbox` står med vilje ikke der:
+  de navngiver en bestemt ting, og skriver man dem, mener man dem.
+- `.hint` må ikke komme igen, hverken i CSS'en eller i markupen.
+- `.fieldhint` må ikke selv blive fast placeret — så var fejlen flyttet, ikke
+  rettet — og `.field .fieldhint` skal stå der, ellers taber den kampen igen.
+
+Prøven fandt i øvrigt en fejl i sig selv, første gang den kørte: dens
+CSS-læser tog kommentaren **over** en regel med som en del af selektoren, så
+`.fieldhint`, nævnt i kommentaren ved `.capturehint`, blev læst som fast
+placeret. Kommentarerne strimles nu væk først.
+
+---
+
+## tovo-broen, fase 2 (2026-09-18)
+
+Tre ting oven på fase 1: **registreret tid i ruden**, **stop ved afkrydsning**
+og **`%` i fangstlinjen**. Projektkoblingen landede allerede i fase 1.
+
+### Tallet regnes af tovo — også når det koster en omvej
+
+tovo afrunder **pr. tidspost** efter en indstilling, doda ikke kender
+(`beregn.js`, `afrund`). En sum lavet her kunne derfor vise noget andet end
+den timeseddel, der bliver skrevet af — og to udregninger er to sandheder,
+som er tovos egen første regel.
+
+Der findes ingen »tid på én opgave«-rute i tovo. Men `spent` pr. opgave ligger
+**allerede** på to ruter, regnet med `forbrugPaaOpgave`: projektruden og
+»opgaver uden projekt«. Broen spørger ad dem. Projektet først, når koblingen
+kendes; ellers — og hvis opgaven er flyttet i tovo siden sidst — de
+projektløse. To rundture i det sjældne tilfælde, én i det normale, og **ingen
+ny rute i tovo**.
+
+`visMinutter()` i doda er **formatering**, ikke udregning: tallet kommer
+færdigt, doda skriver det bare på engelsk.
+
+**Findes opgaven ingen af stederne, er svaret `null` — ikke 0.** »0m tracked«
+på noget, man lige har brugt en time på, ville være en påstand om en måling.
+(At tovo selv svarer 0 for en tidtagning på tyve sekunder er en anden sag —
+det er det rigtige tal, og doda viser det, tovo siger.)
+
+### Stoppet ligger i ét knudepunkt — og det stopper ikke bare »det, der kører«
+
+`stopUretFor()` kaldes fra `fuldfoerItem` og `springItemOver`, samt fra
+`opdaterMedGentagelse` for den gren, der ikke når nogen af dem (en almindelig
+opgave sat til done/dropped med status-chippen). Det er dodas egen lektie fra
+v94: alle veje skal gå det samme sted hen — ringen i listen, ringen i ruden,
+status-chippen, `/complete`, en iOS-genvej og Claude.
+
+To ting den **ikke** gør:
+
+- **Den venter ikke.** En afkrydsning må aldrig blive langsom — eller fejle —
+  fordi en anden server ikke svarer. Målt: en afkrydsning med tovo nede tager
+  under et sekund og lykkes.
+- **Den stopper ikke blindt.** `stopHvisDenne()` læser først: afslutter man
+  opgave A, mens uret løber på B, skal B blive ved.
+
+Fladen **spørger** bagefter i stedet for at sætte `state.tovo.timer = null`.
+Stoppet er bedste forsøg; satte fladen selv timeren til null, ville den påstå
+noget, den ikke ved, og ikonet ville lyve, hvis tovo var nede.
+
+### `%` er tovos tegn, med vilje
+
+Koden er porteret **ordret** fra tovos `parse.js`, ned til kravet om mellemrum
+eller linjeslut efter tegnet — så `100% færdig` er tekst og ikke en timer, der
+går i gang. Samme tastetryk, samme betydning i begge apps; retter man den ene,
+skal man rette den anden.
+
+Markøren håndteres i **ruten**, ikke i `fangst()`: den er synkron og kaldes
+også fra MCP, og en fremmed server hører ikke hjemme i en funktion, der ellers
+kun rører dodas egen base.
+
+Her **ventes** der på svaret, i modsætning til stoppet ved en afkrydsning.
+Forskellen er, hvad brugeren bad om: tidtagningen er en del af handlingen, og
+»Added« uden at vide, om uret kører, ville være et halvt svar.
+
+**Er tovo ikke forbundet, oprettes opgaven alligevel, og svaret siger hvorfor.
+Markøren spises.** Det afviger bevidst fra tovos `/syntax`, hvor `%` bliver
+stående i titlen: dér findes der slet ingen modtager for begrebet, her blev
+markøren *forstået* — modtageren kunne bare ikke handle.
+
+`%` står kun i syntakstabellen og i palettens legende, **når tovo er
+forbundet**. En legende, der lover mere end koden kan, er den fejl, `/projekt`
+var i fire versioner.
+
+### To fejl, browseren fandt, og prøverne ikke
+
+Begge var i fladen, begge så rigtige ud i koden:
+
+1. **Paletten kastede svaret væk.** Serveren startede uret korrekt, men
+   kvitteringen sagde »Added to Inbox«, og ikonet forblev slukket. Nu adopteres
+   `svar.timer`, og serverens `message` vises ordret.
+2. **Flaget blev læst efter `luk()`**, som nulstiller `omniState` — så det var
+   altid `null`, og beskeden kom aldrig. Nu læses `svar.parsed.startTimer`,
+   hvilket desuden er den rigtige kilde: det er dén tolkning, der blev handlet
+   på. Prøven asserterer nu på `parsed.startTimer`, fordi det er **kontrakten**
+   med fladen.
+
+Og en fejl i en **prøve**: »afkrydsning af en anden opgave lader uret køre
+videre« bestod, selv når `stopHvisDenne` blev byttet ud med et blindt `stop()`.
+Opgave B havde aldrig været timet, så `stopUretFor` trak sig på sin egen
+`tovo_task_id`-vagt, og sammenligningen blev aldrig nået. B timet og stoppet
+først — nu fælder prøven substitutionen.
+
+### Målt
+
+| | |
+|---|---|
+| Tests | **413 grønne** (+11 i `tests/tovo.test.mjs`) |
+| Hver vagt set fejle | blindt `stop()` → uret på A stoppes · parser-flaget fjernet → tre prøver røde |
+| I browseren | `%` i paletten: chip før Enter, kvittering, ikon tændt · 2h 15m i ruden · afkrydsning stoppede uret i tovo og lukkede posten |
+| Ændringer i tovo | **ingen** |

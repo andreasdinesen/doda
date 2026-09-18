@@ -740,6 +740,8 @@
       kind: 'task', title: '', note: '',
       contexts: [], project: null, area: null,
       due: null, defer: null, status: null,
+      // `%` - start uret i tovo med det samme. Et flag, ikke et felt.
+      startTimer: false,
       recurrenceText: null, warnings: [],
     };
 
@@ -757,6 +759,27 @@
         ud.note = tekst.slice(sep + 4).trim();
         tekst = tekst.slice(0, sep);
       }
+    }
+
+    /*
+     * `%` = start uret paa den, saa snart den er oprettet (F10, fase 2).
+     *
+     * Den staar UDEN FOR markoer-loekken, fordi den ikke har en vaerdi efter
+     * sig: den er et flag, ikke et felt. Derfor kraeves der ogsaa mellemrum
+     * eller linjeslut EFTER tegnet - saa »100% faerdig« og »5%rabat« er
+     * almindelig tekst og ikke en timer, der gaar i gang.
+     *
+     * Tegnet er tovos. Det er MENINGEN at det er det samme: skriver man `%`
+     * i den ene app, skal det betyde det samme i den anden - ellers er der
+     * to syntakser at huske for én handling. Koden her er porteret ordret
+     * fra tovos `parse.js`; retter du den ene, saa ret den anden.
+     *
+     * `/` kunne ikke bruges: den er projektmarkoer i forvejen.
+     */
+    const timerFlag = tekst.match(/(^|\s)%(?=\s|$)/);
+    if (timerFlag) {
+      ud.startTimer = true;
+      tekst = tekst.replace(/(^|\s)%(?=\s|$)/, '$1');
     }
 
     // Type-praefiks.
@@ -1066,7 +1089,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 98;
+const APP_VERSION = 99;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -1095,6 +1118,19 @@ const state = {
   notesEnabled: true,
   noteCount: 0,
   hideDone: false,
+  /*
+   * tovo - soesterappen, hvor timerne bor (F10).
+   *
+   * `timer` er den KOERENDE tidtagning, som tovo kender den: {taskId,
+   * startedAt, title, …} eller null. Den hentes i et kald for sig og aldrig
+   * som en del af `/api/v1/state`: en rundtur til en fremmed server ved hver
+   * optegning er den fejl, Sagu-broen allerede har betalt for.
+   *
+   * `taskId` er tovos id, ikke dodas. Det er `item.tovo_task_id`, der binder
+   * de to sammen - og derfor kan en raekke kun vide, at DEN koerer, hvis
+   * opgaven har vaeret startet mindst én gang.
+   */
+  tovo: { connected: false, timer: null, url: '', projects: [] },
 };
 
 /* ------------------------------------------------------------ hjaelpere */
@@ -1275,6 +1311,16 @@ const ICONS = {
   copy: '<path d="M9 9h10v10a1.5 1.5 0 01-1.5 1.5H9z"/><path d="M15 9V4.5A1.5 1.5 0 0013.5 3H5.5A1.5 1.5 0 004 4.5v9A1.5 1.5 0 005.5 15H9"/>',
   luk: '<path d="M6 6l12 12M18 6L6 18"/>',
   tjek: '<path d="M20 6.5L9.5 17 4 11.5"/>',
+  /*
+   * Tidtagningen (F10). To ikoner, fordi knappen har to BETYDNINGER, og et
+   * ikon, der skifter mening uden at skifte form, er en gaette-leg:
+   *   `optag`  - start uret. Cirkel med en fyldt prik, som en optageknap.
+   *   `stands` - stop det. Samme cirkel med en firkant i.
+   * Prikken og firkanten fyldes af CSS (`.timerbtn svg [data-fyld]`), saa de
+   * arver knappens farve i begge temaer i stedet for at have en egen.
+   */
+  optag: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.6" data-fyld/>',
+  stands: '<circle cx="12" cy="12" r="8.5"/><rect x="9" y="9" width="6" height="6" rx="1" data-fyld/>',
 };
 
 /**
@@ -1397,6 +1443,14 @@ function syntaksTabel() {
     <tr><td><code>@project</code> · <code>/project</code></td><td>file under a project — <code>/"two words"</code></td></tr>
     <tr><td><code>!date</code></td><td><code>!tomorrow</code>, <code>!friday</code>, <code>!3/9</code>, <code>!in 2 weeks</code></td></tr>
     <tr><td><code>~date</code></td><td>hide until that date</td></tr>
+    ${/*
+      * `%` staar kun, naar tovo er forbundet. Tabellen er en
+      * KRAVSPECIFIKATION (guidens regel 1) - en raekke om et ur, der ikke
+      * findes, ville vaere et loefte, koden ikke kan holde. Det var praecis
+      * det, »/projekt« gjorde i fire versioner.
+      */ ''}
+    ${state.tovo.connected
+    ? '<tr><td><code>%</code></td><td>start the timer in tovo on it right away</td></tr>' : ''}
     <tr><td><code>text // more</code></td><td>everything after <code>//</code> becomes the description</td></tr>
   </table>`;
 }
@@ -1433,7 +1487,7 @@ function gateHtml() {
              de fleste logins har det ikke, og et tomt felt, man skal springe
              over, er en gaade hver gang. -->
         <label class="field" id="gateCodeField" hidden><span>Code from your app
-          <span class="hint">Six digits — or one of your recovery codes.</span></span>
+          <span class="fieldhint">Six digits — or one of your recovery codes.</span></span>
           <input class="input" id="gateCode" inputmode="text" autocomplete="one-time-code"
             autocapitalize="characters" spellcheck="false"></label>
         <button class="btn primary" type="submit" style="width:100%">
@@ -1477,6 +1531,7 @@ function bindGate() {
       state.config.needsSetup = false;
       if (fortsaetTilConnector()) return;
       await hentState();
+      hentSessionsting();
       render();
       // Kommer man fra kalenderen uden at vaere logget ind, skal elementet
       // aabnes NAAR man er - ikke tabes undervejs.
@@ -1502,6 +1557,7 @@ function bindGate() {
         state.user = d.user;
         if (fortsaetTilConnector()) return;
         await hentState();
+        hentSessionsting();
         render();
         aabnFraAdressen();
       } catch (ex) {
@@ -1579,7 +1635,7 @@ function shellHtml() {
     </main>
   </div>
   <nav class="toc" id="tocRail" aria-label="On this page" hidden></nav>
-  <div class="hint"><span class="key">A</span><span class="meta">type to capture</span></div>
+  <div class="capturehint"><span class="key">A</span><span class="meta">type to capture</span></div>
   <nav class="bottomnav" id="bottomNav">
     ${BUND.map((id) => {
     const v = viewById(id);
@@ -1988,6 +2044,29 @@ async function genindlaes() {
   await tegnSide();
 }
 
+/**
+ * Det, der hentes ÉN gang pr. session - ikke ved hver optegning.
+ *
+ * Begge ting er ja/nej-spoergsmaal til en anden app, og begge styrer, om der
+ * overhovedet er en knap: Sagu giver `*` en raekke mere i paletten, tovo
+ * giver opgaverne deres optageknap.
+ *
+ * Helperen findes, fordi der er TRE veje ind i en session - opstart med en
+ * gyldig cookie, kodeordslogin og passkey-login - og de to sidste havde ikke
+ * kaldet noget af det. Efter et frisk login manglede baade Sagu-raekken og
+ * tidtagningen, indtil man genindlaeste siden; og det ser ud som en fejl i
+ * forbindelsen, ikke som en manglende linje. Ét sted at kalde fra, saa en
+ * fjerde vej ind ikke kan glemme den ene af dem.
+ *
+ * Ingen `await`: en fremmed server, der ikke svarer, maa ikke kunne holde
+ * appen tilbage. Begge tegner selv det, de skal, naar svaret kommer.
+ */
+function hentSessionsting() {
+  if (!state.user) return;
+  tjekSagu();
+  hentTovo();
+}
+
 async function hentState() {
   try {
     const d = await api('GET', '/api/v1/state');
@@ -2004,6 +2083,297 @@ async function hentState() {
     if (ex.status !== 401) toast(ex.message);
   }
 }
+
+/* ------------------------------------------------------------- tovo */
+
+/*
+ * Broen til tidsregistreringen (F10).
+ *
+ * Reglerne, det hele hviler paa:
+ *
+ *  - **Ét kald, ikke ét pr. raekke.** Den koerende timer hentes én gang og
+ *    ligger i `state.tovo.timer`. Listerne slaar op i den; de spoerger
+ *    aldrig selv.
+ *  - **Ikonet viser TILSTAND.** tovo tillader kun ÉN koerende timer
+ *    (databasen haandhaever det), saa et tryk paa opgave B stopper uret paa
+ *    A. Det skal kunne ses FOER man trykker, ellers er knappen en faelde.
+ *  - **Timeren gaar aldrig i offline-koen.** En »start«, der sendes 40
+ *    minutter senere, registrerer et forkert starttidspunkt og ser rigtig
+ *    ud. Uden net siger vi det i stedet.
+ */
+
+/** Koerer der en timer, og er det paa DENNE doda-opgave? */
+function tovoKoererPaa(item) {
+  const t = state.tovo.timer;
+  return !!(t && item && item.tovo_task_id && t.taskId === item.tovo_task_id);
+}
+
+/** Skal opgaven overhovedet have en knap? Noter er reference, ikke arbejde. */
+function tovoKanTage(item) {
+  // `dropped` taeller med som afsluttet. Focus-knappen ved siden af ser kun
+  // efter `done` - men en droppet opgave er ogsaa faerdig, og en optageknap
+  // paa noget, man har besluttet ikke at lave, er et tilbud om at gore det
+  // forkerte.
+  return !!(state.tovo.connected && item && item.kind === 'task'
+    && item.status !== 'done' && item.status !== 'dropped');
+}
+
+/**
+ * Knappen, i den tilstand opgaven er i.
+ *
+ * Tre tilstande, tre forklaringer - `title` er ikke pynt her, den er det
+ * eneste sted, den anden opgaves navn kan staa.
+ */
+function timerKnapHtml(item, stoerrelse = 15, ekstraKlasse = '') {
+  if (!tovoKanTage(item)) return '';
+  const denne = tovoKoererPaa(item);
+  const anden = !denne && state.tovo.timer;
+  const klasse = `timerbtn${denne ? ' koerer' : ''}${anden ? ' optaget' : ''}${ekstraKlasse ? ` ${ekstraKlasse}` : ''}`;
+  const titel = denne ? 'Stop the timer'
+    : anden ? `Start the timer — this stops "${state.tovo.timer.title}"`
+      : 'Start the timer';
+  // Stoerrelse og ekstra klasse haenger PAA knappen, saa `opdaterTimerIkoner`
+  // kan tegne den samme knap igen uden at kende kaldsstedet.
+  return `<button class="${klasse}" data-timer="${esc(item.id)}" data-stop
+    data-timer-str="${stoerrelse}" data-timer-klasse="${esc(ekstraKlasse)}"
+    aria-label="${esc(titel)}" title="${esc(titel)}">${icon(denne ? 'stands' : 'optag', stoerrelse)}${
+  denne ? `<span class="timertid" data-timertid>${esc(forloebet())}</span>` : ''}</button>`;
+}
+
+/**
+ * Opgaven bag et `data-timer`-id.
+ *
+ * Fokusskaermen er den ene flade, hvor opgaven IKKE staar i `state.items`:
+ * den henter kun den aktuelle skaerms elementer, og fokus overlever, at man
+ * navigerer vaek (det er hele pointen med den). `fokus` baerer derfor selv
+ * det, knappen skal bruge - og en opgave i fokus er pr. definition en aaben
+ * opgave, saa der er ikke en status at slaa op.
+ */
+function timerItemFor(id) {
+  const fra = state.items.find((x) => x.id === id);
+  if (fra) return fra;
+  if (fokus.itemId !== id) return null;
+  return { id, kind: 'task', status: 'next', tovo_task_id: fokus.tovoTaskId || null };
+}
+
+/**
+ * Minutter som »2h 15m«.
+ *
+ * FORMATERING, ikke udregning. Tallet kommer faerdigt fra tovo, som har
+ * afrundet det efter sin egen indstilling; doda skriver det bare paa engelsk.
+ * Det er derfor ikke en anden sandhed - der regnes ikke noget her.
+ */
+function visMinutter(m) {
+  const n = Math.max(0, Math.round(Number(m) || 0));
+  const t = Math.floor(n / 60);
+  const rest = n % 60;
+  if (!t) return `${rest}m`;
+  return rest ? `${t}h ${rest}m` : `${t}h`;
+}
+
+/**
+ * Henter den registrerede tid og skriver den ind i en aaben rude.
+ *
+ * ÉT kald, naar ruden aabnes - aldrig pr. raekke i en liste. Og kun naar
+ * opgaven overhovedet har et modstykke i tovo: har den ikke, er der ingen
+ * maaling at vise, og »0m« ville se ud som en.
+ *
+ * Fejler kaldet, sker der ingenting. En rude, der aabner med en roed besked,
+ * fordi en anden server ikke svarede, er vaerre end en rude uden et tal.
+ */
+async function hentForbrug(item, vaert) {
+  if (!vaert || !state.tovo.connected || !item.tovo_task_id) return;
+  try {
+    const d = await api('GET', `/api/v1/tovo/spent?id=${encodeURIComponent(item.id)}`);
+    if (d.minutes === null || d.minutes === undefined) return;
+    // Ruden kan vaere lukket imens - saa er der ikke noget at skrive i.
+    if (!vaert.isConnected) return;
+    const koerer = tovoKoererPaa(item);
+    vaert.textContent = `${visMinutter(d.minutes)} tracked in tovo${koerer ? ' — running now' : ''}`;
+    vaert.hidden = false;
+  } catch { /* en tovo, der ikke svarer, maa ikke kunne spolere ruden */ }
+}
+
+/** Sekunder siden start, som ur. Samme form som fokusuret, saa de to stemmer. */
+function forloebet() {
+  const t = state.tovo.timer;
+  if (!t) return '';
+  return fokusUr(Math.max(0, Math.floor(Date.now() / 1000 - t.startedAt)));
+}
+
+/**
+ * Start eller stop - ét sted, saa raekken, ruden og fokusskaermen ikke kan
+ * komme til at goere hver sit.
+ */
+/**
+ * Stopper uret. UBETINGET - ingen vurdering af, hvad der koerer.
+ *
+ * Egen funktion, fordi `slaaTimer` er en VIPPE: den afgoer ud fra tilstanden,
+ * om der skal startes eller stoppes. Kalder man den et sted, hvor tilstanden
+ * er ryddet, gaetter den forkert og STARTER et ur. Det skete i `stopFokus`,
+ * som nulstiller `fokus`, foer den beder om at stoppe - og saa kunne »Stop«
+ * paa fokuslinjen saette tidtagningen i gang i stedet (fundet ved at laese
+ * min egen diff, 18-09-2026).
+ *
+ * Reglen: er svaret »stop« allerede afgjort af kaldsstedet, saa brug DEN
+ * her. En vippe skal kun bruges, hvor man faktisk mener »skift«.
+ */
+async function stopTimerNu() {
+  try {
+    await api('POST', '/api/v1/tovo/stop', {});
+    state.tovo.timer = null;
+    toast('Timer stopped — the task stays open');
+  } catch (ex) {
+    toast(erNetvaerksfejl(ex)
+      ? 'No connection — the timer is still running in tovo.'
+      : ex.message);
+  }
+  opdaterTimerIkoner();
+  tegnFokus();
+}
+
+async function slaaTimer(itemId) {
+  const item = timerItemFor(itemId);
+  const stopper = item ? tovoKoererPaa(item) : false;
+  try {
+    if (stopper) {
+      await api('POST', '/api/v1/tovo/stop', {});
+      state.tovo.timer = null;
+      toast('Timer stopped — the task stays open');
+    } else {
+      const d = await api('POST', '/api/v1/tovo/start', { id: itemId });
+      state.tovo.timer = d.timer;
+      // Foerste gang paa en opgave far den sit modstykke i tovo. Uden at
+      // skrive id'et tilbage i den liste, vi allerede har tegnet, ville
+      // ikonet ikke kunne se, at det er DENNE opgave, der koerer.
+      const raekke = state.items.find((x) => x.id === itemId);
+      if (raekke && d.taskId) raekke.tovo_task_id = d.taskId;
+      if (fokus.itemId === itemId && d.taskId) fokus.tovoTaskId = d.taskId;
+      toast(d.stopped ? 'Timer started — the one that was running has been stopped' : 'Timer started');
+    }
+  } catch (ex) {
+    // Netvaerksfejl faar IKKE en plads i koen (se ovenfor) - kun en aerlig
+    // besked. Alt andet er tovos egen, og den siger allerede hvorfor.
+    toast(erNetvaerksfejl(ex)
+      ? 'No connection — a timer has to be started while you are online.'
+      : ex.message);
+  }
+  opdaterTimerIkoner();
+  tegnFokus();
+}
+
+/**
+ * Henter den koerende timer og tegner ikonerne om.
+ *
+ * Kaldes ved opstart og hver gang fanen kommer frem. tovo har SSE og opdager
+ * selv en timer startet fra telefonen; doda har ikke, og en poll ville koste
+ * en rundtur i minuttet doegnet rundt for noget, der kun betyder noget, naar
+ * man kigger. `visibilitychange` er svaret.
+ */
+async function hentTovo() {
+  const varForbundet = state.tovo.connected;
+  try {
+    const d = await api('GET', '/api/v1/tovo/timer');
+    state.tovo.connected = !!d.connected;
+    state.tovo.timer = d.timer || null;
+    state.tovo.url = d.url || '';
+    state.tovo.projects = d.projects || [];
+  } catch {
+    /*
+     * En tovo, der ikke svarer, giver ingen fejlbesked: kaldet sker ved hver
+     * opstart og hvert faneskift, og en roed besked dér ville vaere stoej om
+     * noget, brugeren ikke bad om.
+     *
+     * Og den kendte timer ryddes IKKE. Det var den foerste udgave, og den var
+     * forkert: tovo koerer stadig sin tidtagning - det er kun forbindelsen,
+     * der er vaek - saa et ikon, der falder tilbage til »ingenting koerer«,
+     * lyver. Vaerre: naeste tryk ville saa vaere en START paa en opgave, der
+     * allerede loeb, og tovo ville lukke posten og aabne en ny. Én
+     * tidtagning blev til to.
+     *
+     * Det, vi sidst vidste, er stadig det rigtige svar - og uret taeller fra
+     * et starttidspunkt, saa tallet bliver ved med at passe.
+     */
+  }
+  tikTimer();
+  // En fokus-session, der er genskabt fra localStorage, kender endnu ikke sin
+  // tovo-opgave. Nu er svaret her.
+  tovoKnytFokus();
+  /*
+   * Skiftede svaret paa »er tovo forbundet«, er det ikke nok at rette de
+   * knapper, der staar - der staar ingen. Siden blev tegnet, FOER svaret kom
+   * (kaldet venter vi med vilje ikke paa), og `opdaterTimerIkoner()` kan kun
+   * rette noget, der allerede findes. Uden den her gren dukkede ikonerne
+   * foerst op ved naeste sideskift.
+   */
+  if (state.tovo.connected !== varForbundet && state.user && document.getElementById('pageHost')) {
+    tegnSide();
+    return;
+  }
+  opdaterTimerIkoner();
+}
+
+/**
+ * Retter ikonerne i den side, der allerede staar - i stedet for at tegne
+ * hele siden om.
+ *
+ * En fuld optegning ville sende fokus tilbage til toppen og lukke en aaben
+ * inline-redigering, hver gang et svar fra tovo landede. Samme greb som
+ * tovos egen `opdaterStjerneKnapper()`.
+ */
+function opdaterTimerIkoner() {
+  document.querySelectorAll('[data-timer]').forEach((el) => {
+    const id = el.dataset.timer;
+    const item = timerItemFor(id);
+    if (!item) return;
+    const ny = timerKnapHtml(item, Number(el.dataset.timerStr || 15), el.dataset.timerKlasse || '');
+    if (!ny) { el.remove(); return; }
+    const skabelon = document.createElement('div');
+    skabelon.innerHTML = ny;
+    const frisk = skabelon.firstElementChild;
+    // Kun klasse, tekst og indhold skiftes. Erstattede vi HELE knappen, ville
+    // dens hændelseslytter forsvinde med den, og der ville staa et ikon uden
+    // en knap bagved (Sagu, 21-08-2026).
+    el.className = frisk.className;
+    el.title = frisk.title;
+    el.setAttribute('aria-label', frisk.getAttribute('aria-label'));
+    el.innerHTML = frisk.innerHTML;
+  });
+}
+
+/*
+ * Sekunderne paa en koerende knap.
+ *
+ * Ét interval for hele appen, ikke ét pr. knap - og det STOPPES, naar der
+ * ikke koerer noget. En timer, der tikker videre uden noget at vise, er den
+ * slags, man opdager som et fladt batteri.
+ */
+let timerTik = null;
+function tikTimer() {
+  clearInterval(timerTik);
+  timerTik = null;
+  if (!state.tovo.timer) return;
+  timerTik = setInterval(() => {
+    if (!state.tovo.timer) { clearInterval(timerTik); timerTik = null; return; }
+    const tekst = forloebet();
+    document.querySelectorAll('[data-timertid]').forEach((el) => { el.textContent = tekst; });
+  }, 1000);
+}
+
+/** Binder knapperne i den side, der lige er tegnet. */
+function bindTimerKnapper(rod) {
+  (rod || document).querySelectorAll('[data-timer]').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      slaaTimer(el.dataset.timer);
+    });
+  });
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && state.user && state.tovo.connected) hentTovo();
+});
 
 /* ------------------------------------------------------ sidebaren */
 
@@ -2390,8 +2760,7 @@ function fortsaetTilConnector() {
     // jeg slet ikke se appen - kun samtykkesiden.
     if (state.user && fortsaetTilConnector()) return;
     if (state.user) await hentState();
-    // Ét ja/nej, hentet én gang: er Sagu forbundet, faar `*` en raekke mere.
-    if (state.user) tjekSagu();
+    hentSessionsting();
   } catch (ex) {
     document.getElementById('root').innerHTML =
       `<div class="gate"><div class="card"><div class="brand">${icon('logo', 26)} doda</div>
@@ -2433,6 +2802,9 @@ const MODER = {
   '+': { id: 'task', pil: '+ New Task', ph: 'Task title… try !tomorrow at 9',
     // `: area` staar med mellemrum EFTER kolonet, fordi det er saadan den
     // skrives - legenden er en kravspecifikation (§v9) og skal vise formen.
+    // `%` foejes til i `MODE_LEGENDE()`, naar tovo er forbundet - en legende,
+    // der lover mere end koden kan, er den fejl, »/projekt« var i fire
+    // versioner (RUNE-ERFARINGER, doda v9).
     legend: ['/ project', '# context', '! date', '~ hide until', ': area', '> stage'], enter: 'Create' },
   '*': { id: 'note', pil: '* New Note', ph: 'Note title…', legend: ['/ project', '# context'], enter: 'Create' },
   '/': { id: 'project', pil: '/ Projects', ph: 'Find or create a project…', legend: [], enter: 'Open' },
@@ -2627,7 +2999,18 @@ function tegnLegend() {
   const host = document.getElementById('omniLegend');
   if (!host) return;
   const m = omniState.mode ? MODER[omniState.mode] : null;
-  const dele = m ? m.legend : standardLegend();
+  /*
+   * `%` er den ENESTE post i legenden, der afhaenger af noget: uret bor i
+   * tovo, og er den ikke forbundet, findes markoeren ikke. Legenden er en
+   * kravspecifikation - staar der noget, skal det virke.
+   *
+   * Den laegges til HER og ikke i `MODER`, fordi `MODER` er en konstant, der
+   * laeses én gang ved indlaesning, mens forbindelsen kan skifte under en
+   * session (man kan forbinde tovo og gaa direkte til paletten).
+   */
+  const dele = m
+    ? (m.id === 'task' && state.tovo.connected ? m.legend.concat('% start timer') : m.legend)
+    : standardLegend();
   const enter = m ? m.enter : 'Select';
   host.innerHTML = `
     <span class="legend-keys">${dele.map((d) => {
@@ -2667,6 +3050,18 @@ function tegnChips() {
   if (t.due) chips.push([`⏰ ${visDato(t.due.dato)}${t.due.tid ? ` ${t.due.tid}` : ''}`, 'accent']);
   if (t.defer) chips.push([`hidden until ${visDato(t.defer)}`, 'neutral']);
   if (t.note) chips.push(['+ description', 'neutral']);
+  /*
+   * `%` skal SES, foer man trykker Enter. Chip-raekken findes netop for at
+   * afsloere det, der ellers ville ske bag om ryggen paa brugeren - og en
+   * tidtagning, der gaar tavst i gang, er en, man glemmer at stoppe.
+   *
+   * Er tovo ikke forbundet, siges det HER og ikke bagefter: chippen er
+   * stedet, hvor man kan naa at fjerne tegnet igen.
+   */
+  if (t.startTimer && t.kind !== 'note') {
+    chips.push([state.tovo.connected ? '⏺ start timer' : '⏺ no tovo — no timer',
+      state.tovo.connected ? 'accent' : 'neutral']);
+  }
 
   // Gentagelsen skal staa SKREVET UD. Forskellen mellem "fast plan" og "fra
   // fuldfoerelse" er ét udrabstegn i teksten - chippen er det eneste sted,
@@ -3079,7 +3474,33 @@ async function fangstNu(bekraeftet) {
     // Ellers hentes state og liste som foer (p3_lists' indsaetStraks).
     if (indsaetStraks(it)) opfriskBagefter();
     else await genindlaes();
-    toast(it.kind === 'note' ? 'Note saved' : `Added to ${statusNavn(it.status)}`, {
+
+    /*
+     * `%` startede et ur. To ting skal foelge med, og begge blev glemt i
+     * foerste udgave (fundet i browseren 18-09-2026 - serveren gjorde det
+     * rigtige, fladen kastede svaret vaek):
+     *
+     *  - tilstanden, saa ikonet paa den nye raekke er taendt med det samme,
+     *  - og BESKEDEN, saa man kan se, at uret gik i gang. En fangst, der
+     *    tavst starter en tidtagning, er en tidtagning, man glemmer at stoppe.
+     *
+     * Serverens `message` baerer allerede begge dele af historien (»timer
+     * started«, »the one that was running has been stopped«, eller hvorfor
+     * det ikke lykkedes), saa den vises ordret frem for at gaette den igen.
+     */
+    if (svar.timer) { state.tovo.timer = svar.timer; tikTimer(); opdaterTimerIkoner(); }
+    /*
+     * Flaget laeses af SERVERENS svar, ikke af `omniState.tolket`.
+     *
+     * `luk()` er kaldt et par linjer oppe, og den nulstiller omniState - saa
+     * den lokale tolkning er vaek her. Foerste udgave laeste den alligevel og
+     * fik altid `null`: beskeden om, at uret var startet, blev aldrig vist,
+     * mens uret faktisk koerte. Serverens `parsed` er desuden den rigtige
+     * kilde: det er DEN tolkning, der blev handlet paa.
+     */
+    const startede = svar.parsed && svar.parsed.startTimer;
+    toast(startede ? svar.message
+      : (it.kind === 'note' ? 'Note saved' : `Added to ${statusNavn(it.status)}`), {
       label: 'Undo',
       run: async () => { await api('DELETE', `/api/v1/items/${it.id}`, {}); await genindlaes(); },
     });
@@ -3492,6 +3913,12 @@ function elementRaekke(it, i) {
       title="${esc(it.link_url)}" data-stop>${icon('link', 15)}</a>` : ''}
     ${it.note ? `<span class="item-flag" title="Has a description">${icon('note', 15)}</span>` : ''}
     ${it.attachment_count ? `<span class="item-flag" title="${it.attachment_count} attachment(s)">${icon('link', 15)}</span>` : ''}
+    ${/*
+      * Tidtagningen staar YDERST til hoejre - efter flagene, ikke mellem dem.
+      * Flagene er oplysninger om opgaven; det her er den eneste ting i
+      * raekken ud over afkrydsningen, man kan GOERE. De to handlinger hoerer
+      * i hver sin ende, saa et fejlklik ikke rammer den anden.
+      */ ''}${timerKnapHtml(it, 15)}
   </div>`;
 }
 
@@ -3510,6 +3937,10 @@ function bindListe() {
   document.querySelectorAll('.item-row [data-stop]').forEach((el) => {
     el.addEventListener('click', (e) => e.stopPropagation());
   });
+
+  // Tidtagningen. Bindes EFTER `data-stop` ovenfor, saa knappen baade
+  // standser boblingen og gor sit eget.
+  bindTimerKnapper();
 
   document.querySelectorAll('.item-row').forEach((el) => {
     el.addEventListener('click', (ev) => {
@@ -3624,6 +4055,31 @@ async function raekkeTaster(e) {
     mit();
     husk();
     await slet(id);
+    return;
+  }
+
+  /*
+   * `t` for tid. Raekken bliver LIGGENDE - i modsaetning til n/w/s/x er en
+   * tidtagning ikke en afklaring, der flytter opgaven ud af listen, saa der
+   * er ingen nabo at huske.
+   *
+   * `mit()` kaldes KUN, naar der faktisk var noget at goere. Er tovo ikke
+   * forbundet, findes knappen ikke, og saa skal tasten opfoere sig som
+   * ethvert andet ubrugt bogstav paa en raekke - ikke aede haendelsen. En
+   * genvej, der stopper udbredelsen for at gore ingenting, er den slags, der
+   * gor en FREMTIDIG lytter umulig at fejlsoege.
+   *
+   * (Og nej: den falder ikke igennem til »begynd bare at skrive«. Den
+   * handler traekker sig, naar fokus staar inde i et [data-keynav], saa
+   * INTET bogstav fanger, mens en raekke har fokus - maalt 18-09-2026 med
+   * baade `t` og `z`. Det er raekkens praemis, ikke noget `t` indfoerer.)
+   */
+  if (e.key === 't') {
+    const it = state.items.find((x) => x.id === id);
+    if (it && tovoKanTage(it)) {
+      mit();
+      await slaaTimer(id);
+    }
     return;
   }
 
@@ -3782,10 +4238,23 @@ function opfriskBagefter() {
 
 async function fuldfoer(id) {
   const it = state.items.find((x) => x.id === id);
+  // Koerte uret paa DEN her? Saa skal ikonet hentes forfra bagefter: serveren
+  // stopper timeren, naar opgaven afsluttes, men den goer det i baggrunden og
+  // kan ikke naa at svare her.
+  const uretKoerteHer = it ? tovoKoererPaa(it) : false;
   const fortryd = straksVaek(id);
   try {
     await api('POST', `/api/v1/items/${id}/complete`, {});
     if (!fortryd) await genindlaes();
+    /*
+     * Der HENTES, i stedet for at saette `state.tovo.timer = null`.
+     *
+     * Stoppet er »bedste forsoeg« paa serveren - det maa ikke kunne faa en
+     * afkrydsning til at fejle, saa det venter ingen paa. Saetter fladen selv
+     * timeren til null, paastaar den noget, den ikke ved: er tovo nede,
+     * koerer uret videre, og ikonet ville lyve. Vi spoerger i stedet.
+     */
+    if (uretKoerteHer) hentTovo();
     toast(`Done: ${it ? it.title : 'item'}`, {
       label: 'Undo',
       run: async () => { await api('POST', `/api/v1/items/${id}/uncomplete`, {}); await genindlaes(); },
@@ -3803,9 +4272,14 @@ async function saetStatus(id, status) {
   // Bliver elementet paa skaermen (fx "n" paa noget, der allerede er next),
   // er der intet at fjerne - saa gaar den ad den gamle vej.
   const fortryd = VIEW_STATUS[state.view] === status ? null : straksVaek(id);
+  // Samme grund som i fuldfoer(): `done` og `dropped` stopper uret paa
+  // serveren, og fladen skal spoerge om resultatet frem for at gaette det.
+  const uretKoerteHer = it && (status === 'done' || status === 'dropped')
+    ? tovoKoererPaa(it) : false;
   try {
     await api('POST', `/api/v1/items/${id}`, { status });
     if (!fortryd) await genindlaes();
+    if (uretKoerteHer) hentTovo();
     toast(`Moved to ${statusNavn(status)}`);
     if (fortryd) opfriskBagefter();
   } catch (ex) {
@@ -4008,6 +4482,15 @@ async function aabnElement(listeItem) {
       */ ''}
     ${it.created_at ? `<div class="detail-alder meta" title="${esc(fuldDato(it.created_at))}">
       Created ${esc(alder(it.created_at))} · ${esc(kortDato(it.created_at))}</div>` : ''}
+    ${/*
+      * Registreret tid (F10, fase 2). Vaerten staar her og fyldes bagefter -
+      * tallet kommer fra tovo, og ruden maa ikke vente paa en fremmed server,
+      * foer den kan aabne.
+      *
+      * Tom, indtil der ER noget at vise: en opgave, der aldrig er taget tid
+      * paa, skal ikke have en linje, der siger nul. Se `hentForbrug()`.
+      */ ''}
+    <div class="detail-alder meta" id="dTid" hidden></div>
 
     <div class="modal-foot">
       <button class="btn ghost" id="edDelete">Delete</button>
@@ -4081,9 +4564,19 @@ async function aabnElement(listeItem) {
        <button class="chip flat" data-edit="link">edit link</button>`
     : '<button class="chip flat" data-edit="link">+ link</button>'}
       <span style="flex:1"></span>
+      ${/*
+        * Tidtagningen staar lige FOER Focus, fordi de to hoerer sammen: den
+        * ene tager tid uden at rydde skaermen, den anden rydder skaermen og
+        * tager tid. Bagefter er der kun hjaelpeknappen.
+        *
+        * `u.status` og ikke `it.status`: krydser man opgaven af i udkastet
+        * uden at gemme, skal knappen forsvinde med det samme - der er ikke
+        * mere at tage tid paa.
+        */ ''}${timerKnapHtml(Object.assign({}, it, { status: u.status }), 13, 'chip flat')}
       ${it.kind === 'task' && u.status !== 'done' ? `<button class="chip flat" id="dFocus">${icon('clock', 13)} Focus</button>` : ''}
       <button class="chip flat" id="dHelpBtn" aria-label="What is this?">?</button>`;
     bindChips();
+    bindTimerKnapper(host);
   };
 
   /** Bytter en chip ud med det rigtige felt, og tilbage igen naar man er faerdig. */
@@ -4174,6 +4667,10 @@ async function aabnElement(listeItem) {
     });
   }
   tegnChipsRow();
+
+  // Registreret tid. UDEN await: ruden er aabnet, og tallet falder ind, naar
+  // tovo svarer. Ventede vi, ville en langsom tunnel forsinke selve ruden.
+  hentForbrug(it, host.querySelector('#dTid'));
 
   // Forklaringen vises, indtil den er set én gang - som i tingdo.
   try {
@@ -4695,6 +5192,25 @@ function sideSettings() {
       sent back to this browser.</p>
     </div>
 
+    <div class="card"><h2>tovo</h2>
+      <p class="lead" style="margin:6px 0 0">tovo is the sister app where the hours live.
+      Connect it, and every task gets a record button — in the lists and inside the task —
+      so you can start the clock without leaving doda. As with Sagu, the two are tied
+      together with a <strong>link</strong> and nothing is synchronised: doda asks tovo
+      to start a timer, and that is all either of them does to the other.</p>
+      <div id="tovoBox">Loading…</div>
+      <p class="gate-note" style="text-align:left">In tovo: Settings → Access keys →
+      create a <strong>full</strong> key. It needs to be that wide: the bridge both reads
+      which timer is running and starts new ones. The key stays on this server and is
+      never sent back to this browser.</p>
+      <p class="gate-note" style="text-align:left">The first time you take time on a task,
+      doda creates the matching task in tovo and remembers it — so picking the same task
+      up tomorrow adds to the same total instead of making a second one.
+      <strong>Renaming it in doda does not rename it in tovo</strong>: saving a task there
+      saves the whole thing, and a title-only write would wipe the estimate and the note
+      that only tovo knows about.</p>
+    </div>
+
     <div class="card"><h2>Notion</h2>
       <p class="lead" style="margin:6px 0 0">Connect Notion, and you can search your
       pages from inside doda when you link one to a task — and the chip gets the page's
@@ -4977,6 +5493,7 @@ function bindSettings() {
   bindKode();
   bindTotp();
   bindSagu();
+  bindTovo();
   bindNotion();
   tegnPasskeys();
   tegnForbindelser();
@@ -5432,6 +5949,30 @@ function redigerProjekt(p) {
     </div>
     <div class="field"><span>Link</span>
       <div class="chiprow" id="pLinkRow" style="margin-top:2px"></div></div>
+    ${/*
+      * Projektkoblingen til tovo (F10). Den staar HER og ikke paa
+      * indstillingssiden: valget hoerer til projektet, og en fane med en
+      * liste over samtlige projekter ville vaere et andet sted at
+      * vedligeholde det samme.
+      *
+      * Feltet vises kun, naar tovo er forbundet OG har projekter. Et tomt
+      * felt, der altid staar der, er et spoergsmaal uden et svar.
+      */ ''}
+    ${state.tovo.connected && state.tovo.projects.length ? `
+    <label class="field"><span>Time goes on the tovo project</span>
+      <select class="input" id="pTovo"><option value="">— none —</option>
+        ${state.tovo.projects.map((t) => `<option value="${esc(t.id)}"${
+  !nyt && t.id === p.tovo_project_id ? ' selected' : ''}>${esc(t.name)}${
+  t.customer ? ` · ${esc(t.customer)}` : ''}</option>`).join('')}
+      </select></label>
+    ${/*
+      * Forklaringen staar som `gate-note` under feltet - IKKE som en
+      * `.hint` inde i etiketten. `.hint` er optaget: den er `position:
+      * fixed` og tegner »type to capture«-maerket nede i hoejre hjoerne, saa
+      * teksten ville lande der i stedet for i ruden.
+      */ ''}
+    <p class="gate-note" style="text-align:left;margin-top:-8px">Without this, the hours
+    land in tovo's <em>no project</em> — and the weekly report cannot be used for anything.</p>` : ''}
     <div class="modal-foot">
       ${nyt ? '' : '<button class="btn ghost" id="pDelete">Delete</button>'}
       <span style="flex:1"></span>
@@ -5474,6 +6015,21 @@ function redigerProjekt(p) {
         id = r.project.id;
       }
       await api('POST', `/api/v1/projects/${id}`, felter);
+      /*
+       * tovo-koblingen gemmes for sig, EFTER projektet.
+       *
+       * Den er ikke et felt paa projektet i dodas forstand - den er en
+       * kobling til en anden app, og den har sin egen rute, som proever, at
+       * projektet faktisk findes i tovo. Fejler den, er projektet stadig
+       * gemt: man har rettet et navn og skal ikke miste det, fordi en
+       * fremmed server var nede.
+       */
+      const tv = host.querySelector('#pTovo');
+      if (tv && tv.value !== (nyt ? '' : (p.tovo_project_id || ''))) {
+        try {
+          await api('POST', '/api/v1/tovo/project', { projectId: id, tovoProjectId: tv.value });
+        } catch (ex) { toast(`The project was saved, but the tovo link was not: ${ex.message}`); }
+      }
       luk();
       await hentState();
       opdaterNav();
@@ -7802,7 +8358,7 @@ async function sideReview() {
                er en kontakt, der ikke kan goere noget. -->
           <label class="field" style="margin-top:16px">
             <span>Also push me a notification
-              <span class="hint">The banner needs you to open doda — and the review is
+              <span class="fieldhint">The banner needs you to open doda — and the review is
               the one thing you forget to open anything for. Off unless you turn it on.</span></span>
             <span style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
               <button class="btn ${d.push ? 'primary' : ''}" id="revPush">
@@ -7964,7 +8520,25 @@ function reviewTrin(id, d) {
 /* Timeren skal blive ved med at taelle, selv om man skifter skaerm
    (handover §5.3). Derfor gemmes STARTTIDSPUNKTET, ikke en tael-vaerdi -
    sa er den rigtig, uanset hvad der er sket imellemtiden. */
-const fokus = { itemId: null, start: 0, timer: null };
+const fokus = { itemId: null, start: 0, timer: null, tovoTaskId: null };
+
+/*
+ * Hvor uret taeller fra (F10).
+ *
+ * Er tovo forbundet, og koerer tidtagningen paa DENNE opgave, er tovos
+ * starttidspunkt sandheden. Ellers er det det lokale, som foer.
+ *
+ * Det er hele forskellen paa de to udgaver af fokusskaermen: uden tovo er
+ * uret en taelling i denne fane, som forsvinder med den. Med tovo er det en
+ * tidspost paa en server, og saa skal skaermen vise DEN - ikke sit eget tal
+ * ved siden af. To ure paa den samme opgave, der viser hver sit, er vaerre
+ * end ét ur.
+ */
+function fokusStartMs() {
+  const t = state.tovo.timer;
+  if (t && fokus.tovoTaskId && t.taskId === fokus.tovoTaskId) return t.startedAt * 1000;
+  return fokus.start;
+}
 
 function startFokus(it) {
   fokus.itemId = it.id;
@@ -7973,22 +8547,63 @@ function startFokus(it) {
   // elementer, saa saa snart man navigerer vaek, kan den ikke slaas op.
   fokus.titel = it.title;
   fokus.note = it.note || '';
+  fokus.tovoTaskId = it.tovo_task_id || null;
   try {
     localStorage.setItem('doda_focus', JSON.stringify({
       id: it.id, start: fokus.start, title: it.title, note: fokus.note,
     }));
   } catch { /* privat tilstand */ }
-  tegnFokus();
+  // Er tovo forbundet, og koerer der ikke allerede tid paa opgaven, startes
+  // den. `slaaTimer` tegner selv skaermen om, naar svaret er kommet.
+  if (tovoKanTage(it) && !tovoKoererPaa(it)) slaaTimer(it.id);
+  else tegnFokus();
 }
 
-function stopFokus() {
+/**
+ * Forlader fokus.
+ *
+ * `medUret` styrer, om tovos tidtagning stoppes med. Den er `true` fra baade
+ * Stop og Done - men IKKE fra »Keep it running«, som kun forlader skaermen.
+ *
+ * Stop og Done er med vilje to ting: man kan vaere noedt til at holde op
+ * uden at blive faerdig, og saa skal opgaven blive staaende aaben, saa man
+ * kan tage fat paa den igen i morgen (Andreas, 18-09-2026). Tiden lander som
+ * to poster paa den samme tovo-opgave, og tovo laegger dem sammen.
+ */
+function stopFokus(medUret = true) {
   const paaSkaerm = state.view === 'focus';
+  const id = fokus.itemId;
+  /*
+   * tovo-id'et laeses FOER `fokus` ryddes - ellers er der intet at
+   * sammenligne med, naar vi skal afgoere, om uret hoerer til DEN her opgave.
+   *
+   * Reserven er listen: er `fokus.tovoTaskId` ikke sat endnu (fokus lige
+   * genskabt fra localStorage, eller startet for et oejeblik siden), kan
+   * opgaven selv kende sin tovo-opgave.
+   */
+  const it = id ? state.items.find((x) => x.id === id) : null;
+  const tovoId = fokus.tovoTaskId || (it && it.tovo_task_id) || null;
+
   fokus.itemId = null;
+  fokus.tovoTaskId = null;
   clearInterval(fokus.timer);
   fokus.timer = null;
   try { localStorage.removeItem('doda_focus'); } catch { /* ligegyldigt */ }
   const el = document.getElementById('focusBar');
   if (el) el.remove();
+  /*
+   * Uret stoppes FOER vi navigerer, saa ikonerne tegnes ind i den side, der
+   * staar. Og der bruges `stopTimerNu()` - IKKE `slaaTimer()`: den sidste er
+   * en vippe, og her er svaret allerede afgjort. Med vippen ville et Stop,
+   * trykket fra en skaerm hvor opgaven ikke staar i listen, have STARTET
+   * uret i stedet.
+   *
+   * Kun naar tovos ur faktisk koerer paa netop den her opgave. Koerer det paa
+   * en anden, skal den blive ved.
+   */
+  if (medUret && tovoId && state.tovo.timer && state.tovo.timer.taskId === tovoId) {
+    stopTimerNu();
+  }
   // Bliver man staaende, ser man paa en skaerm uden en opgave.
   if (paaSkaerm) gaaTil('next');
 }
@@ -8001,8 +8616,34 @@ function gendanFokus() {
     fokus.start = g.start;
     fokus.titel = g.title;
     fokus.note = g.note || '';
+    /*
+     * Koblingen til tovo genfindes IKKE fra localStorage - den hentes af
+     * `hentTovo()`, som er i gang samtidig. Ligger der en koerende timer,
+     * finder `tovoKnytFokus()` den, naar svaret kommer. At gemme tovo-id'et
+     * i browseren ville vaere en tredje kopi af koblingen, der kunne blive
+     * uenig med de to andre.
+     */
+    fokus.tovoTaskId = null;
     tegnFokus();
   } catch { /* ligegyldigt */ }
+}
+
+/**
+ * Binder en genskabt fokus-session til den timer, tovo faktisk har koert.
+ *
+ * Kaldes af `hentTovo()`, naar svaret er kommet. Uden den ville uret efter
+ * et genindlaes taelle fra det tidspunkt, localStorage husker - og det er
+ * det rigtige tal kun, saa laenge browseren har vaeret aaben hele tiden.
+ * Lukkede man fanen og kom tilbage dagen efter, stod der et doegn.
+ */
+function tovoKnytFokus() {
+  if (!fokus.itemId || !state.tovo.timer) return;
+  const it = state.items.find((x) => x.id === fokus.itemId);
+  const tovoId = it ? it.tovo_task_id : null;
+  if (tovoId && tovoId === state.tovo.timer.taskId) {
+    fokus.tovoTaskId = tovoId;
+    tegnFokus();
+  }
 }
 
 /** Sekunder som ur. Bruges baade af linjen og af skaermen, saa de ikke driver. */
@@ -8026,7 +8667,9 @@ const fokusTitel = () => fokus.titel
  */
 function sideFokus() {
   if (!fokus.itemId) return '<div class="wrap"><p class="empty">Nothing in focus.</p></div>';
-  const sek = Math.floor((Date.now() - fokus.start) / 1000);
+  const sek = Math.floor((Date.now() - fokusStartMs()) / 1000);
+  const iTovo = !!(fokus.tovoTaskId && state.tovo.timer
+    && state.tovo.timer.taskId === fokus.tovoTaskId);
   return `<div class="wrap focuspage">
     <div class="focusclock" id="focusBig">${esc(fokusUr(sek))}</div>
     <h1 class="focusname">${esc(fokusTitel())}</h1>
@@ -8036,12 +8679,21 @@ function sideFokus() {
       <button class="btn" id="fpStop">Stop</button>
       <button class="btn ghost" id="fpBack">Keep it running</button>
     </div>
+    ${/*
+      * Sig hvad de tre knapper GOER ved tiden, naar den bliver registreret et
+      * andet sted. Uden linjen kan man ikke vide, om »Stop« ogsaa lukker
+      * opgaven - og det er praecis det spoergsmaal, man staar med, naar man
+      * er noedt til at holde op uden at vaere faerdig.
+      */ ''}
+    ${iTovo ? `<p class="gate-note focushint">The time is being recorded in tovo.
+      <strong>Stop</strong> ends the entry and leaves the task open, so you can pick it up
+      again later. <strong>Done</strong> stops it and closes the task.</p>` : ''}
   </div>`;
 }
 
 function bindFokus() {
   const stop = document.getElementById('fpStop');
-  if (stop) stop.addEventListener('click', stopFokus);
+  if (stop) stop.addEventListener('click', () => stopFokus(true));
   const back = document.getElementById('fpBack');
   // Timeren loeber videre - man forlader kun skaermen, ikke fokus.
   if (back) back.addEventListener('click', () => gaaTil('next'));
@@ -8049,7 +8701,7 @@ function bindFokus() {
   if (done) {
     done.addEventListener('click', async () => {
       const id = fokus.itemId;
-      stopFokus();
+      stopFokus(true);
       await fuldfoer(id);
     });
   }
@@ -8068,7 +8720,7 @@ function tegnFokus() {
     document.body.appendChild(el);
   }
   const tegn = () => {
-    const sek = Math.floor((Date.now() - fokus.start) / 1000);
+    const sek = Math.floor((Date.now() - fokusStartMs()) / 1000);
     const stor = document.getElementById('focusBig');
     if (stor) stor.textContent = fokusUr(sek);
     const b = document.getElementById('focusBar');
@@ -8080,10 +8732,10 @@ function tegnFokus() {
     // Titlen foerer tilbage til skaermen - ellers er der ingen vej tilbage,
     // naar man foerst har navigeret vaek.
     b.querySelector('.focustitle').addEventListener('click', () => gaaTil('focus'));
-    b.querySelector('#focusStop').addEventListener('click', stopFokus);
+    b.querySelector('#focusStop').addEventListener('click', () => stopFokus(true));
     b.querySelector('#focusDone').addEventListener('click', async () => {
       const id = fokus.itemId;
-      stopFokus();
+      stopFokus(true);
       await fuldfoer(id);
     });
   };
@@ -9216,6 +9868,116 @@ async function bindSagu() {
   try { tegn(await api('GET', '/api/v1/sagu')); } catch { boks.innerHTML = ''; }
 }
 
+/**
+ * tovo-kortet (F10). Samme moenster som Sagu: adressen og noeglen gaar IND,
+ * og kun `connected` kommer ud.
+ *
+ * Den ene forskel er, at der ikke er noget at VAELGE her. Sagu skal vide,
+ * hvilken notesbog en hurtig note lander i; tovo-koblingen staar paa hvert
+ * projekt for sig og hoerer derfor hjemme paa projektet - ikke paa en
+ * indstillingsside, hvor man skulle vedligeholde en liste over alting.
+ */
+async function bindTovo() {
+  const boks = document.getElementById('tovoBox');
+  if (!boks) return;
+
+  const tegn = (d) => {
+    const antal = (d.projects || []).length;
+    boks.innerHTML = d.connected
+      ? `<div class="keyrow" style="margin-top:12px">
+           <div class="keyrow-main">
+             <div class="keyrow-name">Connected · ${esc(d.url)}</div>
+             <div class="meta">${antal} project${antal === 1 ? '' : 's'} a doda project can point at</div>
+           </div>
+           <div class="keyrow-btns">
+             <button class="btn ghost" id="tvNy">Refresh</button>
+             <button class="btn ghost" id="tvOff">Disconnect</button>
+           </div>
+         </div>
+         <p class="gate-note" style="text-align:left">Pick which tovo project a doda
+         project belongs to on the project itself. Without that, the hours land in tovo's
+         <em>no project</em> — and the weekly report, which is the whole reason tovo
+         exists, cannot be used for anything.</p>`
+      : `<form id="tvForm" class="keyform" style="margin-top:12px">
+           <input class="input" id="tvUrl" placeholder="https://tovo.example.com"
+             autocomplete="off" spellcheck="false" required>
+           <input class="input" id="tvKey" type="password" autocomplete="off"
+             placeholder="a full access key" required>
+           <button class="btn primary" type="submit">Connect</button>
+         </form>
+         <p class="gate-error" id="tvErr" hidden></p>`;
+
+    const ny = boks.querySelector('#tvNy');
+    if (ny) {
+      ny.addEventListener('click', async () => {
+        const foer = antal;
+        ny.disabled = true;
+        ny.textContent = 'Refreshing…';
+        try {
+          const frisk = await api('POST', '/api/v1/tovo/refresh', {});
+          const efter = (frisk.projects || []).length;
+          tegn(frisk);
+          // Sig hvad der SKETE. "Refreshed" alene lader brugeren gaette, om
+          // knappen overhovedet gjorde noget (RUNE-ERFARINGER, MsGraphBud v8).
+          const d2 = efter - foer;
+          toast(d2 > 0 ? `${d2} new project${d2 === 1 ? '' : 's'} — ${efter} in total`
+            : d2 < 0 ? `${-d2} project${d2 === -1 ? '' : 's'} gone — ${efter} left`
+              : `No change — still ${efter} project${efter === 1 ? '' : 's'}`);
+          // Listen kan have mistet et projekt, et doda-projekt pegede paa.
+          // Serveren har ryddet koblingen; fladen skal se det samme.
+          await hentState();
+        } catch (ex) {
+          ny.disabled = false;
+          ny.textContent = 'Refresh';
+          toast(ex.message);
+        }
+      });
+    }
+    const fra = boks.querySelector('#tvOff');
+    if (fra) {
+      fra.addEventListener('click', async () => {
+        // Sig hvad der SKER med det, der allerede findes - ellers toer man
+        // ikke trykke (RUNE-ERFARINGER, doda v35).
+        if (!window.confirm('Disconnect tovo? Every hour you have recorded stays in tovo, '
+          + 'and doda remembers which task is which — so connecting again picks up where '
+          + 'you left off. Only the record buttons go away.')) return;
+        try {
+          tegn(await api('DELETE', '/api/v1/tovo', {}));
+          state.tovo = { connected: false, timer: null, url: '', projects: [] };
+          opdaterTimerIkoner();
+        } catch (ex) { toast(ex.message); }
+      });
+    }
+    const form = boks.querySelector('#tvForm');
+    if (form) {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const fejl = boks.querySelector('#tvErr');
+        fejl.hidden = true;
+        const knap = form.querySelector('button');
+        knap.disabled = true;
+        knap.textContent = 'Testing…';
+        try {
+          tegn(await api('POST', '/api/v1/tovo', {
+            url: boks.querySelector('#tvUrl').value.trim(),
+            key: boks.querySelector('#tvKey').value.trim(),
+          }));
+          // Knapperne skal frem uden et genindlaes - forbindelsen er jo lige
+          // blevet proevet, saa der er ingen tvivl at vente paa.
+          await hentTovo();
+        } catch (ex) {
+          fejl.textContent = ex.message;
+          fejl.hidden = false;
+          knap.disabled = false;
+          knap.textContent = 'Connect';
+        }
+      });
+    }
+  };
+
+  try { tegn(await api('GET', '/api/v1/tovo')); } catch { boks.innerHTML = ''; }
+}
+
 async function bindNotion() {
   const boks = document.getElementById('notionBox');
   if (!boks) return;
@@ -9497,9 +10259,42 @@ const GUIDE_DELE = [
             lead: 'One task, everything else stepped back.',
             raekker: [
               ['TIMER', 'It starts itself and survives closing the app: what is kept is when you began.'],
+              /*
+               * Raekken sagde »Nothing is recorded and nothing is reported«.
+               * Med tovo forbundet er det ikke laengere sandt, og en
+               * forklaring, der er blevet forkert, er vaerre end ingen
+               * (DESIGN.md 7i). De to udgaver staar derfor hver for sig.
+               */
               ['none', 'Nothing is recorded and nothing is reported.'],
               ['esc', 'Leave again. The task is unchanged.'],
             ],
+            naar: () => !state.tovo.connected,
+          },
+          {
+            titel: 'Focus',
+            lead: 'One task, everything else stepped back — and the clock runs in tovo.',
+            raekker: [
+              ['TIMER', 'It reads its time from tovo, so it is right even after you close the app.'],
+              ['STOP', 'Ends the entry and leaves the task open — for when you have to stop without finishing.'],
+              ['DONE', 'Stops the clock and closes the task.'],
+              ['esc', 'Leave the screen. The clock keeps running.'],
+            ],
+            naar: () => state.tovo.connected,
+          },
+          {
+            titel: 'Time',
+            lead: 'The record button on a task starts a timer in tovo, where your hours live.',
+            raekker: [
+              ['t', 'Start or stop it from the list, without opening the task.'],
+              ['%', 'Capture with a % and the clock starts the moment the task exists.'],
+              ['ONE', 'Only one timer runs at a time — starting a second one stops the first, and the button says so before you press it.'],
+              ['DONE', 'Ticking a task off stops its clock. Ticking off a different one does not.'],
+              ['AGAIN', 'Picking the same task up tomorrow adds to its total instead of making a second task.'],
+              ['TOTAL', 'How long you have spent on a task is at the bottom of the task, counted by tovo.'],
+              ['PROJECT', 'Which tovo project the hours land on is set on the doda project.'],
+            ],
+            kort: 'nothing is synchronised — doda asks tovo to start a timer, and that is all either of them does to the other.',
+            naar: () => state.tovo.connected,
           },
           {
             titel: 'The weekly review',
@@ -9682,7 +10477,16 @@ function sideGuide() {
       </div>
       ${d.grupper.map((g) => `
         ${g.gruppe ? `<div class="guide-group">${esc(g.gruppe)}</div>` : ''}
-        ${g.emner.filter((e) => e.titel !== 'Notes' || state.notesEnabled).map((e) => {
+        ${/*
+          * `naar` er en valgfri betingelse pr. emne: staar den, og er den
+          * falsk, findes emnet ikke paa siden. Den blev sat ind, fordi
+          * tidtagningen kun eksisterer, naar tovo er forbundet - og guiden
+          * maa ALDRIG love mere, end koden kan (regel 1 oeverst i filen).
+          * Noterne havde deres egen betingelse skrevet i haanden; nu er der
+          * ét sted, en tredje kan skrives.
+          */ ''}
+        ${g.emner.filter((e) => (e.titel !== 'Notes' || state.notesEnabled)
+    && (!e.naar || e.naar())).map((e) => {
     if (e.syntaks) {
       return `<h2>${esc(e.titel)}</h2><p class="lead guide-lead">${e.lead}</p>
         <div class="card">${syntaksTabel()}

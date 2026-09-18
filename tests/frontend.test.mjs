@@ -200,3 +200,46 @@ test('alderen står i en enhed, der er til at forholde sig til', () => {
   // Et ur, der er en smule foran serverens, maa ikke give »-1 hours ago«.
   assert.equal(alder(NU + 30, NU), 'just now');
 });
+
+/*
+ * `stopFokus` maa ALDRIG gaa gennem `slaaTimer`.
+ *
+ * `slaaTimer` er en VIPPE: den laeser tilstanden og afgoer selv, om der skal
+ * startes eller stoppes. `stopFokus` rydder `fokus`, FOER den beder om at
+ * stoppe - og saa kan vippen ikke laengere se, at uret hoerte til den opgave.
+ * Den gaettede saa »start«, og »Stop« paa fokuslinjen SATTE TIDTAGNINGEN I
+ * GANG i stedet for at standse den.
+ *
+ * Det ramte kun, naar opgaven ikke stod i den liste, man havde paa skaermen -
+ * altsaa netop naar man havde forladt fokusskaermen og trykkede Stop paa
+ * baandet. Fundet ved at laese diffen, ikke ved at bruge appen (18-09-2026).
+ *
+ * Kontrollen er en KILDEKONTROL, fordi beslutningen ikke kan drives i node:
+ * den afhaenger af DOM, state og en fremmed server. Men reglen kan skrives
+ * ned, og det er den, der staar her: er svaret allerede afgjort af
+ * kaldsstedet, bruger man `stopTimerNu()`. En vippe hoerer kun hjemme, hvor
+ * man faktisk mener »skift«.
+ */
+test('stopFokus stopper uret direkte - ikke gennem vippen', () => {
+  const kode = readFileSync(join(ROD, 'app/public/app.js'), 'utf8');
+  const m = /function stopFokus\([\s\S]*?\n\}/.exec(kode);
+  assert.ok(m, 'stopFokus kunne ikke findes i app.js');
+  /*
+   * KOMMENTARERNE SKAL VAEK FOERST. Funktionens egen kommentar forklarer, at
+   * den IKKE bruger `slaaTimer()` - og uden strimlingen laeser kontrollen
+   * netop den saetning som et kald og faelder den rigtige kode. Det er anden
+   * gang samme dag, en kildekontrol af min egen er faldet i det (foerste
+   * gang: CSS-parseren i fastnavne.test.mjs).
+   */
+  const krop = m[0].replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/.*$/gm, ' ');
+
+  assert.equal(/\bslaaTimer\s*\(/.test(krop), false,
+    'stopFokus kalder slaaTimer() - den er en vippe og kan gaette "start", '
+    + 'naar fokus-tilstanden er ryddet. Brug stopTimerNu().');
+  assert.ok(/\bstopTimerNu\s*\(/.test(krop),
+    'stopFokus skal stoppe uret med stopTimerNu()');
+
+  // Og vippen skal stadig findes, saa reglen ikke er "ingen af delene".
+  assert.ok(/function stopTimerNu\b/.test(kode) && /function slaaTimer\b/.test(kode),
+    'begge funktioner skal findes - de svarer paa hver sit spoergsmaal');
+});

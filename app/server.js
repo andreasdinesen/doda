@@ -341,6 +341,35 @@ const MIGRATIONS = [
       );
     `);
   },
+
+  function m14(d) {
+    /*
+     * Broen til tovo (F10). To kolonner, ingen tabel.
+     *
+     * `items.tovo_task_id` er opgavens modstykke i tovo. Den ligger HER og
+     * ikke i tovo som et `dodaTaskId`, fordi koblingen skal have ÉN ejer:
+     * doda er den, der spoerger, og tovo skal kunne blive ved med ikke at
+     * vide, at doda findes. Ligger noeglen begge steder, kan de to blive
+     * uenige, og saa er der ingen at spoerge.
+     *
+     * At den staar tom betyder »der er aldrig taget tid paa den her« - ikke
+     * »ikke forbundet«. Derfor overlever den ogsaa en frakobling: kobler man
+     * til igen, fortsaetter tiden paa de samme opgaver i stedet for at starte
+     * en ny raekke dubletter.
+     *
+     * `projects.tovo_project_id` er projektkoblingen. Uden den lander al tid
+     * i tovos »no project«, og ugerapporten - som er hele grunden til, at
+     * tovo findes - kan ikke bruges til noget.
+     *
+     * Ingen UNIQUE paa tovo_task_id: to doda-opgaver MAA pege paa den samme
+     * tovo-opgave, hvis Andreas selv kobler dem sammen senere. En spaerre
+     * her ville forbyde noget, der ikke er forkert.
+     */
+    d.exec(`
+      ALTER TABLE items ADD COLUMN tovo_task_id TEXT;
+      ALTER TABLE projects ADD COLUMN tovo_project_id TEXT;
+    `);
+  },
 ];
 
 /*
@@ -351,6 +380,9 @@ const MIGRATIONS = [
  * hemmelighed til - og det opdages ikke, for alt ser ud til at virke.
  */
 const HEMMELIGE_SETTINGS = new Set(['ical_token', 'notion_token', 'vapid_private', 'sagu_key',
+  // tovo-noeglen er `full` og kan alt i tidsregistreringen. Den skal ud af
+  // baade GET /settings og eksporten, praecis som Sagus.
+  'tovo_key',
   // TOTP-hemmeligheden ER det andet led. Kan den laeses, er 2FA'en pynt.
   'totp_secret']);
 
@@ -853,7 +885,7 @@ function hentProjekter() {
   // items_projekt- og items_status-indekserne.
   return db.prepare(`
     SELECT p.id, p.name, p.outcome, p.area_id, p.parent_id, p.status, p.seq, p.reviewed_at,
-           p.link_url, p.link_title,
+           p.link_url, p.link_title, p.tovo_project_id,
            (SELECT COUNT(*) FROM items i
              WHERE i.project_id = p.id AND i.deleted = 0 AND i.kind = 'task'
                AND i.status = 'next'
@@ -924,7 +956,7 @@ const ITEM_FELTER = `
   i.id, i.kind, i.status, i.title, i.note, i.project_id, i.area_id,
   i.due_date, i.due_time, i.defer_date, i.waiting_for, i.seq,
   i.recurrence_id, i.skipped, i.created_at, i.updated_at, i.completed_at,
-  i.link_url, i.link_title, i.starred`;
+  i.link_url, i.link_title, i.starred, i.tovo_task_id`;
 
 /** Haenger konteksterne pa en raekke elementer i ÉT opslag, ikke ét pr. element. */
 function medKontekster(raekker) {
@@ -1386,8 +1418,79 @@ function rykGentagelse(r, fraDato, taelSomSprunget) {
  * nu her paa serveren, hvor enhver klient - ogsaa den, der skrives i morgen -
  * ender det samme sted.
  */
+/*
+ * Et ur, der koerer paa en opgave, man lige har krydset af, skal stoppe.
+ *
+ * Den ligger i `fuldfoerItem` og ikke i kaldsstederne - det er dodas egen
+ * lektie fra v94, hvor »fra fuldfoerelse« doede stille, fordi status-chippen
+ * gik uden om afslutningen. Herfra daekker den ALLE veje: ringen i listen,
+ * ringen i ruden, status-chippen, `/complete`, en iOS-genvej og Claude.
+ *
+ * To ting, den IKKE goer:
+ *
+ *  - **Den venter ikke.** En afkrydsning maa aldrig blive langsom - eller
+ *    fejle - fordi en anden server ikke svarer. Er tovo nede, staar timeren
+ *    og koerer, og det kan ses paa ikonet; det er en irritation, ikke et
+ *    tab. Derfor ingen `await` og en `catch`, der kun logger.
+ *  - **Den stopper ikke bare »det, der koerer«.** `stopHvisDenne` laeser
+ *    foerst: afslutter man opgave A, mens uret loeber paa B, skal B blive
+ *    ved. Et bart stop ville lukke en tidtagning, ingen bad om.
+ */
+function stopUretFor(item) {
+  if (!tovoForbundet() || !item || !item.tovo_task_id) return;
+  tovo.stopHvisDenne(item.tovo_task_id).then((r) => {
+    if (r.fejl) { logError(`tovo: kunne ikke stoppe uret paa ${item.id}: ${r.fejl}`); return; }
+    if (r.stoppet) audit('tovo-ur-stoppet', item.id, 'opgave afsluttet');
+  }).catch((err) => logError(`tovo: ${err && err.message}`));
+}
+
+/**
+ * Starter uret paa en doda-opgave - find eller opret modstykket i tovo.
+ *
+ * Tre trin, og raekkefoelgen er hele pointen:
+ *
+ *  1. Har opgaven allerede et modstykke i tovo, bruges DET. Uden det ville
+ *     hver ny tidtagning oprette en dublet, og »hvor lang tid gik der paa den
+ *     her?« ville ikke kunne besvares.
+ *  2. Svarer tovo 404, er opgaven slettet DÉR. Saa oprettes den igen, og uret
+ *     startes. Alternativet - en fejlbesked - ville efterlade en knap, der
+ *     ikke kan bruges, og ingen vej videre uden at koble fra og til.
+ *  3. Id'et gemmes FOERST, naar tovo har svaret. Gemte vi det foer, ville en
+ *     fejlet oprettelse efterlade en peger paa noget, der ikke findes - og
+ *     trin 1 ville bruge den igen og igen.
+ *
+ * Den ligger her og ikke i ruten, fordi der nu er TO veje ind: knappen og
+ * `%` i fangstlinjen. To udgaver ville kunne blive uenige om, hvornaar en
+ * dublet oprettes - og det er ikke noget, man opdager foer i en rapport.
+ */
+async function startUretFor(item) {
+  if (!item || item.kind !== 'task') return { fejl: 'Time is kept on tasks, not on notes.' };
+  const projekt = item.project_id
+    ? db.prepare('SELECT tovo_project_id FROM projects WHERE id = ? AND deleted = 0').get(item.project_id)
+    : null;
+  const tovoProjekt = (projekt && projekt.tovo_project_id) || null;
+
+  let taskId = item.tovo_task_id || '';
+  let r = taskId ? await tovo.start(taskId) : { borte: true };
+  if (r.borte) {
+    const ny = await tovo.opretOpgave(item.title, tovoProjekt);
+    if (ny.fejl) return { fejl: ny.fejl };
+    taskId = ny.taskId;
+    r = await tovo.start(taskId);
+    // To 404'ere i traek er ikke »slettet imens« - det er noget galt.
+    if (r.borte) return { fejl: 'tovo created the task but would not start a timer on it.' };
+  }
+  if (r.fejl) return { fejl: r.fejl };
+
+  if (taskId !== item.tovo_task_id) {
+    db.prepare('UPDATE items SET tovo_task_id = ? WHERE id = ?').run(taskId, item.id);
+  }
+  return { timer: r.timer, stoppede: r.stoppede, taskId };
+}
+
 function fuldfoerItem(item) {
   const faerdig = opdaterItem(item.id, { status: 'done', completed_at: now() });
+  stopUretFor(item);
   if (!item.recurrence_id) return { item: faerdig, next: null };
   const r = hentGentagelse(item.recurrence_id);
   if (!r) return { item: faerdig, next: null };
@@ -1406,6 +1509,7 @@ function fuldfoerItem(item) {
  */
 function springItemOver(item) {
   const droppet = opdaterItem(item.id, { status: 'dropped', completed_at: now(), skipped: 1 });
+  stopUretFor(item);
   if (!item.recurrence_id) return { item: droppet, next: null };
   const r = hentGentagelse(item.recurrence_id);
   if (!r) return { item: droppet, next: null };
@@ -1427,10 +1531,22 @@ function opdaterMedGentagelse(id, felter) {
   const foer = hentItem(id);
   if (!foer) return null;
   const nyStatus = felter.status;
-  const afsluttes = !!foer.recurrence_id
-    && (nyStatus === 'done' || nyStatus === 'dropped')
+  const lukkes = (nyStatus === 'done' || nyStatus === 'dropped')
     && foer.status !== 'done' && foer.status !== 'dropped';
-  if (!afsluttes) return { item: opdaterItem(id, felter), next: null };
+  const afsluttes = !!foer.recurrence_id && lukkes;
+  if (!afsluttes) {
+    /*
+     * Den gren, der IKKE gaar gennem en afslutning: en almindelig opgave,
+     * der saettes til done eller dropped med status-chippen. Uret skal
+     * stoppe her ogsaa - `fuldfoerItem` og `springItemOver` ser den aldrig,
+     * fordi der ikke er en gentagelse at rulle.
+     *
+     * `dropped` taeller med: »jeg laver den ikke alligevel« er ogsaa en
+     * grund til at holde op med at tage tid paa den.
+     */
+    if (lukkes) stopUretFor(foer);
+    return { item: opdaterItem(id, felter), next: null };
+  }
 
   // Resten af rettelserne FOERST - titel, noter, datoer - saa den nye
   // forekomst ser samme element, som brugeren lige har gemt.
@@ -1652,6 +1768,26 @@ function gemNotesboeger(boeger) {
   if (valgt && !liste.some((b) => b.id === valgt)) {
     db.prepare("DELETE FROM settings WHERE key = 'sagu_notebook'").run();
   }
+}
+
+/*
+ * tovos projekter, af samme grund: vaelger man projekt paa et doda-projekt,
+ * skal listen vaere der med det samme. Bruges af BAADE connect og refresh.
+ *
+ * Og af samme grund som notesboegerne ryddes en kobling til et projekt, der
+ * ikke laengere findes. Ellers ville tiden lande i tovos »no project«, mens
+ * doda blev ved med at vise et projektnavn, der var slettet - og ingenting
+ * ville fejle. Forskellen fra Sagu er, at valget her staar paa HVERT projekt
+ * og ikke i én indstilling, saa oprydningen er en UPDATE over tabellen.
+ */
+function gemTovoProjekter(projekter) {
+  const liste = projekter || [];
+  setSetting('tovo_projects', JSON.stringify(liste));
+  const kendte = liste.map((p) => p.id);
+  const huller = kendte.map(() => '?').join(',');
+  db.prepare(`UPDATE projects SET tovo_project_id = NULL
+               WHERE tovo_project_id IS NOT NULL
+                 ${kendte.length ? `AND tovo_project_id NOT IN (${huller})` : ''}`).run(...kendte);
 }
 
 /**
@@ -2036,9 +2172,62 @@ const ROUTES = {
       return;
     }
     if (auth.viaToken) audit('fangst-via-api', auth.token.name, svar.item.title.slice(0, 80));
+
+    /*
+     * `%` - start uret paa den, saa snart den er oprettet.
+     *
+     * Her og ikke i `fangst()`: den er synkron og kaldes ogsaa fra MCP, og
+     * en fremmed server hoerer ikke hjemme i en funktion, der ellers kun
+     * roerer dodas egen base. Ruten er async i forvejen.
+     *
+     * Der VENTES paa svaret, i modsaetning til stoppet ved en afkrydsning.
+     * Forskellen er, hvad brugeren bad om: her er tidtagningen en del af
+     * handlingen, og »Added« uden at vide, om uret koerer, ville vaere et
+     * halvt svar. Ved en afkrydsning er stoppet en oprydning bagefter.
+     *
+     * Er tovo ikke forbundet, oprettes opgaven alligevel, og svaret siger
+     * hvorfor. Markoeren spises - den blev FORSTAAET, modtageren kunne bare
+     * ikke handle. Det er en anden sag end tovos `/syntax`, hvor `%` bliver
+     * staaende i titlen, fordi der slet ikke findes en modtager for
+     * begrebet dér.
+     */
+    let timerBesked = '';
+    let startetTimer = null;
+    if (svar.tolket && svar.tolket.startTimer && svar.item && svar.item.kind === 'task') {
+      if (!tovoForbundet()) {
+        timerBesked = ' — but tovo is not connected, so no timer was started';
+      } else {
+        const r = await startUretFor(svar.item);
+        if (r.fejl) timerBesked = ` — but the timer could not be started: ${r.fejl}`;
+        else {
+          timerBesked = r.stoppede
+            ? ' — timer started, the one that was running has been stopped'
+            : ' — timer started';
+          startetTimer = r.timer;
+          /*
+           * Elementet LAESES FORFRA. `startUretFor` har lige skrevet
+           * `tovo_task_id` paa raekken, og objektet her er fra foer det -
+           * saa svaret ville sige `null`, mens basen sagde noget andet.
+           *
+           * Fladen laegger netop dét objekt ind i listen (`indsaetStraks`),
+           * og `tovoKoererPaa()` sammenligner paa feltet: uden det ville den
+           * nye raekke staa med et slukket ikon, mens uret koerte. Det
+           * reddede sig i praksis paa den opfriskning, der foelger efter -
+           * men et svar, der modsiger basen, er en faelde, der venter paa
+           * den foerste kalder, som TROR paa det.
+           */
+          svar.item = hentItem(svar.item.id) || svar.item;
+        }
+      }
+    } else if (svar.tolket && svar.tolket.startTimer) {
+      // En NOTE er reference, ikke arbejde (DESIGN.md §3). `%` paa en note
+      // har ingen mening, og den skal siges - ikke sluges.
+      timerBesked = ' — % ignored: time is kept on tasks, not on notes';
+    }
+
     const linje = svar.recurrence
-      ? `Added: ${svar.item.title} — ${parse.beskrivGentagelse(svar.recurrence.rule)}`
-      : `Added: ${svar.item.title}`;
+      ? `Added: ${svar.item.title} — ${parse.beskrivGentagelse(svar.recurrence.rule)}${timerBesked}`
+      : `Added: ${svar.item.title}${timerBesked}`;
     if (ctx.query.get('format') === 'text') {
       /* Hele tolkningen med, ikke bare titlen: skrev man `!i morgen`, vil man
          se, at den blev forstaaet - ellers opdages en tastefejl foerst i appen. */
@@ -2058,9 +2247,9 @@ const ROUTES = {
       recurrence: svar.recurrence || null,
       parsed: svar.tolket,
       // Genveje viser gerne et svar. Giv dem én faerdig linje.
-      message: svar.recurrence
-        ? `Added: ${svar.item.title} — ${parse.beskrivGentagelse(svar.recurrence.rule)}`
-        : `Added: ${svar.item.title}`,
+      message: linje,
+      // Fladen skal kunne tegne ikonet om uden at spoerge igen.
+      timer: startetTimer,
     });
   },
 
@@ -2907,6 +3096,248 @@ const ROUTES = {
     sendJson(res, 200, { message: r.besked, comments: liste });
   },
 
+  /* --- tovo (F10): tidsregistreringen -------------------------------- */
+
+  'GET /api/v1/tovo': (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    // Kun OM der er en noegle, aldrig hvad den er (RUNE-ERFARINGER §6b).
+    sendJson(res, 200, {
+      connected: tovoForbundet(),
+      url: getSetting('tovo_url', ''),
+      projects: JSON.parse(getSetting('tovo_projects', '[]') || '[]'),
+    });
+  },
+
+  /*
+   * Gem forbindelsen - men proev den FOERST.
+   *
+   * Samme raekkefoelge som Sagu og Notion: gem, afproev, rul tilbage. Ellers
+   * ligger en forkert noegle og LIGNER en virkende forbindelse, indtil man
+   * proever at bruge den (RUNE-ERFARINGER, doda v16).
+   */
+  'POST /api/v1/tovo': async (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    const body = await readJsonBody(req);
+    const raa = String(body.url || '').trim().replace(/\/+$/, '');
+    let url = '';
+    try {
+      const u = new URL(raa);
+      // Kun en OPRINDELSE: en sti ville lande midt i alle adresser, vi danner.
+      if ((u.protocol === 'http:' || u.protocol === 'https:') && u.pathname === '/'
+          && !u.search && !u.hash) url = u.origin;
+    } catch { url = ''; }
+    if (!url) {
+      apiFejl(res, 400, 'bad_url', 'The tovo address must be a plain web address like https://tovo.example.com.');
+      return;
+    }
+    const noegle = str(body.key, 200);
+    const gammelUrl = getSetting('tovo_url', '');
+    const gammelKey = getSetting('tovo_key', '');
+    // Tom noegle = behold den, der staar. Ellers kunne man ikke rette
+    // adressen uden ogsaa at finde noeglen frem igen.
+    if (!noegle && !gammelKey) {
+      apiFejl(res, 400, 'no_key', 'Paste a tovo access key the first time you connect.');
+      return;
+    }
+    setSetting('tovo_url', url);
+    if (noegle) setSetting('tovo_key', noegle);
+
+    const svar = await tovo.proev();
+    if (!svar.ok) {
+      setSetting('tovo_url', gammelUrl);
+      if (gammelKey) setSetting('tovo_key', gammelKey);
+      else db.prepare("DELETE FROM settings WHERE key = 'tovo_key'").run();
+      apiFejl(res, 400, 'bad_key', svar.fejl);
+      return;
+    }
+    gemTovoProjekter(svar.projects);
+    audit('tovo-forbundet', url, clientIp(req));
+    sendJson(res, 200, {
+      connected: true, url, user: svar.user, projects: svar.projects || [],
+    });
+  },
+
+  /*
+   * Hent projektlisten forfra.
+   *
+   * Uden den kunne et projekt oprettet i tovo aldrig vaelges i doda, og den
+   * eneste udvej ville vaere at koble fra og til igen - hvilket kraever, at
+   * man finder noeglen frem paa ny. En cache uden en maade at genopfriske
+   * den paa er en blindgyde (samme lektie som Sagus notesboeger).
+   */
+  'POST /api/v1/tovo/refresh': async (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    if (!tovoForbundet()) { apiFejl(res, 400, 'not_connected', 'Connect tovo first.'); return; }
+    const svar = await tovo.proev();
+    // En fejl her aendrer INTET. Er tovo nede, er den gamle liste stadig det
+    // bedste, vi har - at tomme den ville tage projektvalgene fra brugeren,
+    // fordi en fremmed server var utilgaengelig et oejeblik.
+    if (!svar.ok) { apiFejl(res, 400, 'tovo_failed', svar.fejl); return; }
+    gemTovoProjekter(svar.projects);
+    sendJson(res, 200, {
+      connected: true,
+      url: getSetting('tovo_url', ''),
+      projects: JSON.parse(getSetting('tovo_projects', '[]') || '[]'),
+      timer: svar.timer,
+    });
+  },
+
+  'DELETE /api/v1/tovo': async (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    await readJsonBody(req);
+    /*
+     * `tovo_task_id` paa opgaverne bliver STAAENDE - og det er ikke
+     * sjusk. Den er en kendsgerning om opgaven ("her ligger dens tid"), ikke
+     * en foelge af en indstilling. Ryddede vi den, ville en genforbindelse
+     * oprette et nyt saet opgaver i tovo ved siden af de gamle, og timerne
+     * paa den samme sag ville ligge to steder. Samme valg som Sagus links.
+     */
+    db.prepare("DELETE FROM settings WHERE key IN ('tovo_url','tovo_key','tovo_projects')").run();
+    audit('tovo-frakoblet', null, clientIp(req));
+    sendJson(res, 200, { connected: false });
+  },
+
+  /*
+   * Den koerende timer.
+   *
+   * EGEN rute, ikke en del af `/api/v1/state`. To grunde: `/state` er
+   * synkron og tegner hele skallen, og en rundtur til en fremmed server ved
+   * hver optegning er praecis den fejl, Sagu-broen allerede har betalt for
+   * (»aldrig et kald pr. optegning«). Fladen henter derfor timeren én gang
+   * efter opstart og igen, naar fanen kommer frem.
+   *
+   * Er tovo ikke forbundet, er svaret `{connected: false}` - ikke en fejl.
+   * Langt de fleste doda-installationer har ingen tovo, og et 400-svar ved
+   * hver opstart ville fylde loggen med noget, der er helt i orden.
+   */
+  'GET /api/v1/tovo/timer': async (req, res) => {
+    const auth = godkend(req, res, 'read');
+    if (!auth) return;
+    if (!tovoForbundet()) { sendJson(res, 200, { connected: false, timer: null, projects: [] }); return; }
+    const r = await tovo.timer();
+    if (r.fejl) { apiFejl(res, 502, 'tovo_failed', r.fejl); return; }
+    sendJson(res, 200, {
+      connected: true,
+      timer: r.timer,
+      url: getSetting('tovo_url', ''),
+      // Projektlisten er dodas EGEN kopi (gemt ved connect/refresh), ikke et
+      // kald til tovo. Den foelger med her, fordi projektruden ellers skulle
+      // hente den selv - og den aabnes langt oftere end listen aendrer sig.
+      projects: JSON.parse(getSetting('tovo_projects', '[]') || '[]'),
+    });
+  },
+
+  /*
+   * Start uret paa en doda-opgave.
+   *
+   * Tre trin, og raekkefoelgen er hele pointen:
+   *
+   *  1. Har opgaven allerede et modstykke i tovo, bruges DET. Uden det ville
+   *     hver ny tidtagning oprette en dublet, og »hvor lang tid gik der paa
+   *     den her?« ville ikke kunne besvares.
+   *  2. Svarer tovo 404, er opgaven slettet DÉR. Saa oprettes den igen, og
+   *     uret startes. Alternativet - en fejlbesked - ville efterlade Andreas
+   *     med en knap, der ikke kan bruges, og ingen maade at komme videre paa
+   *     uden at koble fra og til.
+   *  3. Id'et gemmes FOERST, naar tovo har svaret. Gemte vi det foer, ville
+   *     en fejlet oprettelse efterlade en peger paa en opgave, der ikke
+   *     findes - og trin 1 ville saa bruge den igen og igen.
+   */
+  'POST /api/v1/tovo/start': async (req, res) => {
+    const auth = godkend(req, res, 'write');
+    if (!auth) return;
+    const body = await readJsonBody(req, auth.viaToken);
+    if (!tovoForbundet()) {
+      apiFejl(res, 400, 'not_connected', 'Connect tovo under Settings first.');
+      return;
+    }
+    const item = hentItem(str(body.id, 64));
+    if (!item) { apiFejl(res, 404, 'not_found', 'No such task.'); return; }
+    // En note er reference, ikke arbejde (DESIGN.md §3). Der er ikke noget at
+    // tage tid paa, og knappen findes derfor heller ikke i fladen.
+    if (item.kind !== 'task') {
+      apiFejl(res, 400, 'not_a_task', 'Time is kept on tasks, not on notes.');
+      return;
+    }
+
+    const r = await startUretFor(item);
+    if (r.fejl) { apiFejl(res, 502, 'tovo_failed', r.fejl); return; }
+    sendJson(res, 200, { timer: r.timer, stopped: r.stoppede, taskId: r.taskId });
+  },
+
+  /*
+   * Stop uret - uden at afslutte opgaven.
+   *
+   * Det er en selvstaendig handling og ikke en bivirkning af »faerdig«: man
+   * holder pause, gaar til moede eller naar det ikke i dag, og tager fat paa
+   * den samme opgave igen i morgen. Tiden lander som to poster paa den samme
+   * tovo-opgave, og tovo laegger dem sammen (Andreas, 18-09-2026).
+   */
+  'POST /api/v1/tovo/stop': async (req, res) => {
+    const auth = godkend(req, res, 'write');
+    if (!auth) return;
+    await readJsonBody(req, auth.viaToken);
+    if (!tovoForbundet()) {
+      apiFejl(res, 400, 'not_connected', 'Connect tovo under Settings first.');
+      return;
+    }
+    const r = await tovo.stop();
+    if (r.fejl) { apiFejl(res, 502, 'tovo_failed', r.fejl); return; }
+    // `intet` = der koerte ikke noget. Det er ikke en fejl at faa praecis
+    // det, man bad om.
+    sendJson(res, 200, { timer: null, wasRunning: !r.intet });
+  },
+
+  /*
+   * Hvor lang tid der er registreret paa opgaven.
+   *
+   * Hentes, naar RUDEN aabnes - aldrig pr. raekke i en liste. En liste med
+   * tredive opgaver ville ellers vaere tredive rundture til en fremmed
+   * server, og det er den samme fejl, Sagu-broen allerede har betalt for.
+   *
+   * Har opgaven intet modstykke i tovo, er svaret `null` - ikke nul. »0m«
+   * paa en opgave, der aldrig er taget tid paa, ville vaere en oplysning,
+   * der ser ud som en maaling.
+   */
+  'GET /api/v1/tovo/spent': async (req, res, ctx) => {
+    const auth = godkend(req, res, 'read');
+    if (!auth) return;
+    const item = hentItem(str(ctx.query.get('id'), 64));
+    if (!item) { apiFejl(res, 404, 'not_found', 'No such task.'); return; }
+    if (!tovoForbundet() || !item.tovo_task_id) {
+      sendJson(res, 200, { minutes: null });
+      return;
+    }
+    const projekt = item.project_id
+      ? db.prepare('SELECT tovo_project_id FROM projects WHERE id = ? AND deleted = 0').get(item.project_id)
+      : null;
+    const r = await tovo.forbrug(item.tovo_task_id, (projekt && projekt.tovo_project_id) || null);
+    if (r.fejl) { apiFejl(res, 502, 'tovo_failed', r.fejl); return; }
+    sendJson(res, 200, { minutes: r.ukendt ? null : r.minutes });
+  },
+
+  /* Hvilket tovo-projekt et doda-projekt hoerer til. Tom = intet. */
+  'POST /api/v1/tovo/project': async (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    const body = await readJsonBody(req);
+    const id = str(body.projectId, 64);
+    const tovoId = str(body.tovoProjectId, 64);
+    const projekt = db.prepare('SELECT id FROM projects WHERE id = ? AND deleted = 0').get(id);
+    if (!projekt) { apiFejl(res, 404, 'not_found', 'No such project.'); return; }
+    const kendte = JSON.parse(getSetting('tovo_projects', '[]') || '[]');
+    if (tovoId && !kendte.some((p) => p.id === tovoId)) {
+      apiFejl(res, 400, 'unknown_project', 'tovo does not have a project with that id.');
+      return;
+    }
+    db.prepare('UPDATE projects SET tovo_project_id = ? WHERE id = ?').run(tovoId || null, id);
+    sendJson(res, 200, { projectId: id, tovoProjectId: tovoId || null });
+  },
+
   'DELETE /api/v1/notion': async (req, res) => {
     const user = requireUser(req, res);
     if (!user) return;
@@ -3673,14 +4104,40 @@ function byggEksport(medFiler) {
   return ud;
 }
 
+/*
+ * Kolonnerne importen skriver. En hvidliste, saa en importfil aldrig
+ * bestemmer skemaet.
+ *
+ * MEN: importen er `INSERT OR REPLACE`. Den erstatter HELE raekken, saa en
+ * kolonne, der ikke staar her, bliver **NULL ved en gendannelse** - og intet
+ * fejler. Eksporten er `SELECT *` og har feltet med; det er kun vejen ind,
+ * der taber det. Fejlen viser sig derfor foerst hos den, der faktisk
+ * gendanner en backup, og dét er den daarligste dag at opdage den paa.
+ *
+ * Listen stod forkert i lang tid: `link_url` og `link_title` manglede paa
+ * BEGGE tabeller, saa en gendannelse slettede hvert eneste Sagu- og
+ * Notion-link. Det samme gjaldt `link_checked_at` og - vaerst -
+ * `items.notified_at`, som er det ENESTE vaern mod at sende en paamindelse
+ * igen (se `paamind()`): uden den ville en gendannelse fyre dagens
+ * notifikationer af en gang til.
+ *
+ * **Tilfoejer du en kolonne til en af disse tabeller, skal den staa her.**
+ * `tests/import.test.mjs` sammenligner listen med det virkelige skema og
+ * bliver roed, hvis en mangler - den naevner navnet, saa fejlen ikke skal
+ * findes. Vil du bevidst UDELADE en kolonne, staar undtagelsen i proeven,
+ * hvor den skal skrives med en begrundelse: en udeladelse uden en er ikke
+ * til at skelne fra en forglemmelse.
+ */
 const IMPORT_TABELLER = {
   areas: ['id', 'name', 'seq', 'created_at', 'updated_at'],
   contexts: ['id', 'name', 'seq', 'created_at', 'updated_at'],
   projects: ['id', 'name', 'outcome', 'area_id', 'parent_id', 'status', 'seq', 'reviewed_at',
-    'created_at', 'updated_at', 'deleted'],
+    'created_at', 'updated_at', 'deleted', 'tovo_project_id',
+    'link_url', 'link_title', 'link_checked_at'],
   items: ['id', 'kind', 'status', 'title', 'note', 'project_id', 'area_id', 'starred', 'due_date', 'due_time',
     'defer_date', 'waiting_for', 'seq', 'recurrence_id', 'skipped', 'created_at', 'updated_at',
-    'completed_at', 'deleted', 'dropped_with_project'],
+    'completed_at', 'deleted', 'dropped_with_project', 'tovo_task_id',
+    'link_url', 'link_title', 'link_checked_at', 'notified_at'],
   recurrences: ['id', 'rule', 'mode', 'template', 'next_due', 'next_time', 'paused', 'skips',
     'last_completed_at', 'created_at', 'updated_at', 'deleted'],
   item_contexts: ['item_id', 'context_id'],
@@ -3778,6 +4235,21 @@ const sagu = saguModul.opret({
 });
 
 const saguForbundet = () => !!(getSetting('sagu_url', '') && getSetting('sagu_key', ''));
+
+/*
+ * tovo - soesterappen, hvor timerne bor (F10).
+ *
+ * Samme form som Sagu-broen: adresse + noegle, som Andreas selv saetter
+ * begge steder. Noeglen skal vaere `full` - broen baade laeser tovos
+ * tilstand og starter ure - og den forlader aldrig serveren.
+ */
+const tovoModul = require('./tovo.js');
+const tovo = tovoModul.opret({
+  hentUrl: () => String(getSetting('tovo_url', '')).replace(/\/+$/, ''),
+  hentNoegle: () => getSetting('tovo_key', ''),
+});
+
+const tovoForbundet = () => !!(getSetting('tovo_url', '') && getSetting('tovo_key', ''));
 
 /* Sidens indhold i hukommelsen et kvarter. IKKE i databasen: Notion er
    kilden, og en kopi ville kunne blive forkert uden at nogen opdagede det. */

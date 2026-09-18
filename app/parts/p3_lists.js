@@ -202,6 +202,12 @@ function elementRaekke(it, i) {
       title="${esc(it.link_url)}" data-stop>${icon('link', 15)}</a>` : ''}
     ${it.note ? `<span class="item-flag" title="Has a description">${icon('note', 15)}</span>` : ''}
     ${it.attachment_count ? `<span class="item-flag" title="${it.attachment_count} attachment(s)">${icon('link', 15)}</span>` : ''}
+    ${/*
+      * Tidtagningen staar YDERST til hoejre - efter flagene, ikke mellem dem.
+      * Flagene er oplysninger om opgaven; det her er den eneste ting i
+      * raekken ud over afkrydsningen, man kan GOERE. De to handlinger hoerer
+      * i hver sin ende, saa et fejlklik ikke rammer den anden.
+      */ ''}${timerKnapHtml(it, 15)}
   </div>`;
 }
 
@@ -220,6 +226,10 @@ function bindListe() {
   document.querySelectorAll('.item-row [data-stop]').forEach((el) => {
     el.addEventListener('click', (e) => e.stopPropagation());
   });
+
+  // Tidtagningen. Bindes EFTER `data-stop` ovenfor, saa knappen baade
+  // standser boblingen og gor sit eget.
+  bindTimerKnapper();
 
   document.querySelectorAll('.item-row').forEach((el) => {
     el.addEventListener('click', (ev) => {
@@ -334,6 +344,31 @@ async function raekkeTaster(e) {
     mit();
     husk();
     await slet(id);
+    return;
+  }
+
+  /*
+   * `t` for tid. Raekken bliver LIGGENDE - i modsaetning til n/w/s/x er en
+   * tidtagning ikke en afklaring, der flytter opgaven ud af listen, saa der
+   * er ingen nabo at huske.
+   *
+   * `mit()` kaldes KUN, naar der faktisk var noget at goere. Er tovo ikke
+   * forbundet, findes knappen ikke, og saa skal tasten opfoere sig som
+   * ethvert andet ubrugt bogstav paa en raekke - ikke aede haendelsen. En
+   * genvej, der stopper udbredelsen for at gore ingenting, er den slags, der
+   * gor en FREMTIDIG lytter umulig at fejlsoege.
+   *
+   * (Og nej: den falder ikke igennem til »begynd bare at skrive«. Den
+   * handler traekker sig, naar fokus staar inde i et [data-keynav], saa
+   * INTET bogstav fanger, mens en raekke har fokus - maalt 18-09-2026 med
+   * baade `t` og `z`. Det er raekkens praemis, ikke noget `t` indfoerer.)
+   */
+  if (e.key === 't') {
+    const it = state.items.find((x) => x.id === id);
+    if (it && tovoKanTage(it)) {
+      mit();
+      await slaaTimer(id);
+    }
     return;
   }
 
@@ -492,10 +527,23 @@ function opfriskBagefter() {
 
 async function fuldfoer(id) {
   const it = state.items.find((x) => x.id === id);
+  // Koerte uret paa DEN her? Saa skal ikonet hentes forfra bagefter: serveren
+  // stopper timeren, naar opgaven afsluttes, men den goer det i baggrunden og
+  // kan ikke naa at svare her.
+  const uretKoerteHer = it ? tovoKoererPaa(it) : false;
   const fortryd = straksVaek(id);
   try {
     await api('POST', `/api/v1/items/${id}/complete`, {});
     if (!fortryd) await genindlaes();
+    /*
+     * Der HENTES, i stedet for at saette `state.tovo.timer = null`.
+     *
+     * Stoppet er »bedste forsoeg« paa serveren - det maa ikke kunne faa en
+     * afkrydsning til at fejle, saa det venter ingen paa. Saetter fladen selv
+     * timeren til null, paastaar den noget, den ikke ved: er tovo nede,
+     * koerer uret videre, og ikonet ville lyve. Vi spoerger i stedet.
+     */
+    if (uretKoerteHer) hentTovo();
     toast(`Done: ${it ? it.title : 'item'}`, {
       label: 'Undo',
       run: async () => { await api('POST', `/api/v1/items/${id}/uncomplete`, {}); await genindlaes(); },
@@ -513,9 +561,14 @@ async function saetStatus(id, status) {
   // Bliver elementet paa skaermen (fx "n" paa noget, der allerede er next),
   // er der intet at fjerne - saa gaar den ad den gamle vej.
   const fortryd = VIEW_STATUS[state.view] === status ? null : straksVaek(id);
+  // Samme grund som i fuldfoer(): `done` og `dropped` stopper uret paa
+  // serveren, og fladen skal spoerge om resultatet frem for at gaette det.
+  const uretKoerteHer = it && (status === 'done' || status === 'dropped')
+    ? tovoKoererPaa(it) : false;
   try {
     await api('POST', `/api/v1/items/${id}`, { status });
     if (!fortryd) await genindlaes();
+    if (uretKoerteHer) hentTovo();
     toast(`Moved to ${statusNavn(status)}`);
     if (fortryd) opfriskBagefter();
   } catch (ex) {
@@ -718,6 +771,15 @@ async function aabnElement(listeItem) {
       */ ''}
     ${it.created_at ? `<div class="detail-alder meta" title="${esc(fuldDato(it.created_at))}">
       Created ${esc(alder(it.created_at))} · ${esc(kortDato(it.created_at))}</div>` : ''}
+    ${/*
+      * Registreret tid (F10, fase 2). Vaerten staar her og fyldes bagefter -
+      * tallet kommer fra tovo, og ruden maa ikke vente paa en fremmed server,
+      * foer den kan aabne.
+      *
+      * Tom, indtil der ER noget at vise: en opgave, der aldrig er taget tid
+      * paa, skal ikke have en linje, der siger nul. Se `hentForbrug()`.
+      */ ''}
+    <div class="detail-alder meta" id="dTid" hidden></div>
 
     <div class="modal-foot">
       <button class="btn ghost" id="edDelete">Delete</button>
@@ -791,9 +853,19 @@ async function aabnElement(listeItem) {
        <button class="chip flat" data-edit="link">edit link</button>`
     : '<button class="chip flat" data-edit="link">+ link</button>'}
       <span style="flex:1"></span>
+      ${/*
+        * Tidtagningen staar lige FOER Focus, fordi de to hoerer sammen: den
+        * ene tager tid uden at rydde skaermen, den anden rydder skaermen og
+        * tager tid. Bagefter er der kun hjaelpeknappen.
+        *
+        * `u.status` og ikke `it.status`: krydser man opgaven af i udkastet
+        * uden at gemme, skal knappen forsvinde med det samme - der er ikke
+        * mere at tage tid paa.
+        */ ''}${timerKnapHtml(Object.assign({}, it, { status: u.status }), 13, 'chip flat')}
       ${it.kind === 'task' && u.status !== 'done' ? `<button class="chip flat" id="dFocus">${icon('clock', 13)} Focus</button>` : ''}
       <button class="chip flat" id="dHelpBtn" aria-label="What is this?">?</button>`;
     bindChips();
+    bindTimerKnapper(host);
   };
 
   /** Bytter en chip ud med det rigtige felt, og tilbage igen naar man er faerdig. */
@@ -884,6 +956,10 @@ async function aabnElement(listeItem) {
     });
   }
   tegnChipsRow();
+
+  // Registreret tid. UDEN await: ruden er aabnet, og tallet falder ind, naar
+  // tovo svarer. Ventede vi, ville en langsom tunnel forsinke selve ruden.
+  hentForbrug(it, host.querySelector('#dTid'));
 
   // Forklaringen vises, indtil den er set én gang - som i tingdo.
   try {
@@ -1405,6 +1481,25 @@ function sideSettings() {
       sent back to this browser.</p>
     </div>
 
+    <div class="card"><h2>tovo</h2>
+      <p class="lead" style="margin:6px 0 0">tovo is the sister app where the hours live.
+      Connect it, and every task gets a record button — in the lists and inside the task —
+      so you can start the clock without leaving doda. As with Sagu, the two are tied
+      together with a <strong>link</strong> and nothing is synchronised: doda asks tovo
+      to start a timer, and that is all either of them does to the other.</p>
+      <div id="tovoBox">Loading…</div>
+      <p class="gate-note" style="text-align:left">In tovo: Settings → Access keys →
+      create a <strong>full</strong> key. It needs to be that wide: the bridge both reads
+      which timer is running and starts new ones. The key stays on this server and is
+      never sent back to this browser.</p>
+      <p class="gate-note" style="text-align:left">The first time you take time on a task,
+      doda creates the matching task in tovo and remembers it — so picking the same task
+      up tomorrow adds to the same total instead of making a second one.
+      <strong>Renaming it in doda does not rename it in tovo</strong>: saving a task there
+      saves the whole thing, and a title-only write would wipe the estimate and the note
+      that only tovo knows about.</p>
+    </div>
+
     <div class="card"><h2>Notion</h2>
       <p class="lead" style="margin:6px 0 0">Connect Notion, and you can search your
       pages from inside doda when you link one to a task — and the chip gets the page's
@@ -1687,6 +1782,7 @@ function bindSettings() {
   bindKode();
   bindTotp();
   bindSagu();
+  bindTovo();
   bindNotion();
   tegnPasskeys();
   tegnForbindelser();
