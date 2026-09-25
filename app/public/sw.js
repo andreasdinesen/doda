@@ -6,7 +6,7 @@
  * browserens cache, og SW'en kan servere en gammel app.js i det uendelige
  * (RUNE-ERFARINGER §5). */
 
-const VERSION = 99;
+const VERSION = 100;
 const CACHE = `doda-v${VERSION}`;
 
 /*
@@ -140,6 +140,19 @@ self.addEventListener('fetch', (e) => {
   })());
 });
 
+/*
+ * Tallet paa app-ikonet (Next Actions). Kan browseren det ikke, eller har iOS
+ * ikke givet lov til notifikationer, sker der bare ingenting - et ikon er
+ * aldrig vaerd at miste en notifikation for.
+ */
+async function saetIkonTal(n) {
+  if (!Number.isInteger(n) || !('setAppBadge' in self.navigator)) return;
+  try {
+    if (n > 0) await self.navigator.setAppBadge(n);
+    else await self.navigator.clearAppBadge();
+  } catch { /* se ovenfor */ }
+}
+
 /* --------------------------------------------------------------- push
  *
  * Pushen er TOM. Den vaekker kun denne worker, som selv henter fra serveren,
@@ -205,6 +218,7 @@ self.addEventListener('push', (e) => {
     try { fraPush = e.data ? e.data.json() : null; } catch { fraPush = null; }
     if (fraPush && fraPush.notification && fraPush.notification.title) {
       await noter({ fase: 'nyttelast' });
+      await saetIkonTal(fraPush.app_badge);
       await self.registration.showNotification(fraPush.notification.title, {
         body: fraPush.notification.body || '',
         tag: TAG,
@@ -242,6 +256,7 @@ self.addEventListener('push', (e) => {
       if (d) {
         items = d.items || [];
         review = !!d.review;
+        await saetIkonTal(d.badge);
       }
     } catch { /* uden svar viser vi det generelle */ }
 

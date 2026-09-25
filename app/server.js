@@ -2073,9 +2073,7 @@ const ROUTES = {
       inbox: db.prepare(`SELECT COUNT(*) AS n FROM items
          WHERE deleted = 0 AND kind = 'task' AND status IN ('inbox','queued')`).get().n,
       // Som listen: kun det, der ikke er skjult til senere.
-      next: db.prepare(`SELECT COUNT(*) AS n FROM items
-         WHERE deleted = 0 AND kind = 'task' AND status = 'next'
-           AND (defer_date IS NULL OR defer_date <= ?)`).get(idag).n,
+      next: taelNext(idag),
       waiting: taelStatus.get('waiting').n,
       someday: taelStatus.get('someday').n,
       // Samme graense som Logbook - ellers ville toplinjen blive ved med at
@@ -2102,6 +2100,8 @@ const ROUTES = {
       // Toplinjen tegnes ved opstart, saa valget maa med HER - Settings-siden
       // hentes foerst, naar man gaar derind, og saa ville tallet naa at blinke.
       hideDone: getSetting('hide_done', '') === '1',
+      // Tallet paa app-ikonet. Slaaet TIL som standard - Andreas bad om det.
+      appBadge: getSetting('app_badge_off', '') !== '1',
     });
   },
 
@@ -3705,7 +3705,7 @@ const ROUTES = {
        */
       const r = await push.sendTil(a.endpoint, tom ? null : Object.assign({
         payload: push.nyttelast({
-          titel: 'doda', tekst: 'This is a test from your own server.',
+          titel: 'doda', tekst: 'This is a test from your own server.', badge: ikonTal(),
         }),
       }, a));
       if (r.borte) {
@@ -3842,7 +3842,7 @@ const ROUTES = {
     /* Var det gennemgangen, der lige blev pushet? Service workeren faar en TOM
        push og skal selv finde ud af, hvad den skal vise. */
     const mindet = Number(getSetting('review_notified', '0')) || 0;
-    sendJson(res, 200, { items, review: !!mindet && now() - mindet < 300 });
+    sendJson(res, 200, { items, review: !!mindet && now() - mindet < 300, badge: ikonTal() });
   },
 
   'GET /api/v1/connections': (req, res) => {
@@ -3891,7 +3891,9 @@ const ROUTES = {
       'ical_alarm', 'notes_off', 'review_time', 'review_push',
       // Skjuler »N done« i toplinjen. En taeller, der kun kan vokse, er for
       // nogle en paamindelse og for andre stoej - derfor et valg.
-      'hide_done']);
+      'hide_done',
+      // Tallet paa app-ikonet (Next Actions). '1' = slaaet fra.
+      'app_badge_off']);
     const written = {};
     for (const [key, value] of Object.entries(body.settings || {})) {
       if (!ALLOWED.has(key)) continue;
@@ -3962,6 +3964,27 @@ function projektMedIndhold(id) {
  * egen kalender giver besked. At bygge en push-kanal til ÉN ugentlig
  * paamindelse ville vaere at tilfoeje en hel infrastruktur for at raabe.
  */
+/** Next Actions, talt praecis som listen: det udskudte taeller foerst paa sin dag. */
+function taelNext(idag = iDag()) {
+  return db.prepare(`SELECT COUNT(*) AS n FROM items
+     WHERE deleted = 0 AND kind = 'task' AND status = 'next'
+       AND (defer_date IS NULL OR defer_date <= ?)`).get(idag).n;
+}
+
+/*
+ * Tallet paa app-ikonet - eller null, naar det er slaaet fra.
+ *
+ * Det rejser med hver push (`app_badge`), fordi iOS ikke lader en webapp
+ * opdatere sit ikon i baggrunden paa anden maade: der er ingen periodisk
+ * synkronisering, og en push SKAL vise en notifikation. Mellem pushene
+ * saettes tallet af appen selv, hver gang den tegner sine taellere.
+ */
+function ikonTal() {
+  if (getSetting('app_badge_off', '') === '1') return null;
+  try { rulFrem(); } catch { /* et forkert tal er bedre end ingen notifikation */ }
+  return taelNext();
+}
+
 function gennemgangForfalder() {
   const ugedag = Number(getSetting('review_weekday', '0')) || 0;
   if (!ugedag) return false;                       // slaaet fra
@@ -4352,6 +4375,7 @@ async function tjekPaamindelser() {
       const nyttelast = push.nyttelast({
         titel: 'Weekly review',
         tekst: 'It is the day you set aside for it. Open doda to start.',
+        badge: ikonTal(),
       });
       for (const a of abon) {
         const svar = await push.sendTil(a.endpoint, Object.assign({ payload: nyttelast }, a));
@@ -4393,10 +4417,12 @@ async function tjekPaamindelser() {
       ? {
         titel: skalMindes[0].title,
         tekst: skalMindes[0].due_time ? `Due at ${skalMindes[0].due_time}` : 'Due now',
+        badge: ikonTal(),
       }
       : {
         titel: `${skalMindes.length} tasks are due`,
         tekst: skalMindes.map((r) => r.title).join(' \u00b7 ').slice(0, 120),
+        badge: ikonTal(),
       });
 
     for (const a of abon) {

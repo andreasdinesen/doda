@@ -5,7 +5,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 99;
+const APP_VERSION = 100;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -34,6 +34,7 @@ const state = {
   notesEnabled: true,
   noteCount: 0,
   hideDone: false,
+  appBadge: true,
   /*
    * tovo - soesterappen, hvor timerne bor (F10).
    *
@@ -716,6 +717,28 @@ function opdaterNav() {
   });
   const stats = document.getElementById('statsHost');
   if (stats) stats.innerHTML = statsHtml();
+  opdaterIkonTal();
+}
+
+/*
+ * Tallet paa app-ikonet - Next Actions, som Todoist viser sine (Andreas,
+ * 25-09-2026).
+ *
+ * Det saettes HER, fordi opdaterNav er dér, alle taellere ender: efter
+ * hentState, efter en ny opgave, efter en fuldfoert. Mens doda er lukket,
+ * bringer pushen tallet med sig (`app_badge`, se push.js) - andre veje har
+ * en webapp paa iOS ikke.
+ *
+ * iOS kraever, at notifikationer er tilladt; ellers afvises kaldet stille.
+ * Det samme tal to gange i traek sendes ikke igen.
+ */
+let sidsteIkonTal = null;
+function opdaterIkonTal() {
+  if (!('setAppBadge' in navigator) || !state.user) return;
+  const n = state.appBadge ? (state.counts.next || 0) : 0;
+  if (n === sidsteIkonTal) return;
+  sidsteIkonTal = n;
+  (n > 0 ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(() => { sidsteIkonTal = null; });
 }
 
 function bindNav() {
@@ -995,6 +1018,8 @@ async function hentState() {
     if (d.notesEnabled !== undefined) state.notesEnabled = d.notesEnabled;
     if (d.noteCount !== undefined) state.noteCount = d.noteCount;
     if (d.hideDone !== undefined) state.hideDone = d.hideDone;
+    if (d.appBadge !== undefined) state.appBadge = d.appBadge;
+    opdaterIkonTal();
   } catch (ex) {
     if (ex.status !== 401) toast(ex.message);
   }

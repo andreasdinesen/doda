@@ -239,3 +239,16 @@ test('et ikon er ikke vaerd at miste en notifikation for', () => {
   assert.equal(n.notification.icon, undefined);
   assert.equal(n.web_push, 8030, 'resten af formen skal stadig vaere hel');
 });
+
+test('tallet paa app-ikonet rejser med pushen - og kun naar det er slaaet til', () => {
+  /* iOS lader ikke en webapp opdatere sit ikon i baggrunden paa anden maade:
+     `app_badge` er formatets eget felt, og systemet saetter det sammen med
+     notifikationen (Andreas, 25-09-2026 - »som Todoist-appen«). */
+  const p = nyPush('https://doda.eksempel.dk');
+  assert.equal(p.nyttelast({ titel: 'x', tekst: 'y', badge: 7 }).app_badge, 7);
+  // 0 er et rigtigt tal: det fjerner tallet fra ikonet.
+  assert.equal(p.nyttelast({ titel: 'x', tekst: 'y', badge: 0 }).app_badge, 0);
+  // Slaaet fra (null) eller udeladt: feltet er vaek, og ikonet roeres ikke.
+  assert.equal('app_badge' in p.nyttelast({ titel: 'x', tekst: 'y', badge: null }), false);
+  assert.equal('app_badge' in p.nyttelast({ titel: 'x', tekst: 'y' }), false);
+});

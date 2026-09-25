@@ -90,7 +90,7 @@ function opret(srv) {
    * `navigate` er paakraevet i formatet og skal vaere instansens egen
    * adresse - den samme, `sub` i VAPID-tokenet bruger.
    */
-  function nyttelast({ titel, tekst }) {
+  function nyttelast({ titel, tekst, badge = null }) {
     const rod = srv.kontakt();
     /*
      * ALLE adresser skal vaere ABSOLUTTE.
@@ -116,6 +116,13 @@ function opret(srv) {
       },
     };
     if (ikon) n.notification.icon = ikon;
+    /*
+     * `app_badge` er formatets eget felt for tallet paa app-ikonet. Systemet
+     * saetter det sammen med notifikationen - ogsaa naar doda er lukket, og
+     * det er den eneste vej, iOS giver til det. 0 fjerner tallet; null (slaaet
+     * fra) udelader feltet, saa ikonet ikke roeres.
+     */
+    if (Number.isInteger(badge) && badge >= 0) n.app_badge = badge;
     return n;
   }
 

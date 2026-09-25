@@ -1412,6 +1412,13 @@ function sideSettings() {
       <div id="pushBox">Loading…</div>
       <p class="gate-note" style="text-align:left">If you already subscribe with your
       calendar, you do not need this — that reminder works without any permission at all.</p>
+      ${/* Tallet paa ikonet bor her, fordi iOS kun viser det, naar
+           notifikationer er tilladt - de to hoerer sammen paa telefonen. */ ''}
+      <label class="ctxopt" style="margin-top:16px">
+        <input type="checkbox" id="appBadge">
+        <span>Show the Next Actions count on the app icon</span>
+      </label>
+      <p class="gate-note" style="text-align:left" id="appBadgeNote"></p>
     </div>
 
     <div class="card"><h2>About</h2>

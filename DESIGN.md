@@ -3200,3 +3200,36 @@ først — nu fælder prøven substitutionen.
 | Hver vagt set fejle | blindt `stop()` → uret på A stoppes · parser-flaget fjernet → tre prøver røde |
 | I browseren | `%` i paletten: chip før Enter, kvittering, ikon tændt · 2h 15m i ruden · afkrydsning stoppede uret i tovo og lukkede posten |
 | Ændringer i tovo | **ingen** |
+
+## Tallet på app-ikonet (2026-09-25)
+
+»Kan du lave så når doda er gemt som en app på telefonen viser antallet af opgaver
+i next actions? På samme måde som todoist appen« (Andreas, 25-09-2026).
+
+**Det er Next Actions og kun den.** Det er det samme tal som ved punktet i menuen
+og i bundlinjen, og det tælles præcis som listen: det udskudte først på sin dag
+(`taelNext()` — /state, pushen og /due-now spørger alle den). §6v's regel holder:
+et tal udenfor appen er et krav om opmærksomhed, og dét er Next Actions' tal.
+
+**Slået TIL som standard, men kan slås fra** (`app_badge_off = '1'`). §2 siger
+»ingen røde tællere« — det her er en rød tæller, han selv bad om. Kontakten står i
+Notifications-kortet, fordi iOS kun viser tallet, når notifikationer er tilladt.
+
+**To veje, fordi iOS ikke giver flere.** En hjemmeskærms-webapp kan ikke opdatere
+sit ikon i baggrunden: ingen periodisk synkronisering, og en push SKAL vise en
+notifikation — en tavs push til tallet alene findes ikke.
+
+1. **Mens doda er åben:** `navigator.setAppBadge()` fra `opdaterNav()`, fordi alle
+   tællere ender dér (hentState, ny opgave, afkrydsning). Samme tal to gange sendes
+   ikke igen.
+2. **Mens doda er lukket:** hver push har `app_badge` med — Declarative Web Push'
+   eget felt, som systemet sætter uden at vække workeren. Den gamle vej (workeren)
+   læser samme felt, eller `badge` fra /due-now.
+
+Følgen, der skal siges højt: **tallet kan være forældet**, hvis opgaver ændres et
+andet sted (Mac, MCP, iOS-genvej), og der hverken kommer en påmindelse eller
+åbnes doda på telefonen. Todoist har en rigtig app og kan mere; det her er det
+mest, en webapp kan.
+
+`app_badge: 0` fjerner tallet; slået fra udelades feltet helt, så ikonet ikke
+røres af en push.

@@ -1089,7 +1089,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 99;
+const APP_VERSION = 100;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -1118,6 +1118,7 @@ const state = {
   notesEnabled: true,
   noteCount: 0,
   hideDone: false,
+  appBadge: true,
   /*
    * tovo - soesterappen, hvor timerne bor (F10).
    *
@@ -1800,6 +1801,28 @@ function opdaterNav() {
   });
   const stats = document.getElementById('statsHost');
   if (stats) stats.innerHTML = statsHtml();
+  opdaterIkonTal();
+}
+
+/*
+ * Tallet paa app-ikonet - Next Actions, som Todoist viser sine (Andreas,
+ * 25-09-2026).
+ *
+ * Det saettes HER, fordi opdaterNav er dér, alle taellere ender: efter
+ * hentState, efter en ny opgave, efter en fuldfoert. Mens doda er lukket,
+ * bringer pushen tallet med sig (`app_badge`, se push.js) - andre veje har
+ * en webapp paa iOS ikke.
+ *
+ * iOS kraever, at notifikationer er tilladt; ellers afvises kaldet stille.
+ * Det samme tal to gange i traek sendes ikke igen.
+ */
+let sidsteIkonTal = null;
+function opdaterIkonTal() {
+  if (!('setAppBadge' in navigator) || !state.user) return;
+  const n = state.appBadge ? (state.counts.next || 0) : 0;
+  if (n === sidsteIkonTal) return;
+  sidsteIkonTal = n;
+  (n > 0 ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(() => { sidsteIkonTal = null; });
 }
 
 function bindNav() {
@@ -2079,6 +2102,8 @@ async function hentState() {
     if (d.notesEnabled !== undefined) state.notesEnabled = d.notesEnabled;
     if (d.noteCount !== undefined) state.noteCount = d.noteCount;
     if (d.hideDone !== undefined) state.hideDone = d.hideDone;
+    if (d.appBadge !== undefined) state.appBadge = d.appBadge;
+    opdaterIkonTal();
   } catch (ex) {
     if (ex.status !== 401) toast(ex.message);
   }
@@ -5123,6 +5148,13 @@ function sideSettings() {
       <div id="pushBox">Loading…</div>
       <p class="gate-note" style="text-align:left">If you already subscribe with your
       calendar, you do not need this — that reminder works without any permission at all.</p>
+      ${/* Tallet paa ikonet bor her, fordi iOS kun viser det, naar
+           notifikationer er tilladt - de to hoerer sammen paa telefonen. */ ''}
+      <label class="ctxopt" style="margin-top:16px">
+        <input type="checkbox" id="appBadge">
+        <span>Show the Next Actions count on the app icon</span>
+      </label>
+      <p class="gate-note" style="text-align:left" id="appBadgeNote"></p>
     </div>
 
     <div class="card"><h2>About</h2>
@@ -8924,6 +8956,8 @@ async function bindData() {
     }
   });
 
+  bindIkonTal();
+
   document.getElementById('expData').addEventListener('click', () => hent(false));
   document.getElementById('expAll').addEventListener('click', () => hent(true));
 
@@ -9348,6 +9382,40 @@ async function minAbonnementsId() {
   } catch { return null; }
 }
 
+/*
+ * Kontakten for tallet paa app-ikonet. Noten siger, HVAD der mangler - en
+ * kontakt, der er slaaet til uden at virke, er det vaerste svar (§ Web Push).
+ */
+function bindIkonTal() {
+  const boks = document.getElementById('appBadge');
+  const note = document.getElementById('appBadgeNote');
+  if (!boks) return;
+  const forklar = () => {
+    let t = 'On iPhone the number follows doda to the home screen: it updates whenever you open '
+      + 'doda, and while doda is closed it comes along with each reminder.';
+    if (!('setAppBadge' in navigator)) {
+      t = 'This browser cannot put a number on the icon. On iPhone, add doda to the home screen first.';
+    } else if (window.Notification && Notification.permission !== 'granted') {
+      t = 'iOS only shows the number when doda may send notifications — turn them on for this device above.';
+    }
+    note.textContent = boks.checked ? t : '';
+  };
+  boks.checked = !!state.appBadge;
+  forklar();
+  boks.addEventListener('change', async () => {
+    try {
+      await api('POST', '/api/v1/settings',
+        { settings: { app_badge_off: boks.checked ? '0' : '1' } });
+      state.appBadge = boks.checked;
+      opdaterIkonTal();
+    } catch (ex) {
+      toast(ex.message);
+      boks.checked = !!state.appBadge;
+    }
+    forklar();
+  });
+}
+
 async function bindPush() {
   const boks = document.getElementById('pushBox');
   if (!boks) return;
@@ -9481,7 +9549,13 @@ async function bindPush() {
       knap.disabled = true;
       try {
         if (tilmeldt) { await slaaPushFra(); toast('Notifications off for this device'); }
-        else { await slaaPushTil(); toast('Notifications on — this device will be reminded'); }
+        else {
+          await slaaPushTil();
+          toast('Notifications on — this device will be reminded');
+          // Foerst NU maa iOS saette tallet paa ikonet - send det igen.
+          sidsteIkonTal = null;
+          opdaterIkonTal();
+        }
         await bindPush();
       } catch (ex) { toast(ex.message); knap.disabled = false; }
     });
