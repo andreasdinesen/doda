@@ -5,7 +5,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 100;
+const APP_VERSION = 101;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -384,6 +384,22 @@ function render() {
   tegnSide();
 }
 
+/* Hvad navnet betyder - samme forklaring som afsnittet Navnet i README'en, kort og
+   paa engelsk, fordi interfacet er engelsk. */
+function navnHtml() {
+  return `
+      <details class="gate-name">
+        <summary>Why “doda”?</summary>
+        <p><b>doda</b> is <i>to-do</i> said with soft Danish d’s: do-da.</p>
+        <ul>
+        <li><b>to-do</b>: the app’s job, said so it sounds like a name and not a list.</li>
+        <li><b>do … ta-da!</b>: the first syllable is the thing to do, the second is the little sound when you tick it off.</li>
+        <li><b>dåd</b>: Danish for a deed (Old Norse <i>dáð</i>). Fitting for an app that runs as a rune on Yggdrasil.</li>
+        </ul>
+        <p>Its siblings are tovo and Sagu: four letters each, easy to type on a phone, no æ, ø or å.</p>
+      </details>`;
+}
+
 function gateHtml() {
   const setup = state.config.needsSetup;
   return `
@@ -414,6 +430,7 @@ function gateHtml() {
         <div class="gate-or"><span>or</span></div>
         <button class="btn" id="gatePasskey" style="width:100%">Sign in with a passkey</button>` : ''}
       ${setup ? '<p class="gate-note">doda is a single-user app. Once this account exists, sign-up closes for good.</p>' : ''}
+      ${navnHtml()}
     </div>
   </div>`;
 }

@@ -2255,3 +2255,14 @@ a.item-flag:hover { color: var(--accent); }
 /* Linjen under knapperne paa fokusskaermen. Den forklarer forskellen paa
    Stop og Done, og den skal kunne laeses uden at fylde som broedtekst. */
 .focushint { max-width: 46ch; margin: 18px auto 0; text-align: center; }
+
+/* »Why the name?« under login-kortet. Et <details> uden JS: det folder ud af
+   sig selv og står ikke i vejen for login. */
+.gate-name { margin: 18px 0 0; font-size: 13px; color: var(--muted); }
+.gate-name > summary { cursor: pointer; text-align: center; list-style: none; color: var(--muted); font-weight: inherit; }
+.gate-name > summary::-webkit-details-marker { display: none; }
+.gate-name > summary:hover { color: var(--text); }
+.gate-name p { margin: 10px 0 0; line-height: 1.5; }
+.gate-name ul { margin: 8px 0 0; padding-left: 18px; line-height: 1.5; }
+.gate-name li + li { margin-top: 4px; }
+.gate-name b { color: var(--text); font-weight: 600; }

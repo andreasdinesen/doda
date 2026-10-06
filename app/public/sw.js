@@ -6,7 +6,7 @@
  * browserens cache, og SW'en kan servere en gammel app.js i det uendelige
  * (RUNE-ERFARINGER §5). */
 
-const VERSION = 100;
+const VERSION = 101;
 const CACHE = `doda-v${VERSION}`;
 
 /*
