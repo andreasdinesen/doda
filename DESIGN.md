@@ -2698,7 +2698,7 @@ plads, bliver stående.
 **Enkeltbruger er en beslutning, ikke en forglemmelse.** Den er grunden til, at ingen
 datatabel har en `user_id`, at `settings` er global, og at token-godkendelsen henter
 brugeren med `LIMIT 1`. Andreas spurgte 2026-08-17, hvad flere brugere ville koste;
-undersøgelsen ligger i `PLAN.md` under »Mulige udvidelser«. **Der er ikke truffet
+undersøgelsen ligger i git-historikken (commit `0753b09`, afsnittet »Mulige udvidelser«). **Der er ikke truffet
 nogen beslutning** — men rører du de tabeller, så læs den først, så antagelsen ikke
 bliver brudt halvt.
 

@@ -43,7 +43,7 @@ OUT = os.path.join(ROOT, 'runes', 'doda.yaml')
 #
 # Det er IKKE en loesning paa pladsen, kun en udsaettelse: der er plads til en
 # funktion eller to. Naar den her fejler igen, skal noget UD af payloaden -
-# se PLAN.md for de maalte muligheder.
+# de maalte muligheder staar i den gamle faseplan i git-historikken.
 MAX_INSTALL = 126_000
 
 # ------------------------------------------------ hvor app-koden kommer fra

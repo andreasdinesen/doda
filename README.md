@@ -503,8 +503,7 @@ alle veje ind i appen.
 `runes/doda.yaml` og `app/public/app.js` er **genererede artefakter** — redigér dem
 aldrig i hånden. Ret kilderne i `app/` og kør build-scriptet.
 
-Se `PLAN.md` for faseoversigt og status, `DESIGN.md` for de trufne beslutninger og
-`CLAUDE.md` for kontekst til videre udvikling.
+Se `DESIGN.md` for de trufne beslutninger og `CLAUDE.md` for kontekst til videre udvikling.
 
 ---
 

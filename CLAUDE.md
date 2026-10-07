@@ -1,24 +1,26 @@
 # doda — kontekst til Claude Code
 
 **doda** er Andreas' personlige GTD-opgave- og noteapp, bygget som **yggdrasil-rune**.
-Én bruger. UI efter **tingdo.app**, gentagelser efter **Todoist**. Alt på dansk.
+Én bruger. UI efter **tingdo.app**, gentagelser efter **Todoist**. Interfacet er
+**engelsk**; kode, kommentarer og docs er dansk.
 
 ## Læs først — hver gang
 
 1. `~/ClaudeMacBook/RUNE-ERFARINGER.md` — fælles lærepenge for alle runes.
    **Læs den FØR og EFTER et stykke arbejde.** Nye generelle lærdomme skrives ind
    nederst under »Log« og repoet committes+pushes.
-2. `PLAN.md` — faseoversigt og hvor vi er. **Opdatér den efter hver fase.**
-3. `DESIGN.md` — alle trufne beslutninger. Ændres noget, rettes det her først.
-4. `docs/HANDOVER.md` — Andreas' oprindelige funktionsbeskrivelse (kravkilden).
+2. `DESIGN.md` — alle trufne beslutninger. Ændres noget, rettes det her først.
+3. `claude-noter/` — krav og faldgruber (se nederst).
 
 ## Filoversigt
 
 | Fil | Rolle |
 |---|---|
-| `app/server.js` | Hele backenden. Ren Node ≥22 (`node:http`, `node:sqlite`, `node:crypto`). |
+| `app/server.js` | Backendens kerne. Ren Node ≥22 (`node:http`, `node:sqlite`, `node:crypto`). |
+| `app/*.js` | Backend-moduler: `mcp`, `oauth`, `webauthn`, `totp`, `push`, `notion`, `sagu`, `tovo`, `qr`, `klientip`. |
+| `app/shared/` | Fælles for server og klient (`parse`, `todoist`, `markdown`). |
 | `app/parts/p*.js` | Frontend-kilde, samles til `app/public/app.js` af build-scriptet. |
-| `app/public/index.html` | HTML-skal + CSS. |
+| `app/public/index.html`, `style.css` | HTML-skal og CSS. |
 | `app/public/app.js` | **Genereret — redigér aldrig.** |
 | `runes/doda.yaml` | **Genereret — redigér aldrig.** Ret kilderne, kør build. |
 | `app/kilde.js` | Henter app-koden fra GitHub ved opstart. Kører fra runens `startup`, før serveren. |
@@ -80,12 +82,12 @@
 ## Lokal kørsel
 
 ```sh
-BIND_PORT=8910 DATA_DIR=/tmp/dodadata node app/server.js
+DODA_DEV=1 BIND_PORT=8910 DATA_DIR=/tmp/dodadata node app/server.js   # DEV=1: ingen asset-cache
 python3 build_rune.py
+node --test tests/
 ```
 
-Dev-server til preview-værktøjet står i den **globale** `~/.claude/launch.json`
-(ikke en `.claude/`-mappe i projektet — preview læser kun den globale).
+Dev-serveren `doda` står i den **globale** `~/.claude/launch.json` (preview læser kun den).
 
 ## Nyere panelfunktioner, doda bruger
 
@@ -98,3 +100,9 @@ Erfaringsfilen er skrevet før disse fandtes:
 - **`variables: secret: true`** — AES-256-GCM krypteret at rest, maskeret i API-svar.
 - **`events:`** — vedvarende sikkerhedssignaler pr. subjekt (fx fejllogin pr. IP).
 - `services:`, `config_files:`, `import:` findes også, men doda bruger dem ikke.
+
+## Notefiler
+
+- `claude-noter/krav.md` — kravbeskrivelsen; kodens »handover §N« peger hertil
+- `claude-noter/faldgruber.md` — dyre fejl, kendte huller, faste værn (nøgler, upload, iCal)
+- `docs/MCP.md`, `docs/OAUTH.md` — MCP og connector · `docs/SHORTCUTS.md` — iPhone-genveje
