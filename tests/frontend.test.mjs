@@ -243,3 +243,126 @@ test('stopFokus stopper uret direkte - ikke gennem vippen', () => {
   assert.ok(/function stopTimerNu\b/.test(kode) && /function slaaTimer\b/.test(kode),
     'begge funktioner skal findes - de svarer paa hver sit spoergsmaal');
 });
+
+/*
+ * Faelles tastaturgenveje (v102, 10-10-2026).
+ *
+ * doda, tovo, qlk og Sagu bruger samme bogstaver paa en raekke: ⌫ = slet,
+ * # = kontekst/tag, m = flyt. `x`, `c` og `p` er frigjort - `x` er »markér« og
+ * `c` er »kopiér« i de andre apps, og en gammel tast, der stadig sletter, er
+ * netop den slags overraskelse, reglen skal fjerne.
+ *
+ * `raekkeTaster` koerer her for alvor: funktionen hentes ud af den byggede
+ * app.js og faar stubbe for det, den kalder. Det er adfaerd, ikke moenster -
+ * en kildekontrol ville ikke se, om `#` stadig gik til den rigtige vaelger.
+ */
+function raekkeHarness() {
+  const kode = readFileSync(join(ROD, 'app/public/app.js'), 'utf8');
+  const start = kode.indexOf('async function raekkeTaster(');
+  assert.ok(start > 0, 'raekkeTaster findes i den byggede app.js');
+  const slut = kode.indexOf('\n}\n', start) + 2;
+  const kald = [];
+  const it = { id: 'a1', kind: 'task', title: 'Test' };
+  const nabo = { dataset: { id: 'a2' }, focus() { kald.push(['focus', 'a2']); } };
+  // eslint-disable-next-line no-new-func
+  const lav = new Function('stubbe', `
+    const { state, sideState, naboRaekke, fuldfoer, saetStatus, slet, slaaTimer,
+            tovoKanTage, vaelgHurtigt, aabnElement } = stubbe;
+    ${kode.slice(start, slut)}
+    return raekkeTaster;`);
+  const raekkeTaster = lav({
+    state: { items: [it] },
+    sideState: {},
+    naboRaekke: () => nabo,
+    fuldfoer: async (id) => kald.push(['fuldfoer', id]),
+    saetStatus: async (id, s) => kald.push(['status', id, s]),
+    slet: async (id) => kald.push(['slet', id]),
+    slaaTimer: async (id) => kald.push(['timer', id]),
+    tovoKanTage: () => true,
+    vaelgHurtigt: (x, hvad) => kald.push(['vaelg', x.id, hvad]),
+    aabnElement: (x) => kald.push(['aabn', x.id]),
+  });
+  const tryk = async (key, ekstra = {}) => {
+    kald.length = 0;
+    let stoppet = false;
+    await raekkeTaster({
+      key, metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, ...ekstra,
+      currentTarget: { dataset: { id: 'a1' }, blur() {} },
+      preventDefault() { stoppet = true; }, stopPropagation() {},
+    });
+    return { kald: [...kald], stoppet };
+  };
+  return tryk;
+}
+
+test('raekketaster: ⌫ sletter, # saetter kontekst, m flytter til projekt', async () => {
+  const tryk = await raekkeHarness();
+
+  for (const key of ['Backspace', 'Delete']) {
+    const r = await tryk(key);
+    assert.deepEqual(r.kald, [['slet', 'a1']], `${key} skal slette`);
+    assert.ok(r.stoppet, `${key} skal preventDefault'es - ellers kan browseren gaa tilbage`);
+  }
+  // `#` kommer med Shift paa mange tastaturer - det maa ikke afvise den.
+  assert.deepEqual((await tryk('#', { shiftKey: true })).kald, [['vaelg', 'a1', 'context']]);
+  assert.deepEqual((await tryk('m')).kald, [['vaelg', 'a1', 'project']]);
+  assert.deepEqual((await tryk('t')).kald, [['timer', 'a1']]);
+  assert.deepEqual((await tryk('s')).kald, [['status', 'a1', 'someday']], 's er Someday i doda');
+  assert.deepEqual((await tryk(' ')).kald, [['fuldfoer', 'a1']]);
+});
+
+test('raekketaster: de gamle x, c og p goer ingenting laengere', async () => {
+  const tryk = await raekkeHarness();
+  for (const key of ['x', 'c', 'p']) {
+    const r = await tryk(key);
+    assert.deepEqual(r.kald, [], `${key} maa ikke laengere goere noget paa en raekke`);
+    assert.equal(r.stoppet, false, `${key} maa ikke aedes, naar den ingenting goer`);
+  }
+  // Og en modifikator-tast (fx ⌘⌫ eller ⌘K) tilhoerer ikke raekken.
+  assert.deepEqual((await tryk('Backspace', { metaKey: true })).kald, []);
+});
+
+test('genvejsoversigten viser de nye taster - og ⌘ kun paa Mac', () => {
+  const kode = readFileSync(join(ROD, 'app/public/app.js'), 'utf8');
+  const fra = kode.indexOf('function modTast(');
+  assert.ok(fra > 0, 'modTast findes i den byggede app.js');
+  const til = kode.indexOf('\n];\n', kode.indexOf('const GENVEJE = [', fra)) + 3;
+  const hent = (platform) => {
+    // eslint-disable-next-line no-new-func
+    return new Function('window', `${kode.slice(fra, til)}; return GENVEJE;`)({ navigator: { platform } });
+  };
+
+  const mac = hent('MacIntel');
+  assert.deepEqual(mac.map(([g]) => g), ['Anywhere', 'In the palette (search field)', 'In a list']);
+  const taster = (g, gruppe) => g.find(([n]) => n === gruppe)[1].map(([t]) => t);
+  assert.ok(taster(mac, 'Anywhere').includes('⌘K'));
+  assert.ok(taster(mac, 'Anywhere').includes('⌘ enter'));
+  const liste = taster(mac, 'In a list');
+  for (const t of ['⌫', '#', 'm', 't', 'n', 'w', 's']) assert.ok(liste.includes(t), `${t} mangler i listen`);
+  for (const t of ['x', 'c', 'p', 'q']) assert.ok(!liste.includes(t), `${t} er ikke laengere en listetast`);
+
+  const pc = hent('Win32');
+  assert.ok(taster(pc, 'Anywhere').includes('Ctrl+K'));
+  assert.ok(taster(pc, 'Anywhere').includes('Ctrl+enter'));
+  assert.ok(!JSON.stringify(pc).includes('⌘'), 'paa en pc maa oversigten ikke vise ⌘');
+});
+
+test('⌘K/Ctrl+K fokuserer paletten - foer undtagelserne for felter', () => {
+  /*
+   * KILDEKONTROL: lytteren haenger paa `document` og kraever DOM. Det, der
+   * laases fast, er raekkefoelgen - Cmd+K skal tjekkes FOER »er fokus i et
+   * felt?«, ellers virker den ikke midt i en saetning, som reglen lover.
+   */
+  const kode = readFileSync(join(ROD, 'app/public/app.js'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/.*$/gm, ' ');
+  const k = kode.search(/\(e\.metaKey \|\| e\.ctrlKey\)[^\n]*e\.key === 'k'/);
+  assert.ok(k > 0, 'ingen Cmd/Ctrl+K-genvej i app.js');
+  const blok = kode.slice(k, kode.indexOf('return;\n  }', k));
+  assert.match(blok, /omni\.focus\(\)/);
+  assert.match(blok, /omni\.select\(\)/);
+  assert.match(blok, /tegnPanel\(\)/);
+  const feltTjek = kode.indexOf("el.tagName === 'INPUT'", k);
+  const lytter = kode.lastIndexOf("document.addEventListener('keydown'", k);
+  assert.ok(feltTjek > k && kode.lastIndexOf("document.addEventListener('keydown'", feltTjek) === lytter,
+    'Cmd+K skal staa foer felt-undtagelsen i samme lytter');
+});

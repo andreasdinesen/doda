@@ -1089,7 +1089,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 101;
+const APP_VERSION = 102;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -3723,12 +3723,37 @@ function bindOmni() {
    fra ethvert felt i appen. */
 document.addEventListener('keydown', (e) => {
   if (!state.user) return;
+
+  /*
+   * Cmd/Ctrl+K aabner paletten OVERALT - ogsaa midt i et felt og midt i en
+   * liste. Det er den faelles soegetast i doda, tovo, qlk og sagu
+   * (10-10-2026); forbilledet er tovos (p2_omni.js). Den staar FOER
+   * undtagelserne nedenfor, for en modifikator-genvej stjaeler ikke et
+   * bogstav fra et felt - den kan bruges, netop mens man skriver.
+   *
+   * Een undtagelse: staar en dialog aaben (detaljeruden, en vaelger), ligger
+   * paletten BAG dens baggrund. Fokus dernede ville vaere usynligt, og
+   * dialogen at lukke ville kunne smide en uafsluttet redigering vaek. Saa
+   * der sluger vi blot tasten (browserens egen Cmd+K - Firefox' soegefelt -
+   * skal ikke komme i stedet) og lader Esc lukke dialogen foerst.
+   */
+  if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && (e.key === 'k' || e.key === 'K')) {
+    const omni = omniEl();
+    if (!omni) return;
+    e.preventDefault();
+    if (document.querySelector('.modal')) return;
+    omni.focus();
+    omni.select();
+    tegnPanel();
+    return;
+  }
+
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   const el = document.activeElement;
   if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
   if (document.querySelector('.modal')) return;
   // Star fokus i en liste med tastaturafklaring, ejer LISTEN bogstaverne
-  // (n = next, w = waiting, x = delete). preventDefault i raekkens egen
+  // (n = next, w = waiting, ⌫ = delete). preventDefault i raekkens egen
   // handler stopper ikke boblingen hertil - det skal dette tjek.
   //
   // Se ogsaa paa haendelsens MAAL og ikke kun paa det, der har fokus NU:
@@ -4093,7 +4118,13 @@ async function raekkeTaster(e) {
     await saetStatus(id, statusTaster[e.key]);
     return;
   }
-  if (e.key === 'x') {
+  /*
+   * Slet er ⌫ (Backspace/Delete) - samme tast i doda, tovo, qlk og sagu
+   * (faelles genvejsregel, 10-10-2026). Foer var det `x`, men `x` betyder
+   * "markér" i de andre apps. `mit()` stopper ogsaa browserens egen
+   * Backspace-adfaerd, saa tasten aldrig kan blive til "tilbage".
+   */
+  if (e.key === 'Backspace' || e.key === 'Delete') {
     mit();
     husk();
     await slet(id);
@@ -4101,7 +4132,7 @@ async function raekkeTaster(e) {
   }
 
   /*
-   * `t` for tid. Raekken bliver LIGGENDE - i modsaetning til n/w/s/x er en
+   * `t` for tid. Raekken bliver LIGGENDE - i modsaetning til n/w/s/⌫ er en
    * tidtagning ikke en afklaring, der flytter opgaven ud af listen, saa der
    * er ingen nabo at huske.
    *
@@ -4127,10 +4158,14 @@ async function raekkeTaster(e) {
 
   // Kontekst og projekt skal ogsaa kunne saettes uden mus (handover §7).
   // De aabner en lille vaelger i stedet for at gaette pa et navn.
-  if (e.key === 'c' || e.key === 'p') {
+  // `#` = kontekst (doda's tag), `m` = flyt til projekt - faelles bogstaver
+  // med tovo, qlk og sagu (10-10-2026; foer `c` og `p`). `#` kraever Shift
+  // paa mange tastaturer; det er fint, for vi afviser kun meta/ctrl/alt,
+  // og vi sammenligner paa `e.key`, der allerede er tegnet `#`.
+  if (e.key === '#' || e.key === 'm') {
     mit();
     const it = state.items.find((x) => x.id === id);
-    if (it) vaelgHurtigt(it, e.key === 'c' ? 'context' : 'project');
+    if (it) vaelgHurtigt(it, e.key === '#' ? 'context' : 'project');
   }
 }
 
@@ -9143,17 +9178,35 @@ function visTodoistForhaandsvisning(laest) {
 
 /* -------------------------------------------------- genvejsoversigten */
 
+/*
+ * Modifikatortasten, som den hedder paa DENNE maskine: ⌘ paa Mac/iPhone/iPad,
+ * Ctrl ellers. Samme regel som Sagus modTast() - viser oversigten »⌘« paa en
+ * pc, leder man efter en tast, der ikke er der. Koden lytter i forvejen paa
+ * begge (metaKey || ctrlKey); det er kun mærkaten, der skal passe.
+ */
+function modTast() {
+  const nav = window.navigator || {};
+  const kilde = String((nav.userAgentData && nav.userAgentData.platform) || nav.platform || '');
+  return /mac|iphone|ipad|ipod/i.test(kilde) ? '\u2318' : 'Ctrl+';
+}
+
 /* Handover §7: "Vis en oversigt over genvejene med ?". Den skal kunne naas
-   overalt - ogsaa fra en liste, hvor bogstaverne ellers er optaget. */
+   overalt - ogsaa fra en liste, hvor bogstaverne ellers er optaget.
+
+   Grupperne og bogstaverne foelger den faelles regel for doda, tovo, qlk og
+   sagu (10-10-2026): Anywhere · In the palette · In a list, og paa en raekke
+   ⌫ = slet, # = kontekst/tag, m = flyt, t = timer. doda beholder n/w/s, fordi
+   de er GTD's egne statusser (s er derfor Someday her, ikke stjerne). */
 const GENVEJE = [
   ['Anywhere', [
+    [`${modTast()}K`, 'Search — focus the palette from anywhere, even mid-sentence'],
     ['any key', 'Start capturing — the palette opens with what you typed'],
     ['↑ ↓', 'Step into the list below, without opening anything'],
     ['?', 'This list'],
     ['esc', 'Close whatever is open'],
-    ['⌘ enter', 'Save the open task, project or repeat'],
+    [modTast() === '\u2318' ? '⌘ enter' : 'Ctrl+enter', 'Save the open task, project or repeat'],
   ]],
-  ['In the palette', [
+  ['In the palette (search field)', [
     ['+', 'New task'], ['*', 'New note'],
     ['/', 'Jump to a project'], ['#', 'Jump to a context'], [':', 'Jump to an area'],
     ['↑ ↓', 'Move between results'], ['enter', 'Create or open'],
@@ -9165,8 +9218,9 @@ const GENVEJE = [
     ['enter', 'Open the item'],
     ['space', 'Mark it done'],
     ['n', 'Next Actions'], ['w', 'Waiting For'], ['s', 'Someday'],
-    ['c', 'Set a context'], ['p', 'Set a project'],
-    ['x', 'Delete'],
+    ['#', 'Set a context'], ['m', 'Move to a project'],
+    ['t', 'Start/stop the tovo timer (only when tovo is connected)'],
+    ['⌫', 'Delete'],
   ]],
 ];
 

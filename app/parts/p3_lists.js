@@ -340,7 +340,13 @@ async function raekkeTaster(e) {
     await saetStatus(id, statusTaster[e.key]);
     return;
   }
-  if (e.key === 'x') {
+  /*
+   * Slet er ⌫ (Backspace/Delete) - samme tast i doda, tovo, qlk og sagu
+   * (faelles genvejsregel, 10-10-2026). Foer var det `x`, men `x` betyder
+   * "markér" i de andre apps. `mit()` stopper ogsaa browserens egen
+   * Backspace-adfaerd, saa tasten aldrig kan blive til "tilbage".
+   */
+  if (e.key === 'Backspace' || e.key === 'Delete') {
     mit();
     husk();
     await slet(id);
@@ -348,7 +354,7 @@ async function raekkeTaster(e) {
   }
 
   /*
-   * `t` for tid. Raekken bliver LIGGENDE - i modsaetning til n/w/s/x er en
+   * `t` for tid. Raekken bliver LIGGENDE - i modsaetning til n/w/s/⌫ er en
    * tidtagning ikke en afklaring, der flytter opgaven ud af listen, saa der
    * er ingen nabo at huske.
    *
@@ -374,10 +380,14 @@ async function raekkeTaster(e) {
 
   // Kontekst og projekt skal ogsaa kunne saettes uden mus (handover §7).
   // De aabner en lille vaelger i stedet for at gaette pa et navn.
-  if (e.key === 'c' || e.key === 'p') {
+  // `#` = kontekst (doda's tag), `m` = flyt til projekt - faelles bogstaver
+  // med tovo, qlk og sagu (10-10-2026; foer `c` og `p`). `#` kraever Shift
+  // paa mange tastaturer; det er fint, for vi afviser kun meta/ctrl/alt,
+  // og vi sammenligner paa `e.key`, der allerede er tegnet `#`.
+  if (e.key === '#' || e.key === 'm') {
     mit();
     const it = state.items.find((x) => x.id === id);
-    if (it) vaelgHurtigt(it, e.key === 'c' ? 'context' : 'project');
+    if (it) vaelgHurtigt(it, e.key === '#' ? 'context' : 'project');
   }
 }
 

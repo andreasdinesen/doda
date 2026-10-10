@@ -993,17 +993,35 @@ function visTodoistForhaandsvisning(laest) {
 
 /* -------------------------------------------------- genvejsoversigten */
 
+/*
+ * Modifikatortasten, som den hedder paa DENNE maskine: ⌘ paa Mac/iPhone/iPad,
+ * Ctrl ellers. Samme regel som Sagus modTast() - viser oversigten »⌘« paa en
+ * pc, leder man efter en tast, der ikke er der. Koden lytter i forvejen paa
+ * begge (metaKey || ctrlKey); det er kun mærkaten, der skal passe.
+ */
+function modTast() {
+  const nav = window.navigator || {};
+  const kilde = String((nav.userAgentData && nav.userAgentData.platform) || nav.platform || '');
+  return /mac|iphone|ipad|ipod/i.test(kilde) ? '\u2318' : 'Ctrl+';
+}
+
 /* Handover §7: "Vis en oversigt over genvejene med ?". Den skal kunne naas
-   overalt - ogsaa fra en liste, hvor bogstaverne ellers er optaget. */
+   overalt - ogsaa fra en liste, hvor bogstaverne ellers er optaget.
+
+   Grupperne og bogstaverne foelger den faelles regel for doda, tovo, qlk og
+   sagu (10-10-2026): Anywhere · In the palette · In a list, og paa en raekke
+   ⌫ = slet, # = kontekst/tag, m = flyt, t = timer. doda beholder n/w/s, fordi
+   de er GTD's egne statusser (s er derfor Someday her, ikke stjerne). */
 const GENVEJE = [
   ['Anywhere', [
+    [`${modTast()}K`, 'Search — focus the palette from anywhere, even mid-sentence'],
     ['any key', 'Start capturing — the palette opens with what you typed'],
     ['↑ ↓', 'Step into the list below, without opening anything'],
     ['?', 'This list'],
     ['esc', 'Close whatever is open'],
-    ['⌘ enter', 'Save the open task, project or repeat'],
+    [modTast() === '\u2318' ? '⌘ enter' : 'Ctrl+enter', 'Save the open task, project or repeat'],
   ]],
-  ['In the palette', [
+  ['In the palette (search field)', [
     ['+', 'New task'], ['*', 'New note'],
     ['/', 'Jump to a project'], ['#', 'Jump to a context'], [':', 'Jump to an area'],
     ['↑ ↓', 'Move between results'], ['enter', 'Create or open'],
@@ -1015,8 +1033,9 @@ const GENVEJE = [
     ['enter', 'Open the item'],
     ['space', 'Mark it done'],
     ['n', 'Next Actions'], ['w', 'Waiting For'], ['s', 'Someday'],
-    ['c', 'Set a context'], ['p', 'Set a project'],
-    ['x', 'Delete'],
+    ['#', 'Set a context'], ['m', 'Move to a project'],
+    ['t', 'Start/stop the tovo timer (only when tovo is connected)'],
+    ['⌫', 'Delete'],
   ]],
 ];
 

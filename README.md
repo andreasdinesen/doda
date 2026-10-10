@@ -233,18 +233,24 @@ projektet, vækkes præcis de opgaver, der fulgte med.
 
 ### Tastatur
 
-I Inbox og Næste handlinger kan alt klares uden mus:
+I Inbox og Næste handlinger kan alt klares uden mus. Tasterne er de samme som i
+tovo, qlk og Sagu, så vidt det giver mening — doda beholder `n` `w` `s`, fordi de
+er GTD's egne statusser (`s` er derfor Someday her, ikke stjerne).
 
 | Tast | Handling |
 |---|---|
+| `⌘K` / `Ctrl+K` | **fokusér kommandobaren** — overalt, også midt i et felt |
 | `↑` `↓` | **gå ind i listen** — uden at åbne noget |
 | `↑` `↓` (eller `k` `j`) | flyt mellem elementer |
 | `Esc` | forlad listen igen, så bogstaverne fanger som normalt |
 | `Enter` | åbn elementet |
 | `mellemrum` | markér udført |
-| `n` `w` `s` `q` | Next · Waiting for · Someday · Queued |
-| `x` | slet |
-| `c` `p` | sæt kontekst · sæt projekt |
+| `n` `w` `s` | Next · Waiting for · Someday |
+| `#` | sæt kontekst |
+| `m` | flyt til et projekt |
+| `t` | start/stop tovo-timeren (kun når tovo er koblet på) |
+| `⌫` | slet |
+| `⌘↵` / `Ctrl+↵` | gem den åbne opgave, det åbne projekt eller gentagelsen |
 | `?` | vis hele oversigten over genveje |
 
 På mobil ligger de fem vigtigste skærme i et bånd i bunden — Next, Inbox,
@@ -511,6 +517,7 @@ Se `DESIGN.md` for de trufne beslutninger og `CLAUDE.md` for kontekst til videre
 
 | Version | Ændringer |
 |---|---|
+| 102 | **Samme taster som i tovo, qlk og Sagu.** `⌘K` (`Ctrl+K` på pc) fokuserer kommandobaren hvor som helst — også midt i et felt. På en række i en liste er **slet** nu `⌫` i stedet for `x`, **kontekst** er `#` i stedet for `c`, og **flyt til projekt** er `m` i stedet for `p` — de bogstaver betyder det samme i alle fire apps. `n`, `w` og `s` er uændrede. Genvejsoversigten (`?`) og guiden viser `⌘` på Mac og `Ctrl` ellers, og `t` (tovo-timeren) står nu også på listen. |
 | 101 | **Hvorfor hedder den doda?** Under login-knappen står nu et lille link, *Why “doda”?*, der folder en kort forklaring på navnet ud. Det er et `<details>` uden JavaScript, så det står ikke i vejen for login. Den samme forklaring står i README'en under »Navnet«. |
 | 100 | **Tallet på app-ikonet.** Har du doda på hjemmeskærmen, viser ikonet nu, hvor mange opgaver der ligger i **Next Actions** — som Todoist gør. Tallet tælles som listen, så udskudte opgaver først tæller med på deres dag. Det opdateres, når du bruger doda, og mens doda er lukket følger det med hver påmindelse. **På iPhone kræver det, at notifikationer er slået til** for doda; ændrer du opgaver et andet sted, retter ikonet sig først, næste gang du åbner doda eller får en påmindelse — mere lader iOS ikke en webapp gøre. Kan slås fra under Settings → Notifications. |
 | 99 | **Tidsregistrering: doda kan tage tid i tovo.** Forbind **tovo** under Settings → Connections, og hver opgave får en optageknap — i listerne og inde i opgaven. Knappen viser, hvad der kører: din egen opgave, en anden (med navn), eller ingenting. Der kan kun køre **én** tidtagning, så start på noget nyt stopper det forrige — og siger det, før du trykker. **Stop er ikke det samme som færdig:** kan du ikke blive færdig i dag, stopper **Stop** uret og lader opgaven stå åben, og i morgen lægges tiden til **samme** opgave i tovo i stedet for at lave en ny. Fokusskærmen henter sin tid fra tovo, så uret er rigtigt, også efter du har lukket appen. Fanger du med et **`%`** i teksten, starter uret i samme øjeblik opgaven findes — en chip viser det, før du trykker Enter. **Krydser du en opgave af, stopper dens ur af sig selv**, uanset om det sker fra listen, inde i opgaven, fra en genvej eller fra Claude — og kun dens eget: er du midt i noget andet, kører det videre. Nederst i opgaven står, hvor lang tid der er gået, **regnet af tovo** med din egen afrunding, så tallet passer med ugerapporten. Hvilket tovo-projekt timerne lander på, sættes på projektet. En afkrydsning venter aldrig på tovo: er den nede, kører uret videre, og det kan ses på ikonet. **Der synkroniseres ingenting** — og tovo har ikke fået en eneste linje kode af det. **Undervejs faldt to ældre fejl ud:** en gendannet backup satte **hvert eneste Sagu- og Notion-link** til tomt — linkene *var* med i filen, det var vejen ind, der tabte dem — og det samme gjaldt stemplet for »der er mindet om denne her«, så en backup lagt ind midt på dagen kunne sende dagens påmindelser en gang til. Begge dele gendannes nu, og en prøve holder listen over, hvad der gendannes, op mod databasens virkelige felter. Og to hjælpetekster — den under »Also push me a notification« og den om totrinskoden i loginruden — blev tegnet nede i skærmens hjørne i stedet for under deres eget felt, fordi de delte klassenavn med »type to capture«-mærket. Teksten om totrinskoden er nu også synlig på telefonen. |

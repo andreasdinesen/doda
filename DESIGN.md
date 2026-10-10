@@ -286,7 +286,7 @@ noget ved den.
 ### Tastaturet ind i listerne
 
 `↑`/`↓` går **ind** i listen uden at åbne noget. Før kunne fokus kun komme fra
-et klik, og et klik åbner opgaven — så genvejstasterne (`n`, `w`, `s`, `x`) var
+et klik, og et klik åbner opgaven — så genvejstasterne (`n`, `w`, `s`, slet) var
 i praksis uopnåelige. `Esc` slipper listen igen, så bogstaverne går tilbage til
 »begynd bare at skrive«. **Kun piletaster** må fange listen: gjorde `j`/`k` det
 også, kunne man ikke længere fange en opgave, der begynder med dem.
@@ -3233,3 +3233,40 @@ mest, en webapp kan.
 
 `app_badge: 0` fjerner tallet; slået fra udelades feltet helt, så ikonet ikke
 røres af en push.
+
+## Fælles tastaturgenveje på tværs af apps (v102, 2026-10-10)
+
+doda, tovo, qlk og Sagu skal tale samme tastatursprog, så hånden ikke skal skifte
+app sammen med hovedet. Reglen (godkendt af Andreas):
+
+- **Overalt:** `⌘K`/`Ctrl+K` → søgefeltet (i doda: kommandobaren), `?` →
+  oversigten, `Esc` lukker, `⌘↵` gemmer.
+- **I en liste:** `↑`/`↓` går ind, derefter også `j`/`k`; `Enter` åbner; `Esc`
+  forlader. Når en række har fokus, **ejer den bogstaverne** (§v29).
+- **Fælles bogstaver på en række:** mellemrum = udført, `e` = rediger, `m` = flyt
+  (projekt/samling), `#` = tag/kontekst, `s` = stjerne, `⌫` = slet, `t` = timer,
+  `x` = markér, `c` = kopiér.
+
+**dodas afvigelser, med vilje:**
+
+- `n`/`w`/`s` bliver — det er GTD's egne statusser og hele pointen med
+  tastaturafklaringen. `s` er derfor **Someday**, ikke stjerne.
+- »Begynd bare at skrive« bliver: et bogstav uden fokus i et felt eller en række
+  åbner kommandobaren med bogstavet i. `/` åbner dermed paletten i
+  projekt-tilstand — dodas `/` er en mode i paletten, ikke kun »fokusér søgning«.
+- `e` og `x`/`c` (markér/kopiér) findes ikke i doda endnu. `x` og `c` er bevidst
+  **frigjort** (før: slet og kontekst), så de ikke betyder noget andet end i de
+  andre apps, hvis de en dag kommer.
+
+**Det, der ændrede sig:** slet `x` → `⌫` (Backspace/Delete), kontekst `c` → `#`,
+projekt `p` → `m`, og `⌘K` er ny. `⌫` på en række kalder `mit()` (preventDefault +
+stopPropagation), så tasten aldrig bliver til browserens »tilbage«. `#` kræver
+Shift på mange tastaturer; `raekkeTaster` afviser kun meta/ctrl/alt og læser
+`e.key`, så det er tegnet `#`, der sammenlignes.
+
+**`⌘K` mens en dialog er åben** sluger tasten, men flytter ikke fokus: paletten
+ligger bag dialogens baggrund, og fokus dernede ville være usynligt. `Esc` først.
+
+**Mærkaterne følger maskinen.** `modTast()` (p8, samme regel som Sagus) viser `⌘`
+på Mac/iPhone/iPad og `Ctrl+` ellers — både for `⌘K` og `⌘ enter`. Koden lytter i
+forvejen på begge (`metaKey || ctrlKey`).

@@ -904,12 +904,37 @@ function bindOmni() {
    fra ethvert felt i appen. */
 document.addEventListener('keydown', (e) => {
   if (!state.user) return;
+
+  /*
+   * Cmd/Ctrl+K aabner paletten OVERALT - ogsaa midt i et felt og midt i en
+   * liste. Det er den faelles soegetast i doda, tovo, qlk og sagu
+   * (10-10-2026); forbilledet er tovos (p2_omni.js). Den staar FOER
+   * undtagelserne nedenfor, for en modifikator-genvej stjaeler ikke et
+   * bogstav fra et felt - den kan bruges, netop mens man skriver.
+   *
+   * Een undtagelse: staar en dialog aaben (detaljeruden, en vaelger), ligger
+   * paletten BAG dens baggrund. Fokus dernede ville vaere usynligt, og
+   * dialogen at lukke ville kunne smide en uafsluttet redigering vaek. Saa
+   * der sluger vi blot tasten (browserens egen Cmd+K - Firefox' soegefelt -
+   * skal ikke komme i stedet) og lader Esc lukke dialogen foerst.
+   */
+  if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && (e.key === 'k' || e.key === 'K')) {
+    const omni = omniEl();
+    if (!omni) return;
+    e.preventDefault();
+    if (document.querySelector('.modal')) return;
+    omni.focus();
+    omni.select();
+    tegnPanel();
+    return;
+  }
+
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   const el = document.activeElement;
   if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
   if (document.querySelector('.modal')) return;
   // Star fokus i en liste med tastaturafklaring, ejer LISTEN bogstaverne
-  // (n = next, w = waiting, x = delete). preventDefault i raekkens egen
+  // (n = next, w = waiting, ⌫ = delete). preventDefault i raekkens egen
   // handler stopper ikke boblingen hertil - det skal dette tjek.
   //
   // Se ogsaa paa haendelsens MAAL og ikke kun paa det, der har fokus NU:
