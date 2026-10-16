@@ -1027,6 +1027,7 @@ const GENVEJE = [
     ['/', 'Jump to a project'], ['#', 'Jump to a context'], [':', 'Jump to an area'],
     ['↑ ↓', 'Move between results'], ['enter', 'Create or open'],
     ['backspace', 'Leave the mode when the field is empty'],
+    ['?', 'Alone in the field: open the guide'],
   ]],
   ['In a list', [
     ['↑ ↓', 'Move between items (or j / k)'],

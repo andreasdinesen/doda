@@ -3301,3 +3301,16 @@ rumme et billede. Nu bliver det en ventende fil som ved træk-og-slip, omdøbt f
 »Screenshot 16 Oct 14:05« markeret, så ét Enter er nok. Ligger der også tekst på
 udklipsholderen, indsættes teksten som altid. Detaljeruden vedhæfter et indsat
 billede direkte.
+
+## `?` i kommandobaren og × på en ventende fil (2026-10-16)
+
+**`?` alene i kommandobaren åbner Guiden** — ikke genvejsoversigten, som `?`
+udenfor feltet viser, fordi Guiden forklarer mere end tasterne og har dem alle under
+»All the keys«. Kun når `?` er hele feltet og ingen fil venter. Samme regel i Sagu
+(Sagu §65), hvor den åbner oversigten, fordi Sagu ikke har en guide.
+
+**En ventende fil i kommandobaren har et ×.** Et indsat skærmbillede, man
+fortrød, kunne kun fjernes med `Esc`, og den tog titlen med. Krydset fjerner kun
+filen, og feltet beholder fokus (`mousedown` forhindres). **Krydset på en
+vedhæftning i en åben opgave** sås kun ved hover og var derfor usynligt på en
+telefon; under `@media (hover: none)` står det nu altid fremme.

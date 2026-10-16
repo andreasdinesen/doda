@@ -496,6 +496,11 @@ body.rullet .omni-card:not(:focus-within) .omni-field { box-shadow: var(--shadow
 }
 
 .chip.neutral { background: var(--card); color: var(--muted); border: 1px solid var(--border); }
+/* Krydset paa en ventende fil i kommandobaren. */
+.chip.filchip { display: inline-flex; align-items: center; gap: 4px; padding-right: 4px; }
+.filchip-x { border: 0; background: none; color: inherit; font: inherit; font-size: 15px; line-height: 1;
+  width: 20px; height: 20px; border-radius: 50%; cursor: pointer; opacity: .65; padding: 0; }
+.filchip-x:hover, .filchip-x:focus-visible { opacity: 1; background: var(--accent-soft); }
 
 /* ------------------------------------------------- resultater i paletten */
 
@@ -1604,6 +1609,8 @@ textarea.input { resize: vertical; min-height: 90px; font-family: inherit; }
 }
 
 .filecard:hover .filedel, .filecard:focus-within .filedel { opacity: 1; }
+/* Uden mus findes der ingen hover - saa ville krydset aldrig kunne ses. */
+@media (hover: none) { .filedel { opacity: 1; } }
 .filedel:hover { background: rgba(20, 15, 8, .85); }
 
 /* Pa touch findes hover ikke - saa skal krydset altid vaere der. */

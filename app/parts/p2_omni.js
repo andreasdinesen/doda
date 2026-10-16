@@ -47,7 +47,7 @@ const NAVIGATION = {
    tilstand findes. Derfor bygges den efter tilstanden, ikke som en konstant. */
 const standardLegend = () => ['+ task']
   .concat(state.notesEnabled ? [saguKlar ? '* note in Sagu' : '* note'] : [])
-  .concat(['/ projects', '# contexts', ': areas']);
+  .concat(['/ projects', '# contexts', ': areas', '? help']);
 
 const omniState = {
   mode: null,          // et tegn fra MODER, eller null
@@ -253,12 +253,16 @@ function tegnChips() {
   const raa = omniEl() ? omniEl().value.trim() : '';
   // Navigations-tilstandene har ingen tolkning at vise.
   if ((!raa && !omniState.filer.length) || (omniState.mode && !'+*'.includes(omniState.mode))) { host.innerHTML = ''; return; }
-  if (!t) { host.innerHTML = omniState.filer.map((f) =>
-    `<span class="chip">${esc(`📎 ${f.name}`)}</span>`).join(''); return; }
+  /*
+   * En ventende fil har et × (Andreas, 16-10-2026): et indsat skaermbillede,
+   * man fortryder, kunne kun fjernes med Esc - og Esc tog titlen med. Krydset
+   * fjerner KUN filen; resten af fangsten bliver staaende.
+   */
+  const filChips = omniState.filer.map((f, i) => `<span class="chip filchip">${esc(`📎 ${f.name}`)}<button
+    class="filchip-x" data-fjernfil="${i}" aria-label="Remove ${esc(f.name)}" title="Remove">×</button></span>`).join('');
+  if (!t) { host.innerHTML = filChips; return; }
 
   const chips = [];
-  // Ventende filer staar foerst: de er det mest overraskende i feltet.
-  for (const f of omniState.filer) chips.push([`📎 ${f.name}`, 'accent']);
   /* Udfylder skaermen noget, skal det staa HER, foer man trykker Enter -
      ellers sker det bag om ryggen paa brugeren, og det er praecis den slags
      tavse hjaelpsomhed, en chip-raekke findes for at afsloere.
@@ -298,7 +302,8 @@ function tegnChips() {
     if (w !== 'gentagelse') chips.push([w.replace('forstod ikke datoen', "didn't understand the date"), 'neutral']);
   }
 
-  host.innerHTML = chips.map(([tekst, slags]) =>
+  // Ventende filer staar foerst: de er det mest overraskende i feltet.
+  host.innerHTML = filChips + chips.map(([tekst, slags]) =>
     `<span class="chip${slags === 'neutral' ? ' neutral' : ''}">${esc(tekst)}</span>`).join('');
 }
 
@@ -760,6 +765,20 @@ function opdaterOmni() {
   // Foerste tegn kan vaelge en tilstand - men KUN naar feltet ellers er tomt.
   // Ellers ville "#hjem" midt i en saetning skifte tilstand, og den inline
   // genvejssyntaks ville holde op med at virke.
+  /*
+   * `?` alene i feltet aabner guiden (Andreas, 16-10-2026). Udenfor feltet
+   * aabner `?` genvejsoversigten, men fra soegningen kunne man ikke naa
+   * hjaelpen. Guiden og ikke oversigten, fordi den forklarer mere end
+   * tasterne - og har dem alle under »All the keys«. Kun naar `?` er HELE
+   * feltet og der ikke venter en fil: midt i en tekst er det bare et tegn.
+   * Samme regel i Sagu.
+   */
+  if (!omniState.mode && el.value === '?' && !omniState.filer.length) {
+    luk();
+    gaaTil('guide');
+    return;
+  }
+
   if (!omniState.mode && el.value.length === 1 && MODER[el.value]) {
     saetMode(el.value);
     el.value = '';
@@ -813,6 +832,22 @@ function bindOmniFiler() {
   if (!kort || !el) return;
 
   const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
+
+  /* Krydset paa en ventende fil. Delegeret, fordi chippene tegnes om ved
+     hvert tastetryk. Fokus gaar tilbage til feltet, saa man kan skrive videre. */
+  const chipHost = document.getElementById('omniChips');
+  if (chipHost) {
+    chipHost.addEventListener('mousedown', (e) => {
+      if (e.target.closest('[data-fjernfil]')) e.preventDefault();   // feltet beholder fokus
+    });
+    chipHost.addEventListener('click', (e) => {
+      const x = e.target.closest('[data-fjernfil]');
+      if (!x) return;
+      e.preventDefault();
+      omniState.filer.splice(Number(x.dataset.fjernfil), 1);
+      opdaterOmni();
+    });
+  }
   ['dragenter', 'dragover'].forEach((n) => kort.addEventListener(n, (e) => {
     if (!e.dataTransfer || !Array.from(e.dataTransfer.types || []).includes('Files')) return;
     stop(e);
