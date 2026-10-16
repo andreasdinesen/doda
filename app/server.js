@@ -1530,6 +1530,26 @@ function springItemOver(item) {
 function opdaterMedGentagelse(id, felter) {
   const foer = hentItem(id);
   if (!foer) return null;
+
+  /*
+   * En dato er en beslutning - OGSAA naar den saettes bagefter (DESIGN.md
+   * §6s). Fangsten flyttede `!fredag` til Next, men en opgave, der fik sin
+   * dato i detaljeruden, blev liggende i Inbox (Andreas, 16-10-2026).
+   *
+   * Kun fra inbox og kun naar status ikke er aendret i samme ombaering:
+   * detaljeruden sender altid sin status med, saa »uaendret inbox« er det
+   * samme som »ikke valgt«. Har man selv valgt Waiting eller Someday, vinder
+   * valget. Udskydelsen foelger datoen som ved fangsten, medmindre der
+   * allerede er en.
+   */
+  if (foer.kind === 'task' && foer.status === 'inbox'
+      && felter.due_date && felter.due_date !== foer.due_date
+      && (felter.status === undefined || felter.status === 'inbox')) {
+    felter = Object.assign({}, felter, { status: 'next' });
+    const defer = 'defer_date' in felter ? felter.defer_date : foer.defer_date;
+    if (!defer) felter.defer_date = felter.due_date;
+  }
+
   const nyStatus = felter.status;
   const lukkes = (nyStatus === 'done' || nyStatus === 'dropped')
     && foer.status !== 'done' && foer.status !== 'dropped';

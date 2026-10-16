@@ -1089,7 +1089,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 102;
+const APP_VERSION = 103;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -2556,15 +2556,58 @@ function synligeRaekker(vaelger = '.item-row') {
  *
  * `preventDefault` er ikke pynt - uden den lægger beskrivelsesfeltet et
  * linjeskift ind i samme ombæring.
+ *
+ * Lytteren sidder paa DOKUMENTET og ikke paa ruden (v103). Paa ruden virkede
+ * den kun, mens fokus var inde i den - og klikker man paa en chip, der
+ * tegner sig om, falder fokus tilbage til <body>. Saa gjorde ⌘+Enter
+ * ingenting, netop efter man havde rettet noget (Andreas, 16-10-2026).
+ * Knappen haenger stadig paa sin egen rude: kun den OEVERSTE rude svarer, og
+ * har den ingen gem-knap (serie-spoergsmaalet), sker der intet - heller ikke
+ * i detaljeruden bagved.
  */
+const gemKnapper = new WeakMap();
+
 function bindGemGenvej(host, knap) {
-  if (!host || !knap) return;
-  host.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter' || !(e.metaKey || e.ctrlKey)) return;
-    e.preventDefault();
-    knap.click();
-  });
+  if (host && knap) gemKnapper.set(host, knap);
 }
+
+/* Den rude, man ser: den sidst tilfoejede `.modal` ligger oeverst. */
+function oeversteRude() {
+  const ruder = document.querySelectorAll('.modal');
+  return ruder.length ? ruder[ruder.length - 1] : null;
+}
+
+/*
+ * ⌘+Enter gemmer og Esc annullerer - i ALLE ruder.
+ *
+ * Esc trykker paa rudens `[data-esc]`-knap (Cancel, Close, Done), saa den
+ * lukker ad den vej, et klik ville. Har ruden ingen, er Esc et klik paa
+ * baggrunden - de ruder, der IKKE maa lukke ved et uheld (noeglen og
+ * noedkoderne, der kun vises én gang), lytter ikke paa baggrunden, og saa
+ * goer Esc heller ingenting dér.
+ *
+ * Boblefasen med vilje: kommentarfelterne i detaljeruden ejer selv deres
+ * ⌘+Enter og stopper den, og lysboksen ejer sin Esc i fangfasen. Hvad et
+ * felt har handlet paa (`defaultPrevented`), roerer vi ikke.
+ */
+document.addEventListener('keydown', (e) => {
+  if (e.defaultPrevented || e.isComposing) return;
+  const gem = e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey;
+  const esc = e.key === 'Escape' && !e.metaKey && !e.ctrlKey && !e.altKey;
+  if (!gem && !esc) return;
+  if (document.querySelector('.lightbox')) return;
+  const rude = oeversteRude();
+  if (!rude) return;
+  e.preventDefault();
+  if (gem) {
+    const knap = gemKnapper.get(rude);
+    if (knap && knap.isConnected && !knap.disabled) knap.click();
+    return;
+  }
+  const knap = rude.querySelector('[data-esc]');
+  if (knap) knap.click();
+  else rude.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+});
 
 /* --------------------------------------------------- brugermenuen */
 
@@ -3639,12 +3682,25 @@ function bindOmniFiler() {
   }));
   ['dragleave', 'dragend'].forEach((n) => kort.addEventListener(n, () => kort.classList.remove('draaber')));
 
+  /*
+   * Fælles for traek-og-slip og indsaet: filerne laegger sig som chips, og
+   * `forslag` bliver titlen, hvis feltet er tomt - markeret, saa det
+   * forsvinder ved foerste tastetryk.
+   */
+  const tilfoej = (filer, forslag) => {
+    omniState.filer = omniState.filer.concat(filer);
+    const tomt = !el.value.trim();
+    if (tomt && forslag) el.value = forslag;
+    el.focus();
+    if (tomt && forslag) el.select();
+    opdaterOmni();
+  };
+
   kort.addEventListener('drop', (e) => {
     const filer = e.dataTransfer && e.dataTransfer.files ? [...e.dataTransfer.files] : [];
     if (!filer.length) return;
     stop(e);
     kort.classList.remove('draaber');
-    omniState.filer = omniState.filer.concat(filer);
     /*
      * Filnavnet foreslaas KUN, naar det ligner noget, nogen har skrevet.
      *
@@ -3653,14 +3709,40 @@ function bindOmniFiler() {
      * ikke et vaern i sig selv: ét klik i feltet opphaever den, og saa stod
      * et kamera-id blandet ind i titlen. Derfor foerst proeven ovenfor.
      */
-    const tomt = !el.value.trim();
-    const forslag = tomt && menneskeligtFilnavn(filer[0].name)
-      ? filer[0].name.replace(/\.[^.]+$/, '')
-      : null;
-    if (forslag) el.value = forslag;
-    el.focus();
-    if (forslag) el.select();
-    opdaterOmni();
+    tilfoej(filer, menneskeligtFilnavn(filer[0].name) ? filer[0].name.replace(/\.[^.]+$/, '') : null);
+  });
+
+  /*
+   * ⌘V / Ctrl+V med et skaermbillede (Andreas, 16-10-2026).
+   *
+   * Et <input> kan ikke rumme et billede, saa browseren smed det bare vaek -
+   * intet skete. Nu bliver det en ventende fil som ved traek-og-slip.
+   *
+   * Udklipsholderens billede hedder altid »image.png«; det omdoebes efter
+   * tidspunktet, saa vedhaeftningen kan kendes fra de andre bagefter. Er
+   * feltet tomt, foreslaas »Screenshot 16 Oct 14:05« som titel: et navn,
+   * man godt kunne have skrevet, og ét Enter er saa nok.
+   *
+   * Ligger der OGSAA tekst paa udklipsholderen (kopieret fra en webside),
+   * indsaettes teksten som altid - billedet kommer bare med.
+   */
+  el.addEventListener('paste', (e) => {
+    const cd = e.clipboardData;
+    if (!cd) return;
+    const filer = [...(cd.files || [])];
+    if (!filer.length) return;
+    const nu = new Date();
+    const to = (n) => String(n).padStart(2, '0');
+    const stempel = `${nu.getFullYear()}-${to(nu.getMonth() + 1)}-${to(nu.getDate())} ${to(nu.getHours())}.${to(nu.getMinutes())}`;
+    const omdoebt = filer.map((f, i) => (/^image\.\w+$/i.test(f.name) && f.type.startsWith('image/')
+      ? new File([f], `Screenshot ${stempel}${filer.length > 1 ? ` (${i + 1})` : ''}.${(f.type.split('/')[1] || 'png').replace('jpeg', 'jpg')}`, { type: f.type })
+      : f));
+    const harTekst = !!cd.getData('text/plain');
+    if (!harTekst) e.preventDefault();
+    const titel = omdoebt[0].type.startsWith('image/')
+      ? `Screenshot ${nu.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} ${to(nu.getHours())}:${to(nu.getMinutes())}`
+      : (menneskeligtFilnavn(omdoebt[0].name) ? omdoebt[0].name.replace(/\.[^.]+$/, '') : null);
+    tilfoej(omdoebt, harTekst ? null : titel);
   });
 }
 
@@ -4187,7 +4269,7 @@ function vaelgHurtigt(it, hvad) {
     </select>` : `<p class="lead">No ${hvad === 'context' ? 'contexts' : 'projects'} yet — type
       ${hvad === 'context' ? '<code>#name</code>' : '<code>@Name</code>'} when you capture.</p>`}
     <div class="modal-foot"><span style="flex:1"></span>
-      <button class="btn" id="qkCancel">Cancel</button>
+      <button class="btn" id="qkCancel" data-esc>Cancel</button>
       ${kilde.length ? '<button class="btn primary" id="qkOk">Set</button>' : ''}</div>
   </div>`;
   document.body.appendChild(host);
@@ -4210,6 +4292,7 @@ function vaelgHurtigt(it, hvad) {
     } catch (ex) { toast(ex.message); }
   };
   host.querySelector('#qkOk').addEventListener('click', gem);
+  bindGemGenvej(host, host.querySelector('#qkOk'));
   sel.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); gem(); } });
   sel.addEventListener('dblclick', gem);
 }
@@ -4578,15 +4661,14 @@ async function aabnElement(listeItem) {
       : (saguKlar ? 'Make it a note in Sagu' : 'Make it a note')}</button>`
     : ''}
       <span style="flex:1"></span>
-      <button class="btn" id="edCancel">Cancel</button>
+      <button class="btn" id="edCancel" data-esc>Cancel</button>
       <button class="btn primary" id="edSave">Save</button>
     </div>
   </div>`;
 
   document.body.appendChild(host);
-  const luk = () => { host.remove(); document.removeEventListener('keydown', esctast); };
-  const esctast = (e) => { if (e.key === 'Escape') { e.preventDefault(); luk(); } };
-  document.addEventListener('keydown', esctast);
+  // Esc gaar gennem den faelles genvej i p1_core (`data-esc` paa Cancel).
+  const luk = () => host.remove();
   host.addEventListener('click', (e) => { if (e.target === host) luk(); });
   host.querySelector('#dClose').addEventListener('click', luk);
   host.querySelector('#edCancel').addEventListener('click', luk);
@@ -6060,7 +6142,7 @@ function redigerProjekt(p) {
     <div class="modal-foot">
       ${nyt ? '' : '<button class="btn ghost" id="pDelete">Delete</button>'}
       <span style="flex:1"></span>
-      <button class="btn" id="pCancel">Cancel</button>
+      <button class="btn" id="pCancel" data-esc>Cancel</button>
       <button class="btn primary" id="pSave">Save</button>
     </div>
   </div>`;
@@ -6157,7 +6239,7 @@ function administrerOmraader() {
         <button class="btn primary" type="submit">Add</button>
       </form>
       <div class="modal-foot"><span style="flex:1"></span>
-        <button class="btn" id="aClose">Done</button></div>
+        <button class="btn" id="aClose" data-esc>Done</button></div>
     </div>`;
 
   const bind = () => {
@@ -6293,7 +6375,7 @@ function spoergOmLink(o, naar, foreslaaetNavn) {
     <div class="modal-foot">
       ${o.link_url ? '<button class="btn ghost" id="lkDel">Remove link</button>' : ''}
       <span style="flex:1"></span>
-      <button class="btn" id="lkCancel">Cancel</button>
+      <button class="btn" id="lkCancel" data-esc>Cancel</button>
       <button class="btn primary" id="lkOk">Set</button>
     </div>
   </div>`;
@@ -6497,6 +6579,7 @@ function spoergOmLink(o, naar, foreslaaetNavn) {
     soeg('', ++token);
   })();
 
+  bindGemGenvej(host, host.querySelector('#lkOk'));
   host.querySelector('#lkOk').addEventListener('click', () => {
     const v = felt.value.trim();
     if (!v) { o.link_url = null; o.link_title = null; luk(); naar(); return; }
@@ -6972,7 +7055,7 @@ function aabnGentagelse(r) {
       <button class="btn ghost" id="rSkip"${r.paused ? ' disabled' : ''}>Skip this one</button>
       <button class="btn ghost" id="rPause">${r.paused ? 'Resume' : 'Pause'}</button>
       <span style="flex:1"></span>
-      <button class="btn" id="rCancel">Cancel</button>
+      <button class="btn" id="rCancel" data-esc>Cancel</button>
       <button class="btn primary" id="rSave">Save</button>
     </div>
   </div>`;
@@ -7851,14 +7934,20 @@ const erBillede = (mime) => /^image\/(png|jpeg|gif|webp|avif)$/.test(mime);
 async function forberedFil(fil) {
   if (!/^image\/(png|jpeg|webp)$/.test(fil.type)) return { blob: fil, w: null, h: null };
 
-  const url = URL.createObjectURL(fil);
+  /*
+   * `createImageBitmap` og ikke `new Image()` med en blob:-adresse (v103):
+   * CSP'en tillader kun `img-src 'self' data:`, saa blob:-billedet blev
+   * afvist, `catch` sendte filen uskaleret, og nedskaleringen havde aldrig
+   * koert. En bitmap kraever ingen adresse - og CSP'en forbliver stram.
+   */
+  let img = null;
   try {
-    const img = await new Promise((ok, fejl) => {
-      const i = new Image();
-      i.onload = () => ok(i);
-      i.onerror = fejl;
-      i.src = url;
-    });
+    const bmp = await createImageBitmap(fil);
+    img = { naturalWidth: bmp.width, naturalHeight: bmp.height, kilde: bmp };
+  } catch {
+    return { blob: fil, w: null, h: null };   // ulaeseligt billede sendes som det er
+  }
+  try {
     const stoerst = Math.max(img.naturalWidth, img.naturalHeight);
     if (stoerst <= MAX_KANT && fil.size <= MAX_FIL) {
       return { blob: fil, w: img.naturalWidth, h: img.naturalHeight };
@@ -7869,14 +7958,14 @@ async function forberedFil(fil) {
     const c = document.createElement('canvas');
     c.width = w;
     c.height = h;
-    c.getContext('2d').drawImage(img, 0, 0, w, h);
+    c.getContext('2d').drawImage(img.kilde, 0, 0, w, h);
     const type = fil.type === 'image/png' ? 'image/png' : 'image/jpeg';
     const blob = await new Promise((ok) => c.toBlob(ok, type, type === 'image/jpeg' ? 0.86 : undefined));
     return { blob: blob || fil, w, h };
   } catch {
-    return { blob: fil, w: null, h: null };   // uláeseligt billede sendes som det er
+    return { blob: fil, w: null, h: null };   // ulaeseligt billede sendes som det er
   } finally {
-    URL.revokeObjectURL(url);
+    if (img.kilde.close) img.kilde.close();
   }
 }
 
@@ -7975,6 +8064,17 @@ function bindVedhaeftninger(host, item, genhent) {
     drop.classList.remove('over');
   }));
   drop.addEventListener('drop', (e) => send(e.dataTransfer && e.dataTransfer.files));
+
+  // ⌘V med et billede hvor som helst i ruden vedhaefter det (v103), som i
+  // kommandobaren. Tekst paa udklipsholderen gaar foer: saa er det et felt,
+  // man indsaetter i, og billedet er bare med paa slaeb.
+  host.addEventListener('paste', (e) => {
+    const cd = e.clipboardData;
+    const filer = cd ? [...(cd.files || [])] : [];
+    if (!filer.length || cd.getData('text/plain')) return;
+    e.preventDefault();
+    send(filer);
+  });
 
   host.querySelectorAll('.filedel[data-del]').forEach((el) => {
     el.addEventListener('click', async (e) => {
@@ -9144,7 +9244,7 @@ function visTodoistForhaandsvisning(laest) {
 
     <div class="modal-foot">
       <span style="flex:1"></span>
-      <button class="btn" id="tdCancel">Cancel</button>
+      <button class="btn" id="tdCancel" data-esc>Cancel</button>
       <button class="btn primary" id="tdGo"${ialt ? '' : ' disabled'}>Import ${ialt || ''}</button>
     </div>
   </div>`;
@@ -9153,6 +9253,7 @@ function visTodoistForhaandsvisning(laest) {
   host.querySelector('#tdCancel').addEventListener('click', luk);
   host.addEventListener('click', (e) => { if (e.target === host) luk(); });
 
+  bindGemGenvej(host, host.querySelector('#tdGo'));
   host.querySelector('#tdGo').addEventListener('click', async () => {
     const knap = host.querySelector('#tdGo');
     knap.disabled = true;
@@ -9203,8 +9304,8 @@ const GENVEJE = [
     ['any key', 'Start capturing — the palette opens with what you typed'],
     ['↑ ↓', 'Step into the list below, without opening anything'],
     ['?', 'This list'],
-    ['esc', 'Close whatever is open'],
-    [modTast() === '\u2318' ? '⌘ enter' : 'Ctrl+enter', 'Save the open task, project or repeat'],
+    ['esc', 'Cancel — close the open dialog without saving'],
+    [modTast() === '\u2318' ? '⌘ enter' : 'Ctrl+enter', 'Save — the primary button of any open dialog that saves something'],
   ]],
   ['In the palette (search field)', [
     ['+', 'New task'], ['*', 'New note'],
@@ -9238,7 +9339,7 @@ function visGenveje() {
       <table class="shortcuts">${liste.map(([tast, hvad]) =>
     `<tr><td><kbd>${esc(tast)}</kbd></td><td>${esc(hvad)}</td></tr>`).join('')}</table>`).join('')}
     <div class="modal-foot"><span style="flex:1"></span>
-      <button class="btn primary" id="scClose">Close</button></div>
+      <button class="btn primary" id="scClose" data-esc>Close</button></div>
   </div>`;
   document.body.appendChild(host);
   const luk = () => host.remove();
@@ -9831,7 +9932,7 @@ function visTotpOpsaetning(d) {
     <p class="gate-error" id="ttErr" hidden></p>
     <div class="modal-foot">
       <span style="flex:1"></span>
-      <button class="btn" id="ttCancel">Cancel</button>
+      <button class="btn" id="ttCancel" data-esc>Cancel</button>
       <button class="btn primary" id="ttVerify">Turn it on</button>
     </div>
   </div>`;
@@ -9840,6 +9941,7 @@ function visTotpOpsaetning(d) {
   host.querySelector('#ttCancel').addEventListener('click', luk);
   host.querySelector('#ttCode').focus();
 
+  bindGemGenvej(host, host.querySelector('#ttVerify'));
   host.querySelector('#ttVerify').addEventListener('click', async () => {
     const fejl = host.querySelector('#ttErr');
     fejl.hidden = true;

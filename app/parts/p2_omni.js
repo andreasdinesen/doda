@@ -820,12 +820,25 @@ function bindOmniFiler() {
   }));
   ['dragleave', 'dragend'].forEach((n) => kort.addEventListener(n, () => kort.classList.remove('draaber')));
 
+  /*
+   * Fælles for traek-og-slip og indsaet: filerne laegger sig som chips, og
+   * `forslag` bliver titlen, hvis feltet er tomt - markeret, saa det
+   * forsvinder ved foerste tastetryk.
+   */
+  const tilfoej = (filer, forslag) => {
+    omniState.filer = omniState.filer.concat(filer);
+    const tomt = !el.value.trim();
+    if (tomt && forslag) el.value = forslag;
+    el.focus();
+    if (tomt && forslag) el.select();
+    opdaterOmni();
+  };
+
   kort.addEventListener('drop', (e) => {
     const filer = e.dataTransfer && e.dataTransfer.files ? [...e.dataTransfer.files] : [];
     if (!filer.length) return;
     stop(e);
     kort.classList.remove('draaber');
-    omniState.filer = omniState.filer.concat(filer);
     /*
      * Filnavnet foreslaas KUN, naar det ligner noget, nogen har skrevet.
      *
@@ -834,14 +847,40 @@ function bindOmniFiler() {
      * ikke et vaern i sig selv: ét klik i feltet opphaever den, og saa stod
      * et kamera-id blandet ind i titlen. Derfor foerst proeven ovenfor.
      */
-    const tomt = !el.value.trim();
-    const forslag = tomt && menneskeligtFilnavn(filer[0].name)
-      ? filer[0].name.replace(/\.[^.]+$/, '')
-      : null;
-    if (forslag) el.value = forslag;
-    el.focus();
-    if (forslag) el.select();
-    opdaterOmni();
+    tilfoej(filer, menneskeligtFilnavn(filer[0].name) ? filer[0].name.replace(/\.[^.]+$/, '') : null);
+  });
+
+  /*
+   * ⌘V / Ctrl+V med et skaermbillede (Andreas, 16-10-2026).
+   *
+   * Et <input> kan ikke rumme et billede, saa browseren smed det bare vaek -
+   * intet skete. Nu bliver det en ventende fil som ved traek-og-slip.
+   *
+   * Udklipsholderens billede hedder altid »image.png«; det omdoebes efter
+   * tidspunktet, saa vedhaeftningen kan kendes fra de andre bagefter. Er
+   * feltet tomt, foreslaas »Screenshot 16 Oct 14:05« som titel: et navn,
+   * man godt kunne have skrevet, og ét Enter er saa nok.
+   *
+   * Ligger der OGSAA tekst paa udklipsholderen (kopieret fra en webside),
+   * indsaettes teksten som altid - billedet kommer bare med.
+   */
+  el.addEventListener('paste', (e) => {
+    const cd = e.clipboardData;
+    if (!cd) return;
+    const filer = [...(cd.files || [])];
+    if (!filer.length) return;
+    const nu = new Date();
+    const to = (n) => String(n).padStart(2, '0');
+    const stempel = `${nu.getFullYear()}-${to(nu.getMonth() + 1)}-${to(nu.getDate())} ${to(nu.getHours())}.${to(nu.getMinutes())}`;
+    const omdoebt = filer.map((f, i) => (/^image\.\w+$/i.test(f.name) && f.type.startsWith('image/')
+      ? new File([f], `Screenshot ${stempel}${filer.length > 1 ? ` (${i + 1})` : ''}.${(f.type.split('/')[1] || 'png').replace('jpeg', 'jpg')}`, { type: f.type })
+      : f));
+    const harTekst = !!cd.getData('text/plain');
+    if (!harTekst) e.preventDefault();
+    const titel = omdoebt[0].type.startsWith('image/')
+      ? `Screenshot ${nu.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} ${to(nu.getHours())}:${to(nu.getMinutes())}`
+      : (menneskeligtFilnavn(omdoebt[0].name) ? omdoebt[0].name.replace(/\.[^.]+$/, '') : null);
+    tilfoej(omdoebt, harTekst ? null : titel);
   });
 }
 

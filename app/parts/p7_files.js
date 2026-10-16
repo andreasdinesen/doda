@@ -29,14 +29,20 @@ const erBillede = (mime) => /^image\/(png|jpeg|gif|webp|avif)$/.test(mime);
 async function forberedFil(fil) {
   if (!/^image\/(png|jpeg|webp)$/.test(fil.type)) return { blob: fil, w: null, h: null };
 
-  const url = URL.createObjectURL(fil);
+  /*
+   * `createImageBitmap` og ikke `new Image()` med en blob:-adresse (v103):
+   * CSP'en tillader kun `img-src 'self' data:`, saa blob:-billedet blev
+   * afvist, `catch` sendte filen uskaleret, og nedskaleringen havde aldrig
+   * koert. En bitmap kraever ingen adresse - og CSP'en forbliver stram.
+   */
+  let img = null;
   try {
-    const img = await new Promise((ok, fejl) => {
-      const i = new Image();
-      i.onload = () => ok(i);
-      i.onerror = fejl;
-      i.src = url;
-    });
+    const bmp = await createImageBitmap(fil);
+    img = { naturalWidth: bmp.width, naturalHeight: bmp.height, kilde: bmp };
+  } catch {
+    return { blob: fil, w: null, h: null };   // ulaeseligt billede sendes som det er
+  }
+  try {
     const stoerst = Math.max(img.naturalWidth, img.naturalHeight);
     if (stoerst <= MAX_KANT && fil.size <= MAX_FIL) {
       return { blob: fil, w: img.naturalWidth, h: img.naturalHeight };
@@ -47,14 +53,14 @@ async function forberedFil(fil) {
     const c = document.createElement('canvas');
     c.width = w;
     c.height = h;
-    c.getContext('2d').drawImage(img, 0, 0, w, h);
+    c.getContext('2d').drawImage(img.kilde, 0, 0, w, h);
     const type = fil.type === 'image/png' ? 'image/png' : 'image/jpeg';
     const blob = await new Promise((ok) => c.toBlob(ok, type, type === 'image/jpeg' ? 0.86 : undefined));
     return { blob: blob || fil, w, h };
   } catch {
-    return { blob: fil, w: null, h: null };   // uláeseligt billede sendes som det er
+    return { blob: fil, w: null, h: null };   // ulaeseligt billede sendes som det er
   } finally {
-    URL.revokeObjectURL(url);
+    if (img.kilde.close) img.kilde.close();
   }
 }
 
@@ -153,6 +159,17 @@ function bindVedhaeftninger(host, item, genhent) {
     drop.classList.remove('over');
   }));
   drop.addEventListener('drop', (e) => send(e.dataTransfer && e.dataTransfer.files));
+
+  // ⌘V med et billede hvor som helst i ruden vedhaefter det (v103), som i
+  // kommandobaren. Tekst paa udklipsholderen gaar foer: saa er det et felt,
+  // man indsaetter i, og billedet er bare med paa slaeb.
+  host.addEventListener('paste', (e) => {
+    const cd = e.clipboardData;
+    const filer = cd ? [...(cd.files || [])] : [];
+    if (!filer.length || cd.getData('text/plain')) return;
+    e.preventDefault();
+    send(filer);
+  });
 
   host.querySelectorAll('.filedel[data-del]').forEach((el) => {
     el.addEventListener('click', async (e) => {

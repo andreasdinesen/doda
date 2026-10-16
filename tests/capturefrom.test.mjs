@@ -125,3 +125,28 @@ test('en gentagelse arver ogsaa skaermens projekt', async () => {
   assert.ok(svar.recurrence, 'der blev ikke lavet en gentagelse');
   assert.equal(svar.recurrence.template.project_id, p.id);
 });
+
+/* DESIGN.md §6s gaelder ogsaa EFTER fangsten (v103): en dato sat i
+   detaljeruden flytter opgaven fra Inbox til Next og skjuler den til dagen.
+   Detaljeruden sender altid sin status med, saa »inbox« uaendret skal
+   regnes som »ikke valgt« - men et aktivt valg skal vinde. */
+test('en dato sat bagefter flytter en inbox-opgave til Next', async () => {
+  const it = await fang('ret vaegten i shoppen');
+  assert.equal(it.status, 'inbox');
+  const ny = (await J(`/api/v1/items/${it.id}`, { status: 'inbox', due_date: '2030-01-04', defer_date: null })).item;
+  assert.equal(ny.status, 'next');
+  assert.equal(ny.defer_date, '2030-01-04');
+});
+
+test('et aktivt valg af status vinder over datoen', async () => {
+  const it = await fang('vent paa svar');
+  const ny = (await J(`/api/v1/items/${it.id}`, { status: 'waiting', due_date: '2030-01-04' })).item;
+  assert.equal(ny.status, 'waiting');
+});
+
+test('en egen udskydelse bliver staaende', async () => {
+  const it = await fang('noget til senere');
+  const ny = (await J(`/api/v1/items/${it.id}`, { due_date: '2030-01-04', defer_date: '2030-01-01' })).item;
+  assert.equal(ny.status, 'next');
+  assert.equal(ny.defer_date, '2030-01-01');
+});

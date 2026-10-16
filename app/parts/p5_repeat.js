@@ -133,7 +133,7 @@ function aabnGentagelse(r) {
       <button class="btn ghost" id="rSkip"${r.paused ? ' disabled' : ''}>Skip this one</button>
       <button class="btn ghost" id="rPause">${r.paused ? 'Resume' : 'Pause'}</button>
       <span style="flex:1"></span>
-      <button class="btn" id="rCancel">Cancel</button>
+      <button class="btn" id="rCancel" data-esc>Cancel</button>
       <button class="btn primary" id="rSave">Save</button>
     </div>
   </div>`;

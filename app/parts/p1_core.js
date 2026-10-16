@@ -5,7 +5,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 102;
+const APP_VERSION = 103;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -1472,15 +1472,58 @@ function synligeRaekker(vaelger = '.item-row') {
  *
  * `preventDefault` er ikke pynt - uden den lægger beskrivelsesfeltet et
  * linjeskift ind i samme ombæring.
+ *
+ * Lytteren sidder paa DOKUMENTET og ikke paa ruden (v103). Paa ruden virkede
+ * den kun, mens fokus var inde i den - og klikker man paa en chip, der
+ * tegner sig om, falder fokus tilbage til <body>. Saa gjorde ⌘+Enter
+ * ingenting, netop efter man havde rettet noget (Andreas, 16-10-2026).
+ * Knappen haenger stadig paa sin egen rude: kun den OEVERSTE rude svarer, og
+ * har den ingen gem-knap (serie-spoergsmaalet), sker der intet - heller ikke
+ * i detaljeruden bagved.
  */
+const gemKnapper = new WeakMap();
+
 function bindGemGenvej(host, knap) {
-  if (!host || !knap) return;
-  host.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter' || !(e.metaKey || e.ctrlKey)) return;
-    e.preventDefault();
-    knap.click();
-  });
+  if (host && knap) gemKnapper.set(host, knap);
 }
+
+/* Den rude, man ser: den sidst tilfoejede `.modal` ligger oeverst. */
+function oeversteRude() {
+  const ruder = document.querySelectorAll('.modal');
+  return ruder.length ? ruder[ruder.length - 1] : null;
+}
+
+/*
+ * ⌘+Enter gemmer og Esc annullerer - i ALLE ruder.
+ *
+ * Esc trykker paa rudens `[data-esc]`-knap (Cancel, Close, Done), saa den
+ * lukker ad den vej, et klik ville. Har ruden ingen, er Esc et klik paa
+ * baggrunden - de ruder, der IKKE maa lukke ved et uheld (noeglen og
+ * noedkoderne, der kun vises én gang), lytter ikke paa baggrunden, og saa
+ * goer Esc heller ingenting dér.
+ *
+ * Boblefasen med vilje: kommentarfelterne i detaljeruden ejer selv deres
+ * ⌘+Enter og stopper den, og lysboksen ejer sin Esc i fangfasen. Hvad et
+ * felt har handlet paa (`defaultPrevented`), roerer vi ikke.
+ */
+document.addEventListener('keydown', (e) => {
+  if (e.defaultPrevented || e.isComposing) return;
+  const gem = e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey;
+  const esc = e.key === 'Escape' && !e.metaKey && !e.ctrlKey && !e.altKey;
+  if (!gem && !esc) return;
+  if (document.querySelector('.lightbox')) return;
+  const rude = oeversteRude();
+  if (!rude) return;
+  e.preventDefault();
+  if (gem) {
+    const knap = gemKnapper.get(rude);
+    if (knap && knap.isConnected && !knap.disabled) knap.click();
+    return;
+  }
+  const knap = rude.querySelector('[data-esc]');
+  if (knap) knap.click();
+  else rude.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+});
 
 /* --------------------------------------------------- brugermenuen */
 

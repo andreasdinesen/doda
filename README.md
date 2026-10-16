@@ -188,6 +188,10 @@ Store fotos **skaleres ned i browseren**, før de sendes, så de ikke fylder
 unødigt. PNG bevares som PNG, så gennemsigtighed ikke bliver til sort.
 Grænsen er 25 MB pr. fil.
 
+Et **skærmbillede kan sættes ind** med `⌘V` / `Ctrl+V` — i kommandobaren bliver
+det til en ny opgave med titlen »Screenshot 16 Oct 14:05« (skriv bare din egen
+oven i), og i en åben opgave vedhæftes det med det samme.
+
 Billeder vises som miniature og åbner i fuld størrelse ved klik. Alt andet
 vises som en fil, du kan hente. Filerne ligger i serverens datamappe og er
 derfor med i panelets backup.
@@ -250,7 +254,8 @@ er GTD's egne statusser (`s` er derfor Someday her, ikke stjerne).
 | `m` | flyt til et projekt |
 | `t` | start/stop tovo-timeren (kun når tovo er koblet på) |
 | `⌫` | slet |
-| `⌘↵` / `Ctrl+↵` | gem den åbne opgave, det åbne projekt eller gentagelsen |
+| `⌘↵` / `Ctrl+↵` | **gem** i enhver åben rude, der gemmer noget — opgave, projekt, gentagelse, link, import |
+| `Esc` (i en rude) | **annullér** — luk ruden uden at gemme |
 | `?` | vis hele oversigten over genveje |
 
 På mobil ligger de fem vigtigste skærme i et bånd i bunden — Next, Inbox,
@@ -517,6 +522,7 @@ Se `DESIGN.md` for de trufne beslutninger og `CLAUDE.md` for kontekst til videre
 
 | Version | Ændringer |
 |---|---|
+| 103 | **`⌘↵` gemmer og `Esc` annullerer i alle ruder.** Før virkede `⌘↵` kun, mens markøren stod inde i ruden — klikkede du på en chip, fx datoen, gjorde tasten ingenting. Nu virker den, uanset hvor fokus er, og i alle ruder, der gemmer noget; `Esc` lukker enhver rude uden at gemme. Et spørgsmål som »This one, or all future ones?« svares der stadig ikke på med en tast. **En dato flytter opgaven til Next Actions — også bagefter.** Det gjorde den kun, når datoen kom med i fangsten (`!fredag`); sætter du den i en åben opgave i Inbox, lægger den sig nu også i Next og skjuler sig til dagen. Har du selv valgt Waiting eller Someday, bliver den dér. **Indsæt et skærmbillede med `⌘V`** i kommandobaren eller i en åben opgave. Og **store billeder skaleres nu faktisk ned**, før de sendes — det har de aldrig gjort, fordi sikkerhedsreglerne for siden stille afviste den måde, billedet blev læst på. |
 | 102 | **Samme taster som i tovo, qlk og Sagu.** `⌘K` (`Ctrl+K` på pc) fokuserer kommandobaren hvor som helst — også midt i et felt. På en række i en liste er **slet** nu `⌫` i stedet for `x`, **kontekst** er `#` i stedet for `c`, og **flyt til projekt** er `m` i stedet for `p` — de bogstaver betyder det samme i alle fire apps. `n`, `w` og `s` er uændrede. Genvejsoversigten (`?`) og guiden viser `⌘` på Mac og `Ctrl` ellers, og `t` (tovo-timeren) står nu også på listen. |
 | 101 | **Hvorfor hedder den doda?** Under login-knappen står nu et lille link, *Why “doda”?*, der folder en kort forklaring på navnet ud. Det er et `<details>` uden JavaScript, så det står ikke i vejen for login. Den samme forklaring står i README'en under »Navnet«. |
 | 100 | **Tallet på app-ikonet.** Har du doda på hjemmeskærmen, viser ikonet nu, hvor mange opgaver der ligger i **Next Actions** — som Todoist gør. Tallet tælles som listen, så udskudte opgaver først tæller med på deres dag. Det opdateres, når du bruger doda, og mens doda er lukket følger det med hver påmindelse. **På iPhone kræver det, at notifikationer er slået til** for doda; ændrer du opgaver et andet sted, retter ikonet sig først, næste gang du åbner doda eller får en påmindelse — mere lader iOS ikke en webapp gøre. Kan slås fra under Settings → Notifications. |

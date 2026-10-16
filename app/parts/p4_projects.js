@@ -449,7 +449,7 @@ function redigerProjekt(p) {
     <div class="modal-foot">
       ${nyt ? '' : '<button class="btn ghost" id="pDelete">Delete</button>'}
       <span style="flex:1"></span>
-      <button class="btn" id="pCancel">Cancel</button>
+      <button class="btn" id="pCancel" data-esc>Cancel</button>
       <button class="btn primary" id="pSave">Save</button>
     </div>
   </div>`;
@@ -546,7 +546,7 @@ function administrerOmraader() {
         <button class="btn primary" type="submit">Add</button>
       </form>
       <div class="modal-foot"><span style="flex:1"></span>
-        <button class="btn" id="aClose">Done</button></div>
+        <button class="btn" id="aClose" data-esc>Done</button></div>
     </div>`;
 
   const bind = () => {
@@ -682,7 +682,7 @@ function spoergOmLink(o, naar, foreslaaetNavn) {
     <div class="modal-foot">
       ${o.link_url ? '<button class="btn ghost" id="lkDel">Remove link</button>' : ''}
       <span style="flex:1"></span>
-      <button class="btn" id="lkCancel">Cancel</button>
+      <button class="btn" id="lkCancel" data-esc>Cancel</button>
       <button class="btn primary" id="lkOk">Set</button>
     </div>
   </div>`;
@@ -886,6 +886,7 @@ function spoergOmLink(o, naar, foreslaaetNavn) {
     soeg('', ++token);
   })();
 
+  bindGemGenvej(host, host.querySelector('#lkOk'));
   host.querySelector('#lkOk').addEventListener('click', () => {
     const v = felt.value.trim();
     if (!v) { o.link_url = null; o.link_title = null; luk(); naar(); return; }

@@ -409,7 +409,7 @@ function vaelgHurtigt(it, hvad) {
     </select>` : `<p class="lead">No ${hvad === 'context' ? 'contexts' : 'projects'} yet — type
       ${hvad === 'context' ? '<code>#name</code>' : '<code>@Name</code>'} when you capture.</p>`}
     <div class="modal-foot"><span style="flex:1"></span>
-      <button class="btn" id="qkCancel">Cancel</button>
+      <button class="btn" id="qkCancel" data-esc>Cancel</button>
       ${kilde.length ? '<button class="btn primary" id="qkOk">Set</button>' : ''}</div>
   </div>`;
   document.body.appendChild(host);
@@ -432,6 +432,7 @@ function vaelgHurtigt(it, hvad) {
     } catch (ex) { toast(ex.message); }
   };
   host.querySelector('#qkOk').addEventListener('click', gem);
+  bindGemGenvej(host, host.querySelector('#qkOk'));
   sel.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); gem(); } });
   sel.addEventListener('dblclick', gem);
 }
@@ -800,15 +801,14 @@ async function aabnElement(listeItem) {
       : (saguKlar ? 'Make it a note in Sagu' : 'Make it a note')}</button>`
     : ''}
       <span style="flex:1"></span>
-      <button class="btn" id="edCancel">Cancel</button>
+      <button class="btn" id="edCancel" data-esc>Cancel</button>
       <button class="btn primary" id="edSave">Save</button>
     </div>
   </div>`;
 
   document.body.appendChild(host);
-  const luk = () => { host.remove(); document.removeEventListener('keydown', esctast); };
-  const esctast = (e) => { if (e.key === 'Escape') { e.preventDefault(); luk(); } };
-  document.addEventListener('keydown', esctast);
+  // Esc gaar gennem den faelles genvej i p1_core (`data-esc` paa Cancel).
+  const luk = () => host.remove();
   host.addEventListener('click', (e) => { if (e.target === host) luk(); });
   host.querySelector('#dClose').addEventListener('click', luk);
   host.querySelector('#edCancel').addEventListener('click', luk);

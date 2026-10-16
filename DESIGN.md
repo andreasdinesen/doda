@@ -3270,3 +3270,34 @@ ligger bag dialogens baggrund, og fokus dernede ville være usynligt. `Esc` før
 **Mærkaterne følger maskinen.** `modTast()` (p8, samme regel som Sagus) viser `⌘`
 på Mac/iPhone/iPad og `Ctrl+` ellers — både for `⌘K` og `⌘ enter`. Koden lytter i
 forvejen på begge (`metaKey || ctrlKey`).
+
+## Gem og annullér i alle ruder · dato bagefter · indsæt billede (v103, 2026-10-16)
+
+**`⌘ enter` / `Ctrl+enter` gemmer og `Esc` annullerer — i alle ruder** (Andreas,
+16-10-2026). Genvejen sad på den enkelte rude og virkede kun, mens fokus var inde
+i den; et klik på en chip, der tegner sig om, smed fokus ud på `<body>`, og så
+skete der ingenting. Nu er der ÉN lytter på dokumentet (`p1_core`), og den svarer
+kun for den **øverste** rude:
+
+- `⌘ enter` trykker på den knap, ruden selv har registreret med
+  `bindGemGenvej()`. Har den ingen (»This one, or all future ones?«), sker der
+  intet — heller ikke i ruden bagved. Reglen om, at et tastetryk ikke må svare
+  på et spørgsmål, står ved magt.
+- `Esc` trykker på rudens `[data-esc]`-knap (Cancel/Close/Done), ellers på
+  baggrunden. Nøglen og nødkoderne, der kun vises én gang, lytter ikke på
+  baggrunden — og lukker derfor heller ikke på `Esc`.
+- **Boblefasen** med vilje: kommentarfelterne ejer selv deres `⌘ enter`, og
+  lysboksen ejer sin `Esc` i fangfasen.
+
+**En dato sat bagefter flytter også til Next** (§6s gjaldt kun fangsten).
+Reglen ligger i `opdaterMedGentagelse`, så web, MCP og genveje deler den: kun fra
+`inbox`, kun når status ikke er ændret i samme ombæring (detaljeruden sender altid
+sin status — uændret `inbox` = ikke valgt), og udskydelsen følger datoen, medmindre
+der er en i forvejen.
+
+**`⌘V` med et skærmbillede i kommandobaren** gav ingenting: et `<input>` kan ikke
+rumme et billede. Nu bliver det en ventende fil som ved træk-og-slip, omdøbt fra
+`image.png` til »Screenshot ÅÅÅÅ-MM-DD TT.MM.png«, og et tomt felt får titlen
+»Screenshot 16 Oct 14:05« markeret, så ét Enter er nok. Ligger der også tekst på
+udklipsholderen, indsættes teksten som altid. Detaljeruden vedhæfter et indsat
+billede direkte.

@@ -959,7 +959,7 @@ function visTodoistForhaandsvisning(laest) {
 
     <div class="modal-foot">
       <span style="flex:1"></span>
-      <button class="btn" id="tdCancel">Cancel</button>
+      <button class="btn" id="tdCancel" data-esc>Cancel</button>
       <button class="btn primary" id="tdGo"${ialt ? '' : ' disabled'}>Import ${ialt || ''}</button>
     </div>
   </div>`;
@@ -968,6 +968,7 @@ function visTodoistForhaandsvisning(laest) {
   host.querySelector('#tdCancel').addEventListener('click', luk);
   host.addEventListener('click', (e) => { if (e.target === host) luk(); });
 
+  bindGemGenvej(host, host.querySelector('#tdGo'));
   host.querySelector('#tdGo').addEventListener('click', async () => {
     const knap = host.querySelector('#tdGo');
     knap.disabled = true;
@@ -1018,8 +1019,8 @@ const GENVEJE = [
     ['any key', 'Start capturing — the palette opens with what you typed'],
     ['↑ ↓', 'Step into the list below, without opening anything'],
     ['?', 'This list'],
-    ['esc', 'Close whatever is open'],
-    [modTast() === '\u2318' ? '⌘ enter' : 'Ctrl+enter', 'Save the open task, project or repeat'],
+    ['esc', 'Cancel — close the open dialog without saving'],
+    [modTast() === '\u2318' ? '⌘ enter' : 'Ctrl+enter', 'Save — the primary button of any open dialog that saves something'],
   ]],
   ['In the palette (search field)', [
     ['+', 'New task'], ['*', 'New note'],
@@ -1053,7 +1054,7 @@ function visGenveje() {
       <table class="shortcuts">${liste.map(([tast, hvad]) =>
     `<tr><td><kbd>${esc(tast)}</kbd></td><td>${esc(hvad)}</td></tr>`).join('')}</table>`).join('')}
     <div class="modal-foot"><span style="flex:1"></span>
-      <button class="btn primary" id="scClose">Close</button></div>
+      <button class="btn primary" id="scClose" data-esc>Close</button></div>
   </div>`;
   document.body.appendChild(host);
   const luk = () => host.remove();
@@ -1646,7 +1647,7 @@ function visTotpOpsaetning(d) {
     <p class="gate-error" id="ttErr" hidden></p>
     <div class="modal-foot">
       <span style="flex:1"></span>
-      <button class="btn" id="ttCancel">Cancel</button>
+      <button class="btn" id="ttCancel" data-esc>Cancel</button>
       <button class="btn primary" id="ttVerify">Turn it on</button>
     </div>
   </div>`;
@@ -1655,6 +1656,7 @@ function visTotpOpsaetning(d) {
   host.querySelector('#ttCancel').addEventListener('click', luk);
   host.querySelector('#ttCode').focus();
 
+  bindGemGenvej(host, host.querySelector('#ttVerify'));
   host.querySelector('#ttVerify').addEventListener('click', async () => {
     const fejl = host.querySelector('#ttErr');
     fejl.hidden = true;
