@@ -116,5 +116,6 @@ test('underetiketterne bruger .fieldhint - og den er IKKE fast placeret', () => 
   const js = readFileSync(join(ROD, 'app/public/app.js'), 'utf8');
   const antal = [...js.matchAll(/class="([^"]*)"/g)]
     .filter((m) => m[1].split(/\s+/).includes('fieldhint')).length;
-  assert.equal(antal, 2, 'de to underetiketter (login-koden og gennemgangens push) skal bruge .fieldhint');
+  assert.equal(antal, 5, 'underetiketterne (login-koden og gennemgangens baand, opgave, push og '
+    + 'klokkeslaet) skal bruge .fieldhint');
 });

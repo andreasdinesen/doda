@@ -5,7 +5,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 104;
+const APP_VERSION = 105;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -1032,6 +1032,7 @@ async function hentState() {
     state.counts = d.counts;
     state.today = d.today;
     state.reviewDue = d.reviewDue;
+    state.reviewTaskId = d.reviewTaskId || null;
     if (d.notesEnabled !== undefined) state.notesEnabled = d.notesEnabled;
     if (d.noteCount !== undefined) state.noteCount = d.noteCount;
     if (d.hideDone !== undefined) state.hideDone = d.hideDone;

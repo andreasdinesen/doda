@@ -116,6 +116,12 @@ deadlines har allerede en vej ud — **kalenderfeedet**, hvor telefonens egen
 kalender giver besked. At bygge en push-kanal til én ugentlig påmindelse ville
 være at tilføje en hel infrastruktur for at råbe.
 
+Påmindelsen kan nu tage tre former, og du vælger selv hvilke: **båndet**
+(til som standard), en **push-besked**, og en opgave **»Weekly review« i Next
+Actions**, der dukker op på dagen fra det valgte klokkeslæt. Opgaven har et
+link direkte ind i Review, og når du trykker *Finish* i gennemgangen, bliver
+den markeret som udført.
+
 **Logbook** viser hvad du har lavet, dag for dag, med filter på projekt. Ingen
 tal, ingen grafer, ingen produktivitetsscore — formålet er tilfredsstillelse og
 overblik, ikke måling.
@@ -524,6 +530,7 @@ Se `DESIGN.md` for de trufne beslutninger og `CLAUDE.md` for kontekst til videre
 
 | Version | Ændringer |
 |---|---|
+| 105 | **Ugentligt review som opgave i Next.** Review-kortet har nu tre påmindelser, du selv vælger imellem: **båndet** (stadig til som standard, men kan nu slås fra), **push-beskeden** og en ny opgave **»Weekly review« i Next Actions**. Opgaven dukker op på review-dagen fra det valgte klokkeslæt, har et review-ikon i rækken og en *Open Review*-chip i ruden, der fører direkte ind i gennemgangen, og markeres som udført, når du trykker *Finish*. Står sidste uges opgave stadig åben, kommer der ikke en ny. Klokkeslættet gælder nu både push og opgave. |
 | 104 | **`?` i kommandobaren åbner Guiden.** Et `?` alene i feltet fører til Guiden, som forklarer hele doda og har alle tasterne under *All the keys* — før blev tegnet bare skrevet. Midt i en tekst er det stadig et almindeligt tegn. Legenden siger `? help`. Samme genvej i Sagu. **Fjern et indsat billede, før du gemmer:** en ventende fil under kommandobaren har nu et ×, der kun fjerner filen — titlen bliver stående. Og krydset på en vedhæftning i en åben opgave kan nu ses på telefonen; før kom det kun frem, når musen var over. |
 | 103 | **`⌘↵` gemmer og `Esc` annullerer i alle ruder.** Før virkede `⌘↵` kun, mens markøren stod inde i ruden — klikkede du på en chip, fx datoen, gjorde tasten ingenting. Nu virker den, uanset hvor fokus er, og i alle ruder, der gemmer noget; `Esc` lukker enhver rude uden at gemme. Et spørgsmål som »This one, or all future ones?« svares der stadig ikke på med en tast. **En dato flytter opgaven til Next Actions — også bagefter.** Det gjorde den kun, når datoen kom med i fangsten (`!fredag`); sætter du den i en åben opgave i Inbox, lægger den sig nu også i Next og skjuler sig til dagen. Har du selv valgt Waiting eller Someday, bliver den dér. **Indsæt et skærmbillede med `⌘V`** i kommandobaren eller i en åben opgave. Og **store billeder skaleres nu faktisk ned**, før de sendes — det har de aldrig gjort, fordi sikkerhedsreglerne for siden stille afviste den måde, billedet blev læst på. |
 | 102 | **Samme taster som i tovo, qlk og Sagu.** `⌘K` (`Ctrl+K` på pc) fokuserer kommandobaren hvor som helst — også midt i et felt. På en række i en liste er **slet** nu `⌫` i stedet for `x`, **kontekst** er `#` i stedet for `c`, og **flyt til projekt** er `m` i stedet for `p` — de bogstaver betyder det samme i alle fire apps. `n`, `w` og `s` er uændrede. Genvejsoversigten (`?`) og guiden viser `⌘` på Mac og `Ctrl` ellers, og `t` (tovo-timeren) står nu også på listen. |

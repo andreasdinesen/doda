@@ -1089,7 +1089,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 104;
+const APP_VERSION = 105;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -2116,6 +2116,7 @@ async function hentState() {
     state.counts = d.counts;
     state.today = d.today;
     state.reviewDue = d.reviewDue;
+    state.reviewTaskId = d.reviewTaskId || null;
     if (d.notesEnabled !== undefined) state.notesEnabled = d.notesEnabled;
     if (d.noteCount !== undefined) state.noteCount = d.noteCount;
     if (d.hideDone !== undefined) state.hideDone = d.hideDone;
@@ -4095,6 +4096,8 @@ function elementRaekke(it, i) {
     </div>
     ${it.link_url ? `<a class="item-flag" href="${esc(it.link_url)}" target="_blank" rel="noopener noreferrer"
       title="${esc(it.link_url)}" data-stop>${icon('link', 15)}</a>` : ''}
+    ${it.id === state.reviewTaskId ? `<a class="item-flag" href="?view=review" data-stop data-goreview
+      title="Open the weekly review">${icon('review', 15)}</a>` : ''}
     ${it.note ? `<span class="item-flag" title="Has a description">${icon('note', 15)}</span>` : ''}
     ${it.attachment_count ? `<span class="item-flag" title="${it.attachment_count} attachment(s)">${icon('link', 15)}</span>` : ''}
     ${/*
@@ -4752,6 +4755,8 @@ async function aabnElement(listeItem) {
     : '<button class="chip flat" data-edit="defer">no hide-until</button>'}
       ${kontekster.map((c) => `<button class="chip" data-ctx="${esc(c.id)}">#${esc(c.name)}</button>`).join('')}${nye}
       <button class="chip flat" data-edit="contexts">${kontekster.length ? '+' : '# context'}</button>
+      ${it.id === state.reviewTaskId
+    ? `<a class="chip link" href="?view=review" data-goreview>${icon('review', 13)} Open Review</a>` : ''}
       ${u.link_url
     ? `<a class="chip link" href="${esc(u.link_url)}" target="_blank" rel="noopener noreferrer"
          title="${esc(u.link_url)}">${icon('link', 13)} ${esc(linkNavn(u))}</a>
@@ -8521,6 +8526,22 @@ const MAADER = {
 
 const trinListe = (mode) => (MAADER[mode] || MAADER.simple).trin.map((id) => TRIN.find((x) => x.id === id));
 
+/*
+ * Linket paa gennemgangens opgave (v105). Det er et rigtigt <a href>, saa et
+ * langt tryk eller ⌘-klik stadig virker - men et almindeligt klik bliver i
+ * appen. Lyttes i CAPTURE: raekkens link-ikon har `data-stop`, der standser
+ * boblingen, foer den naar dokumentet. Staar det i detaljeruden, lukkes den.
+ */
+document.addEventListener('click', (e) => {
+  const a = e.target && e.target.closest && e.target.closest('[data-goreview]');
+  if (!a || e.metaKey || e.ctrlKey || e.shiftKey) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const rude = a.closest('.modal');
+  if (rude) rude.remove();
+  gaaTil('review');
+}, true);
+
 async function sideReview() {
   const host = document.getElementById('pageHost');
   const d = await api('GET', '/api/v1/review');
@@ -8567,8 +8588,8 @@ async function sideReview() {
       </div>
       <div class="card">
         <h2>Reminder</h2>
-        <p class="lead" style="margin:6px 0 12px">A quiet nudge on the day you choose —
-        a banner when you open doda.</p>
+        <p class="lead" style="margin:6px 0 12px">A quiet nudge on the day you choose.
+        Pick any of the three below.</p>
         <select class="input" id="revDay" style="max-width:240px">
           ${dage.map((n, i) => `<option value="${i}"${i === d.weekday ? ' selected' : ''}>${n}</option>`).join('')}
         </select>
@@ -8576,13 +8597,29 @@ async function sideReview() {
           <!-- Kun naar der ER en dag: en paamindelse uden en dag at minde om
                er en kontakt, der ikke kan goere noget. -->
           <label class="field" style="margin-top:16px">
+            <span>Show a banner
+              <span class="fieldhint">At the top of doda when you open it on the day.</span></span>
+            <span><button class="btn ${d.banner ? 'primary' : ''}" id="revBanner">
+              ${d.banner ? 'Banner on' : 'Banner off'}</button></span></label>
+          <label class="field" style="margin-top:16px">
+            <span>Add a task to Next Actions
+              <span class="fieldhint">A <strong>Weekly review</strong> task appears in Next from
+              the time below, linking straight here. Finishing the review marks it done.</span></span>
+            <span><button class="btn ${d.task ? 'primary' : ''}" id="revTask">
+              ${d.task ? 'Task on' : 'Task off'}</button></span></label>
+          <label class="field" style="margin-top:16px">
             <span>Also push me a notification
               <span class="fieldhint">The banner needs you to open doda — and the review is
               the one thing you forget to open anything for. Off unless you turn it on.</span></span>
             <span style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
               <button class="btn ${d.push ? 'primary' : ''}" id="revPush">
                 ${d.push ? 'Notification on' : 'Notification off'}</button>
-              <select class="input" id="revTime" style="max-width:140px"${d.push ? '' : ' disabled'}>
+            </span></label>
+          <label class="field" style="margin-top:16px">
+            <span>Time
+              <span class="fieldhint">When the notification is sent and the task appears.</span></span>
+            <span>
+              <select class="input" id="revTime" style="max-width:140px"${d.push || d.task ? '' : ' disabled'}>
                 ${['08:00', '09:00', '10:00', '12:00', '17:00', '19:00', '20:00']
     .map((t) => `<option value="${t}"${t === d.time ? ' selected' : ''}>${t}</option>`).join('')}
               </select>
@@ -8608,7 +8645,26 @@ async function sideReview() {
       revPush.addEventListener('click', async () => {
         const til = !d.push;
         await api('POST', '/api/v1/settings', { settings: { review_push: til ? '1' : '0' } });
-        toast(til ? 'You will be notified on the day' : 'Notification off — the banner stays');
+        toast(til ? 'You will be notified on the day' : 'Notification off');
+        tegnSide();
+      });
+    }
+    const revBanner = document.getElementById('revBanner');
+    if (revBanner) {
+      revBanner.addEventListener('click', async () => {
+        await api('POST', '/api/v1/settings', { settings: { review_banner_off: d.banner ? '1' : '' } });
+        toast(d.banner ? 'Banner off' : 'Banner on');
+        // Baandet tegnes fra state - hent den, saa det passer med det samme.
+        await hentState();
+        tegnSide();
+      });
+    }
+    const revTask = document.getElementById('revTask');
+    if (revTask) {
+      revTask.addEventListener('click', async () => {
+        const til = !d.task;
+        await api('POST', '/api/v1/settings', { settings: { review_task: til ? '1' : '0' } });
+        toast(til ? 'A task will appear in Next on the day' : 'Task off');
         tegnSide();
       });
     }

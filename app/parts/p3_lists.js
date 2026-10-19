@@ -200,6 +200,8 @@ function elementRaekke(it, i) {
     </div>
     ${it.link_url ? `<a class="item-flag" href="${esc(it.link_url)}" target="_blank" rel="noopener noreferrer"
       title="${esc(it.link_url)}" data-stop>${icon('link', 15)}</a>` : ''}
+    ${it.id === state.reviewTaskId ? `<a class="item-flag" href="?view=review" data-stop data-goreview
+      title="Open the weekly review">${icon('review', 15)}</a>` : ''}
     ${it.note ? `<span class="item-flag" title="Has a description">${icon('note', 15)}</span>` : ''}
     ${it.attachment_count ? `<span class="item-flag" title="${it.attachment_count} attachment(s)">${icon('link', 15)}</span>` : ''}
     ${/*
@@ -857,6 +859,8 @@ async function aabnElement(listeItem) {
     : '<button class="chip flat" data-edit="defer">no hide-until</button>'}
       ${kontekster.map((c) => `<button class="chip" data-ctx="${esc(c.id)}">#${esc(c.name)}</button>`).join('')}${nye}
       <button class="chip flat" data-edit="contexts">${kontekster.length ? '+' : '# context'}</button>
+      ${it.id === state.reviewTaskId
+    ? `<a class="chip link" href="?view=review" data-goreview>${icon('review', 13)} Open Review</a>` : ''}
       ${u.link_url
     ? `<a class="chip link" href="${esc(u.link_url)}" target="_blank" rel="noopener noreferrer"
          title="${esc(u.link_url)}">${icon('link', 13)} ${esc(linkNavn(u))}</a>

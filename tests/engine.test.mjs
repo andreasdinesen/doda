@@ -368,6 +368,44 @@ test('gennemgangens klokkeslæt og kontakt kan gemmes og læses tilbage', async 
   assert.equal(r.weekday, 7);
 });
 
+test('gennemgangen som opgave i Next: én ad gangen, og Finish fuldfører den', async () => {
+  // Fra som standard - som pushen.
+  let r = await J('/api/v1/review');
+  assert.equal(r.task, false, 'ingen opgaver af sig selv');
+  assert.equal(r.banner, true, 'baandet er stadig standard');
+
+  const ugedag = ((new Date().getDay() + 6) % 7) + 1;   // ISO: mandag = 1
+  saetIndstilling('review_done', '0');
+  await J('/api/v1/settings', { settings: { review_weekday: String(ugedag), review_time: '00:00', review_task: '1' } });
+  let s = await J('/api/v1/state');
+  assert.ok(s.reviewTaskId, 'opgaven skal vaere lagt ind');
+  const opg = (await J(`/api/v1/items/${s.reviewTaskId}`)).item;
+  assert.equal(opg.status, 'next');
+  assert.equal(opg.title, 'Weekly review');
+
+  // Igen samme dag - og igen efter stemplet er fjernet: stadig kun én.
+  s = await J('/api/v1/state');
+  saetIndstilling('review_task_made', '');
+  s = await J('/api/v1/state');
+  const alle = medDb((db) => db.prepare("SELECT COUNT(*) AS n FROM items WHERE title = 'Weekly review' AND deleted = 0 AND status = 'next'").get().n);
+  assert.equal(alle, 1, 'en aaben opgave ER paamindelsen');
+
+  // Baandet kan slaas fra uden at roere opgaven.
+  await J('/api/v1/settings', { settings: { review_banner_off: '1' } });
+  s = await J('/api/v1/state');
+  assert.equal(s.reviewDue, false);
+  assert.equal(s.reviewTaskId, opg.id);
+
+  await J('/api/v1/review', { action: 'start', mode: 'speed' });
+  await J('/api/v1/review', { action: 'finish' });
+  assert.equal((await J(`/api/v1/items/${opg.id}`)).item.status, 'done');
+  s = await J('/api/v1/state');
+  assert.equal(s.reviewTaskId, null);
+
+  // Ryd op til testene herunder.
+  await J('/api/v1/settings', { settings: { review_task: '0', review_banner_off: '' } });
+});
+
 /* ==================== stjerne og område på en opgave =================== */
 
 /*

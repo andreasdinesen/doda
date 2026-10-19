@@ -2070,6 +2070,8 @@ const ROUTES = {
     // Overskredne faste planer rulles frem, foer der taelles - ellers viser
     // taellerne noget, der ikke passer med listerne.
     rulFrem();
+    // Og gennemgangens opgave laegges ind FOER, af samme grund.
+    gennemgangsOpgave();
     /*
      * Hvert tal spejler sin LISTE - ikke bare sin status.
      *
@@ -2112,7 +2114,11 @@ const ROUTES = {
       areas: hentOmraader(),
       counts: antal,
       today: iDag(),
-      reviewDue: gennemgangForfalder(),
+      // Baandet er et af tre valg nu (v105) - og det eneste, der er TIL som standard.
+      reviewDue: getSetting('review_banner_off', '') !== '1' && gennemgangForfalder(),
+      // Opgaven, doda selv har lagt i Next. Klienten kender den paa id'et og
+      // giver den et link ind i gennemgangen (se gennemgangsOpgave()).
+      reviewTaskId: aabenGennemgangsOpgave(),
       notesEnabled: getSetting('notes_off', '') !== '1',
       // Hvor mange noter der ER - saa indstillingen kan sige sandheden om,
       // hvad der sker med dem, i stedet for at lade brugeren gaette.
@@ -2486,6 +2492,9 @@ const ROUTES = {
       // Standard FRA. Handover §5.12: saa faa notifikationer som muligt, og
       // en frisk installation skal ikke begynde at sende af sig selv.
       push: getSetting('review_push', '') === '1',
+      // De to andre valg (v105). Baandet er TIL som standard, opgaven FRA.
+      banner: getSetting('review_banner_off', '') !== '1',
+      task: getSetting('review_task', '') === '1',
       inbox: hentItems({ status: 'inbox' }),
       // Netop de projekter, der er den klassiske GTD-fejl.
       stalled: projekter.filter((p) => !p.next_count && p.open_count > 0),
@@ -2524,6 +2533,10 @@ const ROUTES = {
       setSetting('review_done', String(now()));
       // Hvert projekt husker, hvornaar det sidst blev gennemgaet (§5.7).
       db.prepare("UPDATE projects SET reviewed_at = ? WHERE deleted = 0 AND status = 'active'").run(now());
+      // Er gennemgangen lavet, er opgaven om den ogsaa. Ellers staar den i
+      // Next og siger noget, der ikke passer laengere.
+      const opg = aabenGennemgangsOpgave();
+      if (opg) fuldfoerItem(hentItem(opg));
     } else if (body.action === 'abandon') {
       setSetting('review_step', '0');
     } else if (Number.isFinite(Number(body.step))) {
@@ -3909,6 +3922,8 @@ const ROUTES = {
     // Whitelist - aldrig blind gennemskrivning af klientens noegler.
     const ALLOWED = new Set(['theme', 'review_weekday', 'focus_item', 'focus_started',
       'ical_alarm', 'notes_off', 'review_time', 'review_push',
+      // Gennemgangens to andre paamindelser (v105): baandet og opgaven i Next.
+      'review_banner_off', 'review_task',
       // Skjuler »N done« i toplinjen. En taeller, der kun kan vokse, er for
       // nogle en paamindelse og for andre stoej - derfor et valg.
       'hide_done',
@@ -4213,7 +4228,8 @@ function importer(data) {
     }
     if (data.settings && typeof data.settings === 'object') {
       const OK = new Set(['theme', 'review_weekday', 'review_done', 'ical_alarm',
-        'review_mode', 'review_focus', 'review_time', 'review_push']);
+        'review_mode', 'review_focus', 'review_time', 'review_push',
+        'review_banner_off', 'review_task', 'review_task_item', 'review_task_made']);
       for (const [k, v] of Object.entries(data.settings)) if (OK.has(k)) setSetting(k, String(v));
     }
     db.exec('COMMIT');
@@ -4378,7 +4394,62 @@ function gennemgangSkalMindes() {
   return minutter >= paa && minutter - paa <= 60;
 }
 
+/**
+ * Gennemgangen som en OPGAVE i Next (v105).
+ *
+ * Baandet kraever, at man aabner doda, og pushen kraever en enhed med
+ * notifikationer. En opgave i Next kraever ingenting: den staar dér, hvor man
+ * alligevel kigger, ogsaa i en MCP-klient eller en genvej. Andreas bad om den
+ * 19-10-2026, som et TREDJE valg ved siden af de to andre - ikke i stedet.
+ *
+ * - Slaaet FRA som standard, som pushen (handover §5.12).
+ * - Laegges ind paa gennemgangsdagen, fra klokkeslaettet og resten af dagen.
+ *   Intet ensidigt vindue som pushen: en opgave vaekker ingen, saa den maa
+ *   gerne komme sent, hvis serveren har vaeret nede.
+ * - Én ad gangen. Staar sidste uges stadig aaben, er DEN paamindelsen - en
+ *   til ville bare vaere stoej (og fortaelle det samme to gange).
+ * - Id'et huskes i `review_task_item`; det er dét, klienten kender den paa og
+ *   giver et link ind i gennemgangen. Et `link_url` kan ikke bruges: det skal
+ *   vaere en fuld http(s)-adresse, og serveren kender ikke sin egen.
+ * - »Finish« i gennemgangen fuldfoerer den.
+ */
+function gennemgangsOpgave() {
+  try {
+    if (getSetting('review_task', '') !== '1') return;
+    if (!gennemgangForfalder()) return;
+    const idag = iDag();
+    if (getSetting('review_task_made', '') === idag) return;
+    const [t, m] = String(getSetting('review_time', '10:00')).split(':').map(Number);
+    if (!Number.isFinite(t) || !Number.isFinite(m)) return;
+    const nu = new Date();
+    if (nu.getHours() * 60 + nu.getMinutes() < t * 60 + m) return;
+    // Stemples FOER, saa en fejl herunder ikke giver en ny opgave hvert minut.
+    setSetting('review_task_made', idag);
+    if (aabenGennemgangsOpgave()) return;
+    const opg = opretItem({
+      status: 'next',
+      title: 'Weekly review',
+      note: 'Open **Review** in the sidebar, or the link on this task. '
+        + 'Finishing the review marks this done.',
+      due_date: idag,
+    });
+    setSetting('review_task_item', opg.id);
+    log('lagde den ugentlige gennemgang i Next');
+  } catch (err) { logError(`gennemgangens opgave: ${err.message}`); }
+}
+
+/** Id'et paa gennemgangens opgave, hvis den stadig er aaben - ellers null. */
+function aabenGennemgangsOpgave() {
+  const id = getSetting('review_task_item', '');
+  if (!id) return null;
+  const r = db.prepare(`SELECT id FROM items WHERE id = ? AND deleted = 0
+      AND status NOT IN ('done','dropped')`).get(id);
+  return r ? r.id : null;
+}
+
 async function tjekPaamindelser() {
+  // Opgaven har intet med push at goere og skal ogsaa komme uden abonnementer.
+  gennemgangsOpgave();
   try {
     const abon = hentAbonnementer();
     if (!abon.length) return;

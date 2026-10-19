@@ -156,6 +156,29 @@ uden at bede om noget.
 - Notifikationen lander på `?view=review`, ikke på forsiden. **En besked, der
   beder om en handling, skal lande dér, hvor handlingen sker.**
 
+**Gennemgangen som en opgave i Next — tredje valg (v105).** Båndet kræver, at
+man åbner doda, og pushen kræver en enhed med notifikationer. En opgave i Next
+kræver ingenting: den står dér, hvor man alligevel kigger — også i en
+MCP-klient. Andreas bad om den 19-10-2026, **som et valg ved siden af de to
+andre**, så Review-kortet har nu tre kontakter: banner, opgave, push.
+
+- **Båndet er stadig standard** (`review_banner_off` slår det fra); opgaven er
+  **slået fra** som pushen (`review_task`).
+- Opgaven lægges ind på gennemgangsdagen **fra `review_time` og resten af
+  dagen** — uden pushens ensidige vindue: en opgave vækker ingen, så den må
+  gerne komme sent, hvis serveren har været nede. Klokkeslættet gælder derfor
+  både push og opgave.
+- **Én ad gangen.** Står sidste uges stadig åben, ER den påmindelsen.
+  `review_task_made` (dato) stemples FØR oprettelsen, så en fejl ikke giver en
+  ny opgave hvert minut.
+- Linket ind i gennemgangen er **ikke** `link_url`: det skal være en fuld
+  http(s)-adresse, og serveren kender ikke sin egen. Id'et huskes i
+  `review_task_item`, klienten får det som `reviewTaskId` og giver netop den
+  opgave et review-ikon i rækken og en »Open Review«-chip i ruden — begge
+  `href="?view=review"`, så et ⌘-klik stadig virker.
+- **Finish fuldfører opgaven.** Ellers stod den i Next og sagde noget, der
+  ikke passede længere.
+
 ### Web Push (v13) — for den, der ikke abonnerer med sin kalender
 
 Kalenderen er stadig den **primære** vej: den virker uden tilladelser, uden
