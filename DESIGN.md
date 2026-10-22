@@ -373,8 +373,11 @@ gemmes i `items.body`). Både beskrivelsen og **selve titlen** må indeholde lin
 - Kun `http:` og `https:` accepteres — `javascript:` og `data:` afvises i
   linkifiseringen, ellers er et link fra API'et eller en import en XSS-vej.
 - Alle links får `target="_blank" rel="noopener noreferrer"`.
-- I lister vises titlen på én linje; er der en beskrivelse, markeres det med et
-  lille diskret tegn frem for at folde teksten ud.
+- I lister vises titlen, og under den **beskrivelsens første linje** — som i
+  Todoist (Andreas, 22-10-2026): én linje, dæmpet, afkortet med `…`. Markdownens
+  bloktegn og fremhævelser skrælles af (`foersteLinje` i `p1_core.js`), links
+  bevares og er klikbare. Kodeblokke og billeder springes over. Giver
+  beskrivelsen ingen brugbar linje, vises i stedet det lille diskrete tegn.
 
 ### Dansk dato-tolkning — minimum i F1
 

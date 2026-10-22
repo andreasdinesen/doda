@@ -5,7 +5,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 105;
+const APP_VERSION = 106;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -115,6 +115,31 @@ function linkify(tekst) {
     return `${foer}<a href="${ren}" target="_blank" rel="noopener noreferrer">${vis}</a>${hale ? hale[0] : ''}`;
   });
   return ud;
+}
+
+/*
+ * Beskrivelsens foerste linje til listerne - som i Todoist (Andreas,
+ * 22-10-2026). Markdownens BLOKtegn (overskrift, citat, punkt, afkrydsning)
+ * og fremhaevelser skraelles af, men links bevares, saa linkify kan goere dem
+ * klikbare. Kodeblokke og billeder springes over: de siger intet paa en linje.
+ * Er der ingen brugbar linje, gives '' - og raekken viser saa flaget i stedet.
+ */
+function foersteLinje(note, titel) {
+  let iKode = false;
+  for (const raa of String(note || '').split('\n')) {
+    if (/^\s*(```|~~~)/.test(raa)) { iKode = !iKode; continue; }
+    if (iKode) continue;
+    const linje = raa
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+      .replace(/^\s*(#{1,6}\s+|>\s?|[-*+]\s+\[[ xX]\]\s+|[-*+]\s+|\d+[.)]\s+)/, '')
+      .replace(/(\*\*|__|~~|`)/g, '')
+      .trim();
+    if (!linje || /^[-*_]{3,}$/.test(linje)) continue;
+    // En note, hvis broedtekst begynder med titlen, skal ikke sige det to gange.
+    if (titel && linje === String(titel).trim()) return '';
+    return linje.slice(0, 300);
+  }
+  return '';
 }
 
 async function api(method, path, body) {

@@ -1089,7 +1089,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 105;
+const APP_VERSION = 106;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -1199,6 +1199,31 @@ function linkify(tekst) {
     return `${foer}<a href="${ren}" target="_blank" rel="noopener noreferrer">${vis}</a>${hale ? hale[0] : ''}`;
   });
   return ud;
+}
+
+/*
+ * Beskrivelsens foerste linje til listerne - som i Todoist (Andreas,
+ * 22-10-2026). Markdownens BLOKtegn (overskrift, citat, punkt, afkrydsning)
+ * og fremhaevelser skraelles af, men links bevares, saa linkify kan goere dem
+ * klikbare. Kodeblokke og billeder springes over: de siger intet paa en linje.
+ * Er der ingen brugbar linje, gives '' - og raekken viser saa flaget i stedet.
+ */
+function foersteLinje(note, titel) {
+  let iKode = false;
+  for (const raa of String(note || '').split('\n')) {
+    if (/^\s*(```|~~~)/.test(raa)) { iKode = !iKode; continue; }
+    if (iKode) continue;
+    const linje = raa
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+      .replace(/^\s*(#{1,6}\s+|>\s?|[-*+]\s+\[[ xX]\]\s+|[-*+]\s+|\d+[.)]\s+)/, '')
+      .replace(/(\*\*|__|~~|`)/g, '')
+      .trim();
+    if (!linje || /^[-*_]{3,}$/.test(linje)) continue;
+    // En note, hvis broedtekst begynder med titlen, skal ikke sige det to gange.
+    if (titel && linje === String(titel).trim()) return '';
+    return linje.slice(0, 300);
+  }
+  return '';
 }
 
 async function api(method, path, body) {
@@ -4080,6 +4105,7 @@ function elementRaekke(it, i) {
   if (projekt) meta.push(esc(projekt.name));
   if (it.due_date) meta.push(`${visDato(it.due_date)}${it.due_time ? ` ${it.due_time}` : ''}`);
   if (it.contexts.length) meta.push(it.contexts.map((c) => `#${esc(c.name)}`).join(' '));
+  const uddrag = foersteLinje(it.note, it.title);
 
   return `<div class="item-row${venter ? ' venter' : ''}" tabindex="0" data-id="${esc(it.id)}" data-i="${i}">
     ${it.kind === 'note'
@@ -4092,13 +4118,14 @@ function elementRaekke(it, i) {
     <div class="item-main">
       <div class="item-title">${it.starred
     ? `<span class="stjerne" title="Starred — kept at the top">${icon('star', 14)}</span> ` : ''}${linkify(it.title)}</div>
+      ${uddrag ? `<div class="item-desc">${linkify(uddrag)}</div>` : ''}
       ${meta.length ? `<div class="item-meta meta">${meta.join(' · ')}</div>` : ''}
     </div>
     ${it.link_url ? `<a class="item-flag" href="${esc(it.link_url)}" target="_blank" rel="noopener noreferrer"
       title="${esc(it.link_url)}" data-stop>${icon('link', 15)}</a>` : ''}
     ${it.id === state.reviewTaskId ? `<a class="item-flag" href="?view=review" data-stop data-goreview
       title="Open the weekly review">${icon('review', 15)}</a>` : ''}
-    ${it.note ? `<span class="item-flag" title="Has a description">${icon('note', 15)}</span>` : ''}
+    ${it.note && !uddrag ? `<span class="item-flag" title="Has a description">${icon('note', 15)}</span>` : ''}
     ${it.attachment_count ? `<span class="item-flag" title="${it.attachment_count} attachment(s)">${icon('link', 15)}</span>` : ''}
     ${/*
       * Tidtagningen staar YDERST til hoejre - efter flagene, ikke mellem dem.
@@ -6007,14 +6034,16 @@ function projektOpgave(it, i, ialt) {
   const meta = [statusNavn(it.status)];
   if (it.due_date) meta.push(visDato(it.due_date));
   if (it.contexts.length) meta.push(it.contexts.map((c) => `#${esc(c.name)}`).join(' '));
+  const uddrag = foersteLinje(it.note, it.title);
 
   return `<div class="item-row${faerdig ? ' dim' : ''}" tabindex="0" data-id="${esc(it.id)}" data-i="${i}">
     <button class="tick${it.status === 'done' ? ' on' : ''}" data-done="${esc(it.id)}" aria-label="Mark done"></button>
     <div class="item-main">
       <div class="item-title">${linkify(it.title)}</div>
+      ${uddrag ? `<div class="item-desc">${linkify(uddrag)}</div>` : ''}
       <div class="item-meta meta">${meta.join(' · ')}</div>
     </div>
-    ${it.note ? `<span class="item-flag">${icon('note', 15)}</span>` : ''}
+    ${it.note && !uddrag ? `<span class="item-flag">${icon('note', 15)}</span>` : ''}
     <span class="movers">
       <button class="mover" data-move="up" data-id="${esc(it.id)}" ${i === 0 ? 'disabled' : ''} aria-label="Move up">↑</button>
       <button class="mover" data-move="down" data-id="${esc(it.id)}" ${i === ialt - 1 ? 'disabled' : ''} aria-label="Move down">↓</button>

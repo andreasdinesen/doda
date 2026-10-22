@@ -274,14 +274,16 @@ function projektOpgave(it, i, ialt) {
   const meta = [statusNavn(it.status)];
   if (it.due_date) meta.push(visDato(it.due_date));
   if (it.contexts.length) meta.push(it.contexts.map((c) => `#${esc(c.name)}`).join(' '));
+  const uddrag = foersteLinje(it.note, it.title);
 
   return `<div class="item-row${faerdig ? ' dim' : ''}" tabindex="0" data-id="${esc(it.id)}" data-i="${i}">
     <button class="tick${it.status === 'done' ? ' on' : ''}" data-done="${esc(it.id)}" aria-label="Mark done"></button>
     <div class="item-main">
       <div class="item-title">${linkify(it.title)}</div>
+      ${uddrag ? `<div class="item-desc">${linkify(uddrag)}</div>` : ''}
       <div class="item-meta meta">${meta.join(' · ')}</div>
     </div>
-    ${it.note ? `<span class="item-flag">${icon('note', 15)}</span>` : ''}
+    ${it.note && !uddrag ? `<span class="item-flag">${icon('note', 15)}</span>` : ''}
     <span class="movers">
       <button class="mover" data-move="up" data-id="${esc(it.id)}" ${i === 0 ? 'disabled' : ''} aria-label="Move up">↑</button>
       <button class="mover" data-move="down" data-id="${esc(it.id)}" ${i === ialt - 1 ? 'disabled' : ''} aria-label="Move down">↓</button>

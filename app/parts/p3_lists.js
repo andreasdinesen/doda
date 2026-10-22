@@ -184,6 +184,7 @@ function elementRaekke(it, i) {
   if (projekt) meta.push(esc(projekt.name));
   if (it.due_date) meta.push(`${visDato(it.due_date)}${it.due_time ? ` ${it.due_time}` : ''}`);
   if (it.contexts.length) meta.push(it.contexts.map((c) => `#${esc(c.name)}`).join(' '));
+  const uddrag = foersteLinje(it.note, it.title);
 
   return `<div class="item-row${venter ? ' venter' : ''}" tabindex="0" data-id="${esc(it.id)}" data-i="${i}">
     ${it.kind === 'note'
@@ -196,13 +197,14 @@ function elementRaekke(it, i) {
     <div class="item-main">
       <div class="item-title">${it.starred
     ? `<span class="stjerne" title="Starred — kept at the top">${icon('star', 14)}</span> ` : ''}${linkify(it.title)}</div>
+      ${uddrag ? `<div class="item-desc">${linkify(uddrag)}</div>` : ''}
       ${meta.length ? `<div class="item-meta meta">${meta.join(' · ')}</div>` : ''}
     </div>
     ${it.link_url ? `<a class="item-flag" href="${esc(it.link_url)}" target="_blank" rel="noopener noreferrer"
       title="${esc(it.link_url)}" data-stop>${icon('link', 15)}</a>` : ''}
     ${it.id === state.reviewTaskId ? `<a class="item-flag" href="?view=review" data-stop data-goreview
       title="Open the weekly review">${icon('review', 15)}</a>` : ''}
-    ${it.note ? `<span class="item-flag" title="Has a description">${icon('note', 15)}</span>` : ''}
+    ${it.note && !uddrag ? `<span class="item-flag" title="Has a description">${icon('note', 15)}</span>` : ''}
     ${it.attachment_count ? `<span class="item-flag" title="${it.attachment_count} attachment(s)">${icon('link', 15)}</span>` : ''}
     ${/*
       * Tidtagningen staar YDERST til hoejre - efter flagene, ikke mellem dem.
