@@ -184,7 +184,7 @@ function elementRaekke(it, i) {
   if (projekt) meta.push(esc(projekt.name));
   if (it.due_date) meta.push(`${visDato(it.due_date)}${it.due_time ? ` ${it.due_time}` : ''}`);
   if (it.contexts.length) meta.push(it.contexts.map((c) => `#${esc(c.name)}`).join(' '));
-  const uddrag = foersteLinje(it.note, it.title);
+  const uddrag = beskrivelsesUddrag(it.note, it.title);
 
   return `<div class="item-row${venter ? ' venter' : ''}" tabindex="0" data-id="${esc(it.id)}" data-i="${i}">
     ${it.kind === 'note'

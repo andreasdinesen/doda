@@ -752,9 +752,10 @@ button.group.foldknap:hover { color: var(--text); }
 
 .item-main { min-width: 0; flex: 1; }
 .item-title { font-size: 16px; line-height: 1.35; }
-/* Beskrivelsens foerste linje, som i Todoist: én linje, afkortet med … */
+/* Beskrivelsens foerste linjer, som i Todoist: hoejst to, afkortet med … */
 .item-desc { margin-top: 2px; font-size: 13.5px; line-height: 1.35; color: var(--muted);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  white-space: pre-line; overflow-wrap: anywhere; overflow: hidden;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
 .item-desc a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 .item-meta { margin-top: 3px; text-transform: none; letter-spacing: 0; font-size: 12.5px; font-weight: 500; }
 .item-flag { flex: none; color: var(--muted); opacity: .6; margin-top: 2px; }

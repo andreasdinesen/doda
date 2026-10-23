@@ -373,9 +373,10 @@ gemmes i `items.body`). Både beskrivelsen og **selve titlen** må indeholde lin
 - Kun `http:` og `https:` accepteres — `javascript:` og `data:` afvises i
   linkifiseringen, ellers er et link fra API'et eller en import en XSS-vej.
 - Alle links får `target="_blank" rel="noopener noreferrer"`.
-- I lister vises titlen, og under den **beskrivelsens første linje** — som i
-  Todoist (Andreas, 22-10-2026): én linje, dæmpet, afkortet med `…`. Markdownens
-  bloktegn og fremhævelser skrælles af (`foersteLinje` i `p1_core.js`), links
+- I lister vises titlen, og under den **beskrivelsens første linjer** — som i
+  Todoist (Andreas, 22-10-2026): højst **to linjer** (fra 23-10-2026), dæmpet,
+  afkortet med `…`. En lang første linje fylder selv begge. Markdownens
+  bloktegn og fremhævelser skrælles af (`beskrivelsesUddrag` i `p1_core.js`), links
   bevares og er klikbare. Kodeblokke og billeder springes over. Giver
   beskrivelsen ingen brugbar linje, vises i stedet det lille diskrete tegn.
 

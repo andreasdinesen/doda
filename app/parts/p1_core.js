@@ -5,7 +5,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 106;
+const APP_VERSION = 107;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -118,13 +118,16 @@ function linkify(tekst) {
 }
 
 /*
- * Beskrivelsens foerste linje til listerne - som i Todoist (Andreas,
- * 22-10-2026). Markdownens BLOKtegn (overskrift, citat, punkt, afkrydsning)
- * og fremhaevelser skraelles af, men links bevares, saa linkify kan goere dem
- * klikbare. Kodeblokke og billeder springes over: de siger intet paa en linje.
+ * Beskrivelsens foerste linjer til listerne - som i Todoist (Andreas,
+ * 22-10-2026; to linjer fra 23-10-2026). Markdownens BLOKtegn (overskrift,
+ * citat, punkt, afkrydsning) og fremhaevelser skraelles af, men links bevares,
+ * saa linkify kan goere dem klikbare. Kodeblokke og billeder springes over: de
+ * siger intet paa en linje. Linjerne samles med '\n'; CSS'en klipper ved to
+ * linjer, saa en lang foerste linje selv fylder begge.
  * Er der ingen brugbar linje, gives '' - og raekken viser saa flaget i stedet.
  */
-function foersteLinje(note, titel) {
+function beskrivelsesUddrag(note, titel, antal = 2) {
+  const ud = [];
   let iKode = false;
   for (const raa of String(note || '').split('\n')) {
     if (/^\s*(```|~~~)/.test(raa)) { iKode = !iKode; continue; }
@@ -136,10 +139,11 @@ function foersteLinje(note, titel) {
       .trim();
     if (!linje || /^[-*_]{3,}$/.test(linje)) continue;
     // En note, hvis broedtekst begynder med titlen, skal ikke sige det to gange.
-    if (titel && linje === String(titel).trim()) return '';
-    return linje.slice(0, 300);
+    if (!ud.length && titel && linje === String(titel).trim()) continue;
+    ud.push(linje.slice(0, 300));
+    if (ud.length >= antal) break;
   }
-  return '';
+  return ud.join('\n');
 }
 
 async function api(method, path, body) {

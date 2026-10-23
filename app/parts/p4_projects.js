@@ -274,7 +274,7 @@ function projektOpgave(it, i, ialt) {
   const meta = [statusNavn(it.status)];
   if (it.due_date) meta.push(visDato(it.due_date));
   if (it.contexts.length) meta.push(it.contexts.map((c) => `#${esc(c.name)}`).join(' '));
-  const uddrag = foersteLinje(it.note, it.title);
+  const uddrag = beskrivelsesUddrag(it.note, it.title);
 
   return `<div class="item-row${faerdig ? ' dim' : ''}" tabindex="0" data-id="${esc(it.id)}" data-i="${i}">
     <button class="tick${it.status === 'done' ? ' on' : ''}" data-done="${esc(it.id)}" aria-label="Mark done"></button>
