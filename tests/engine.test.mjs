@@ -889,6 +889,40 @@ test('en stjerne slår et tidspunkt - den er brugerens eget råb', async () => {
   assert.ok(ider.indexOf(stjernet) < ider.indexOf(haster), 'stjernen vinder');
 });
 
+test('Next Actions: stjerne, så i dag, så det ældste forfaldne', async () => {
+  /*
+   * »Altid stjernemarkeret, så opgaver sat til dagsdato, og efterfølgende det
+   * som er ældst« (Andreas, 30-10-2026). En opgave fra september maa ikke
+   * ligge over den, der skal ske i dag.
+   */
+  const lav = async (titel, felter) => {
+    const it = (await J('/api/v1/capture', { text: titel, createNew: true })).item;
+    await J(`/api/v1/items/${it.id}`, Object.assign({ status: 'next' }, felter));
+    return it.id;
+  };
+  // Serverens »i dag« - ikke testmaskinens UTC-dato.
+  const iDag = (await J('/api/v1/state')).today;
+  const foer = (n) => {
+    const d = new Date(`${iDag}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - n);
+    return d.toISOString().slice(0, 10);
+  };
+  // Modsat raekkefoelge af den forventede.
+  const udenDato = await lav('uden dato', {});
+  const igaar = await lav('i går', { due_date: foer(1) });
+  const gammel = await lav('for en måned siden', { due_date: foer(30) });
+  const idag = await lav('i dag', { due_date: iDag });
+  const stjerne = await lav('stjernet, gammel', { starred: 1, due_date: foer(40) });
+
+  const ider = (await J('/api/v1/items?status=next&hideDeferred=1&sort=urgent')).items
+    .map((i) => i.id);
+  const plads = (id) => ider.indexOf(id);
+  assert.ok(plads(stjerne) < plads(idag), 'stjernen øverst');
+  assert.ok(plads(idag) < plads(gammel), 'i dag før det forfaldne');
+  assert.ok(plads(gammel) < plads(igaar), 'det ældste forfaldne først');
+  assert.ok(plads(igaar) < plads(udenDato), 'uden dato til sidst');
+});
+
 test('en gentagelse kan slettes HELT - eller kun stoppes', async () => {
   /*
    * »Jeg mangler en slette knap på en recurring opgave, så jeg kan slette den

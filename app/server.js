@@ -1036,8 +1036,19 @@ function hentItems(filter) {
        * gaelder stadig blandt dem, der ikke har et tidspunkt at rette sig
        * efter.
        */
+      /*
+       * v109: DAGENS opgaver lige under stjernen, FOER det forfaldne.
+       *
+       * »Altid stjernemarkeret, så opgaver sat til dagsdato, og efterfølgende
+       * det som er ældst« (Andreas, 30-10-2026). Med én samlet liste (v108)
+       * lagde gamle YouTube-opgaver fra september sig ellers over det, der
+       * skal ske i dag.
+       *
+       * Saa: stjerne → i dag (efter klokkeslaet) → forfaldent, aeldst foerst
+       * → uden dato (`seq`). `?` er dagens dato og bindes i `ordenArg`.
+       */
       ? `i.starred DESC,
-         CASE WHEN i.due_date IS NULL THEN 1 ELSE 0 END,
+         CASE WHEN i.due_date = ? THEN 0 WHEN i.due_date IS NOT NULL THEN 1 ELSE 2 END,
          i.due_date, CASE WHEN i.due_time IS NULL THEN 1 ELSE 0 END, i.due_time,
          i.seq, i.created_at`
       : filter.efterDato
@@ -1048,7 +1059,8 @@ function hentItems(filter) {
          opgaven, ikke bare maerke den. Inden for hver gruppe er raekkefoelgen
          uaendret, saa den, man selv har traekket paa plads, bliver staaende. */
       : 'i.starred DESC, i.seq, i.created_at'}
-     LIMIT ?`).all(...arg, Math.min(Number(filter.limit) || 500, 2000));
+     LIMIT ?`).all(...arg, ...(filter.hasterFoerst && !filter.nyesteFoerst ? [iDag()] : []),
+    Math.min(Number(filter.limit) || 500, 2000));
 
   return medVedhaeftningsantal(medKontekster(raekker));
 }

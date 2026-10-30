@@ -1089,7 +1089,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 108;
+const APP_VERSION = 109;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -1445,7 +1445,7 @@ const BUND = ['next', 'inbox', 'projects', 'repeat', 'review'];
 
 const BESKRIVELSER = {
   all: 'Everything still open — deadlines first, then newest.',
-  next: 'What you can actually do right now. Starred first, then by date.',
+  next: 'What you can actually do right now. Starred first, then today, then the oldest.',
   inbox: 'Unprocessed items waiting for clarification.',
   waiting: 'Delegated — you are waiting on someone else.',
   someday: 'Parked without commitment.',

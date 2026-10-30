@@ -1780,6 +1780,16 @@ blandt dem, der ikke har et tidspunkt at rette sig efter.
 Ellers beviser den kun, at listen ikke blev rodet rundt — ikke at den blev
 sorteret.
 
+## 6x3 · I dag før det forfaldne (v109)
+
+»Altid stjernemarkeret, så opgaver sat til dagsdato, og efterfølgende det som er
+ældst« (Andreas, 30-10-2026). Med én samlet liste (§6x2) lagde gamle opgaver fra
+september sig ellers over det, der skal ske i dag.
+
+`sort=urgent` er nu: **stjerne → i dag** (efter klokkeslæt) **→ forfaldent, ældst
+først → uden dato** (`seq`). Dagens dato bindes som parameter i ORDER BY — det
+er serverens `iDag()`, samme dag som `hideDeferred` bruger.
+
 ## 6x2 · Next Actions er én liste med flervalgsfilter (v108)
 
 »Opdelt i context bliver den for lang. Jeg vil have én samlet liste, hvor jeg
