@@ -1089,7 +1089,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 107;
+const APP_VERSION = 108;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -1109,7 +1109,9 @@ const state = {
   review: null,
   counts: {},
   today: '',
-  filterContext: null,
+  // Next Actions kan filtreres paa FLERE kontekster paa én gang (v108):
+  // tom = alle. Se `sideNext` i p3_lists.
+  filterContexts: [],
   items: [],
   indlaeser: false,
   // Noter kan slaas fra (Settings). Bruger man Notion til reference, er
@@ -1443,7 +1445,7 @@ const BUND = ['next', 'inbox', 'projects', 'repeat', 'review'];
 
 const BESKRIVELSER = {
   all: 'Everything still open — deadlines first, then newest.',
-  next: 'What you can actually do right now, grouped by context.',
+  next: 'What you can actually do right now. Starred first, then by date.',
   inbox: 'Unprocessed items waiting for clarification.',
   waiting: 'Delegated — you are waiting on someone else.',
   someday: 'Parked without commitment.',
@@ -2087,14 +2089,14 @@ function registrerRullevagt() {
 function gaaTil(view, opt) {
   const skifter = state.view !== view;
   // Var der noget at rydde, er skaermen aendret, selv om `view` er den samme.
-  const havdeFilter = !!(state.openProject || state.filterContext
+  const havdeFilter = !!(state.openProject || state.filterContexts.length
     || state.filterArea || state.logProject);
   state.view = view;
   state.openProject = null;
-  state.filterContext = null;
+  state.filterContexts = [];
   state.filterArea = null;
   state.logProject = null;
-  if (opt && opt.context !== undefined) state.filterContext = opt.context;
+  if (opt && opt.context) state.filterContexts = [opt.context];
   if (opt && opt.area !== undefined) state.filterArea = opt.area;
   document.body.classList.remove('navopen');
   opdaterNav();
@@ -3548,8 +3550,10 @@ function skaermensUdfyldning() {
     const p = state.projects.find((x) => x.id === state.openProject);
     return p ? { project: p.id, vis: `@${p.name}` } : null;
   }
-  if (state.view === 'next' && state.filterContext) {
-    const k = state.contexts.find((x) => x.id === state.filterContext);
+  // Kun ved PRAECIS én valgt kontekst: med to er der ingen af dem, en ny
+  // opgave oplagt hoerer til.
+  if (state.view === 'next' && state.filterContexts.length === 1) {
+    const k = state.contexts.find((x) => x.id === state.filterContexts[0]);
     return k ? { context: k.id, vis: `#${k.name}` } : null;
   }
   return null;
@@ -3994,9 +3998,10 @@ async function tegnSideIndhold() {
       state.items = d.items;
       host.innerHTML = sideInbox();
     } else {
-      const q = state.filterContext ? `&context=${encodeURIComponent(state.filterContext)}` : '';
       // `sort=urgent`: stjernen oeverst, saa det, klokken loeber fra.
-      const d = await api('GET', `/api/v1/items?status=next&hideDeferred=1&sort=urgent${q}`);
+      // ALLE hentes - kontekstfilteret er flervalg og sker i `sideNext`, saa
+      // et klik paa et filter ikke skal vente paa serveren.
+      const d = await api('GET', '/api/v1/items?status=next&hideDeferred=1&sort=urgent');
       state.items = d.items;
       host.innerHTML = sideNext();
     }
@@ -4044,51 +4049,40 @@ function tomInbox() {
 /* ----------------------------------------------------- Next Actions */
 
 function sideNext() {
-  const items = state.items;
+  /*
+   * ÉN samlet liste, ikke grupper pr. kontekst (Andreas, 30-10-2026): »den
+   * bliver for lang«. Filteret er flervalg - Mail og huti paa samme tid - og
+   * et element vises, hvis det har BARE én af de valgte kontekster.
+   *
+   * Raekkefoelgen er serverens `sort=urgent` (§6x): stjernen oeverst, saa
+   * efter dato, resten i den raekkefoelge, man selv har trukket paa plads.
+   * Klienten sorterer IKKE om - saa ville to steder skulle vaere enige.
+   */
+  const valgte = new Set(state.filterContexts);
+  const items = valgte.size
+    ? state.items.filter((it) => it.contexts.some((c) => valgte.has(c.id)))
+    : state.items;
   const filtre = state.contexts.map((c) => `
-    <button class="pill${state.filterContext === c.id ? ' on' : ''}" data-ctx="${esc(c.id)}">#${esc(c.name)}</button>`).join('');
+    <button class="pill${valgte.has(c.id) ? ' on' : ''}" data-ctx="${esc(c.id)}"
+      aria-pressed="${valgte.has(c.id)}">#${esc(c.name)}</button>`).join('');
+  const piller = state.contexts.length ? `<div class="pills">
+    <button class="pill${valgte.size ? '' : ' on'}" data-ctx="">All</button>${filtre}</div>` : '';
 
   if (!items.length) {
     return `<section class="page">
       <div class="page-head"><h1>Next Actions</h1><p class="lead">${esc(BESKRIVELSER.next)}</p></div>
-      ${state.contexts.length ? `<div class="pills">
-        <button class="pill${state.filterContext ? '' : ' on'}" data-ctx="">All</button>${filtre}</div>` : ''}
+      ${piller}
       <div class="empty">${icon('calm', 34)}
-        <p class="empty-title">${state.filterContext ? 'Nothing here right now' : 'Nothing to do right now'}</p>
-        <p>${state.filterContext ? 'No next actions in this context.' : 'Clarify something from your inbox, or capture something new.'}</p></div>
+        <p class="empty-title">${valgte.size ? 'Nothing here right now' : 'Nothing to do right now'}</p>
+        <p>${valgte.size ? 'No next actions in these contexts.' : 'Clarify something from your inbox, or capture something new.'}</p></div>
     </section>`;
   }
 
-  // Grupperet efter kontekst. Et element uden kontekst horer under "No context"
-  // - det skal ikke forsvinde, bare fordi det mangler et felt.
-  const grupper = new Map();
-  for (const it of items) {
-    const noegler = it.contexts.length ? it.contexts.map((c) => c.name) : ['No context'];
-    for (const n of noegler) {
-      if (!grupper.has(n)) grupper.set(n, []);
-      grupper.get(n).push(it);
-    }
-  }
-  const sorteret = [...grupper.entries()].sort((a, b) => {
-    if (a[0] === 'No context') return 1;
-    if (b[0] === 'No context') return -1;
-    return a[0].localeCompare(b[0]);
-  });
-
-  // Hver kontekst kan foldes sammen, sa der kun star overskriften og tallet
-  // tilbage (Andreas, 16-09-2026). Valget huskes pr. kontekst - se
-  // `foldGrupper` i p1_core.
-  const gruppe = foldGrupper('next');
-
-  let n = 0;
   return `<section class="page">
     <div class="page-head"><h1>Next Actions</h1><p class="lead">${esc(BESKRIVELSER.next)}</p></div>
-    ${state.contexts.length ? `<div class="pills">
-      <button class="pill${state.filterContext ? '' : ' on'}" data-ctx="">All</button>${filtre}</div>` : ''}
-    <div data-keynav>
-      ${sorteret.map(([navn, liste]) => gruppe(navn, navn, liste.length,
-    liste.map((it) => elementRaekke(it, n++)).join(''))).join('')}
-    </div>
+    ${piller}
+    <p class="meta" style="margin-bottom:12px">${items.length} action${items.length === 1 ? '' : 's'}</p>
+    <div class="list" data-keynav>${items.map((it, i) => elementRaekke(it, i)).join('')}</div>
     <p class="hintline meta">↑↓ select · enter open · space done · esc leave</p>
   </section>`;
 }
@@ -4143,8 +4137,21 @@ function elementRaekke(it, i) {
 /* ------------------------------------------------------- haendelser */
 
 function bindListe() {
-  document.querySelectorAll('.pill[data-ctx]').forEach((el) => {
-    el.addEventListener('click', () => gaaTil('next', { context: el.dataset.ctx || null }));
+  // Et klik slaar konteksten til eller fra; »All« rydder. Listen er allerede
+  // hentet, saa der tegnes bare om - ingen tur til serveren.
+  // `gentegnRaekke` koerer `bindListe()` igen uden at tegne pillerne om; en
+  // lytter mere ville faa ét klik til at slaa til OG fra. Derfor kun én gang.
+  document.querySelectorAll('.pill[data-ctx]:not([data-bundet])').forEach((el) => {
+    el.dataset.bundet = '1';
+    el.addEventListener('click', () => {
+      const id = el.dataset.ctx;
+      const valgte = new Set(state.filterContexts);
+      if (!id) valgte.clear();
+      else if (valgte.has(id)) valgte.delete(id);
+      else valgte.add(id);
+      state.filterContexts = [...valgte];
+      tegnListeFraState();
+    });
   });
 
   document.querySelectorAll('.tick[data-done]').forEach((el) => {

@@ -656,8 +656,10 @@ function skaermensUdfyldning() {
     const p = state.projects.find((x) => x.id === state.openProject);
     return p ? { project: p.id, vis: `@${p.name}` } : null;
   }
-  if (state.view === 'next' && state.filterContext) {
-    const k = state.contexts.find((x) => x.id === state.filterContext);
+  // Kun ved PRAECIS én valgt kontekst: med to er der ingen af dem, en ny
+  // opgave oplagt hoerer til.
+  if (state.view === 'next' && state.filterContexts.length === 1) {
+    const k = state.contexts.find((x) => x.id === state.filterContexts[0]);
     return k ? { context: k.id, vis: `#${k.name}` } : null;
   }
   return null;

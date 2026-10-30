@@ -5,7 +5,7 @@
    NB: interfacet er ENGELSK (Andreas' oenske - aeoea er besvaerligt at taste),
    men koden, kommentarerne og dokumenterne er dansk. */
 
-const APP_VERSION = 107;
+const APP_VERSION = 108;
 
 /* Mobilgraensen bor to steder: her og i style.css. Holdes de ikke i trit,
    folder menuknappen sidebaren sammen pa en iPad, hvor CSS'en tror den er
@@ -25,7 +25,9 @@ const state = {
   review: null,
   counts: {},
   today: '',
-  filterContext: null,
+  // Next Actions kan filtreres paa FLERE kontekster paa én gang (v108):
+  // tom = alle. Se `sideNext` i p3_lists.
+  filterContexts: [],
   items: [],
   indlaeser: false,
   // Noter kan slaas fra (Settings). Bruger man Notion til reference, er
@@ -359,7 +361,7 @@ const BUND = ['next', 'inbox', 'projects', 'repeat', 'review'];
 
 const BESKRIVELSER = {
   all: 'Everything still open — deadlines first, then newest.',
-  next: 'What you can actually do right now, grouped by context.',
+  next: 'What you can actually do right now. Starred first, then by date.',
   inbox: 'Unprocessed items waiting for clarification.',
   waiting: 'Delegated — you are waiting on someone else.',
   someday: 'Parked without commitment.',
@@ -1003,14 +1005,14 @@ function registrerRullevagt() {
 function gaaTil(view, opt) {
   const skifter = state.view !== view;
   // Var der noget at rydde, er skaermen aendret, selv om `view` er den samme.
-  const havdeFilter = !!(state.openProject || state.filterContext
+  const havdeFilter = !!(state.openProject || state.filterContexts.length
     || state.filterArea || state.logProject);
   state.view = view;
   state.openProject = null;
-  state.filterContext = null;
+  state.filterContexts = [];
   state.filterArea = null;
   state.logProject = null;
-  if (opt && opt.context !== undefined) state.filterContext = opt.context;
+  if (opt && opt.context) state.filterContexts = [opt.context];
   if (opt && opt.area !== undefined) state.filterArea = opt.area;
   document.body.classList.remove('navopen');
   opdaterNav();

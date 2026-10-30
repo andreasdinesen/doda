@@ -1780,6 +1780,23 @@ blandt dem, der ikke har et tidspunkt at rette sig efter.
 Ellers beviser den kun, at listen ikke blev rodet rundt — ikke at den blev
 sorteret.
 
+## 6x2 · Next Actions er én liste med flervalgsfilter (v108)
+
+»Opdelt i context bliver den for lang. Jeg vil have én samlet liste, hvor jeg
+stadig kan filtrere — og vælge flere contexts, fx Mail og huti på samme tid«
+(Andreas, 30-10-2026).
+
+- **Ingen grupper.** Rækkefølgen er §6x's `sort=urgent` for hele listen:
+  stjerne → dato → `seq`. Klienten sorterer ikke om.
+- **Filteret er flervalg** (`state.filterContexts`). Et element vises, hvis det
+  har *bare én* af de valgte kontekster (ELLER). »All« rydder valget.
+- **Filtreringen sker i klienten.** Listen hentes én gang uden `context=`, og et
+  klik tegner bare om af state — ingen ventetid. `GET /items?context=` findes
+  stadig til MCP og iOS-genveje.
+- **Fangst arver kun en kontekst ved præcis ét valg.** Med to valgte er der
+  ingen af dem, en ny opgave oplagt hører til.
+- `gaaTil('next', { context })` (fra Contexts og `#` i paletten) vælger netop den ene.
+
 ## 6y · Faner i indstillingerne (v75)
 
 Siden var vokset til **seksten afsnit** i én stribe. Opskriften står i
